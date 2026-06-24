@@ -1,0 +1,194 @@
+import type { Ocpp16Runtime } from "../../protocol/runtime";
+import type { ISession } from "../../protocol/session/types";
+import { SimulatorError } from "../errors";
+import type {
+  SimulatorStartResult,
+  SimulatorStatus,
+} from "../types";
+import { toSimulatorBootResult } from "./resultMapping";
+
+export interface Ocpp16StartupLifecycleOptions {
+  chargingPointId: string;
+  session: ISession;
+  runtime: Ocpp16Runtime;
+  getStatus(): SimulatorStatus;
+  isDisposed(): boolean;
+  transitionStatus(
+    currentStatus: SimulatorStatus,
+    error?: { code: string; message: string },
+  ): void;
+}
+
+export class Ocpp16StartupLifecycle {
+  private bootRetryTimerId: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(private readonly options: Ocpp16StartupLifecycleOptions) {}
+
+  async start(): Promise<SimulatorStartResult> {
+    try {
+      await this.options.session.connect();
+
+      const bootResult = await this.options.runtime.boot();
+
+      if (bootResult.status === "Accepted") {
+        await this.completeAcceptedBoot();
+
+        return {
+          chargingPointId: this.options.chargingPointId,
+          simulatorStatus: "running",
+          bootStatus: bootResult.status,
+        };
+      }
+
+      if (bootResult.status === "Pending") {
+        this.scheduleBootRetry(bootResult.interval);
+        this.options.transitionStatus("starting");
+
+        return {
+          chargingPointId: this.options.chargingPointId,
+          simulatorStatus: "starting",
+          bootStatus: bootResult.status,
+          retryAfterSec: bootResult.interval,
+        };
+      }
+
+      throw new SimulatorError(
+        "SIMULATOR_START_FAILED",
+        `BootNotification ${bootResult.status}`,
+        toSimulatorBootResult(bootResult),
+      );
+    } catch (cause) {
+      if (this.options.session.state === "reconnecting") {
+        this.options.transitionStatus("starting", {
+          code: cause instanceof Error ? cause.name : "SIMULATOR_START_FAILED",
+          message: toErrorMessage(cause),
+        });
+        return {
+          chargingPointId: this.options.chargingPointId,
+          simulatorStatus: "starting",
+          bootStatus: "Pending",
+          retryAfterSec: 0,
+        };
+      }
+
+      await this.stopAfterFailure(cause);
+
+      if (cause instanceof SimulatorError) {
+        throw cause;
+      }
+
+      throw new SimulatorError(
+        "SIMULATOR_START_FAILED",
+        "simulator 启动失败",
+        cause,
+      );
+    }
+  }
+
+  handleOnline(): void {
+    if (this.options.isDisposed() || this.options.getStatus() !== "starting") {
+      return;
+    }
+
+    void this.retryBoot().catch(() => undefined);
+  }
+
+  clearBootRetryTimer(): void {
+    if (this.bootRetryTimerId === null) {
+      return;
+    }
+
+    clearTimeout(this.bootRetryTimerId);
+    this.bootRetryTimerId = null;
+  }
+
+  private async completeAcceptedBoot(): Promise<void> {
+    this.options.runtime.startHeartbeatLoop({
+      onReconnectRequired: (result) => {
+        if (
+          this.options.getStatus() !== "running" ||
+          this.options.isDisposed()
+        ) {
+          return;
+        }
+
+        this.options.transitionStatus(this.options.getStatus(), {
+          code: result.errorCode,
+          message: result.errorMessage,
+        });
+      },
+    });
+    await this.reportStartupStatuses();
+    this.options.transitionStatus("running");
+  }
+
+  private async reportStartupStatuses(): Promise<void> {
+    await this.options.runtime.reportChargingPointStatus();
+
+    for (const connectorRef of this.options.runtime.listConnectorRefs()) {
+      await this.options.runtime.reportConnectorStatus({
+        connectorId: connectorRef.connectorId,
+      });
+    }
+  }
+
+  private scheduleBootRetry(intervalSec: number): void {
+    this.clearBootRetryTimer();
+    this.bootRetryTimerId = setTimeout(() => {
+      this.bootRetryTimerId = null;
+      void this.retryBoot().catch(() => undefined);
+    }, Math.max(0, intervalSec * 1_000));
+  }
+
+  private async retryBoot(): Promise<void> {
+    if (this.options.getStatus() !== "starting" || this.options.isDisposed()) {
+      return;
+    }
+
+    try {
+      const bootResult = await this.options.runtime.boot();
+      if (
+        this.options.getStatus() !== "starting" ||
+        this.options.isDisposed()
+      ) {
+        return;
+      }
+
+      if (bootResult.status === "Pending") {
+        this.scheduleBootRetry(bootResult.interval);
+        return;
+      }
+
+      if (bootResult.status === "Accepted") {
+        await this.completeAcceptedBoot();
+        return;
+      }
+
+      await this.stopAfterFailure(new SimulatorError(
+        "SIMULATOR_START_FAILED",
+        `BootNotification ${bootResult.status}`,
+        toSimulatorBootResult(bootResult),
+      ));
+    } catch (cause) {
+      await this.stopAfterFailure(cause);
+    }
+  }
+
+  private async stopAfterFailure(cause: unknown): Promise<void> {
+    this.clearBootRetryTimer();
+    this.options.runtime.stopRuntime();
+    if (this.options.session.isConnected()) {
+      await this.options.session.disconnect();
+    }
+    this.options.transitionStatus("stopped", {
+      code: cause instanceof SimulatorError
+        ? cause.code
+        : "SIMULATOR_START_FAILED",
+      message: toErrorMessage(cause),
+    });
+  }
+}
+
+function toErrorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
