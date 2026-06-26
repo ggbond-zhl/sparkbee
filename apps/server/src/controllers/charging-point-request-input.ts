@@ -4,33 +4,33 @@ import type { AppBindings } from "../types/app";
 import {
   authorizeSchema,
   connectorParamSchema,
-  createStationSchema,
+  createChargingPointSchema,
   meterValueSchema,
   startTransactionSchema,
-  stationEventQuerySchema,
-  stationIdParamSchema,
+  chargingPointEventQuerySchema,
+  chargingPointIdParamSchema,
   stopTransactionSchema,
   transactionParamSchema,
-  updateStationSchema
-} from "../validators/station.validator";
+  updateChargingPointSchema
+} from "../validators/charging-point.validator";
 import { parseJson, parseParams, parseQuery } from "../validators/parse";
 
-export class StationRequestInput {
+export class ChargingPointRequestInput {
   constructor(private readonly context: Context<AppBindings>) {}
 
-  createStation() {
-    return parseJson(this.context, createStationSchema);
+  createChargingPoint() {
+    return parseJson(this.context, createChargingPointSchema);
   }
 
-  async updateStation() {
+  async updateChargingPoint() {
     return {
-      id: this.stationId(),
-      input: await parseJson(this.context, updateStationSchema),
+      id: this.chargingPointId(),
+      input: await parseJson(this.context, updateChargingPointSchema),
     };
   }
 
-  stationId(): string {
-    return parseParams(this.context, stationIdParamSchema).id;
+  chargingPointId(): string {
+    return parseParams(this.context, chargingPointIdParamSchema).id;
   }
 
   connectorAction() {
@@ -39,14 +39,14 @@ export class StationRequestInput {
 
   async authorize() {
     return {
-      id: this.stationId(),
+      id: this.chargingPointId(),
       input: await parseJson(this.context, authorizeSchema),
     };
   }
 
   async startTransaction() {
     return {
-      id: this.stationId(),
+      id: this.chargingPointId(),
       input: await parseJson(this.context, startTransactionSchema),
     };
   }
@@ -80,8 +80,8 @@ export class StationRequestInput {
 
   eventsQuery() {
     return {
-      id: this.stationId(),
-      query: parseQuery(this.context, stationEventQuerySchema),
+      id: this.chargingPointId(),
+      query: parseQuery(this.context, chargingPointEventQuerySchema),
     };
   }
 }

@@ -3,19 +3,19 @@ import { EventEmitter } from "node:events";
 import type { ProtocolVersion } from "../../shared/types";
 import type { ProtocolClock } from "../../protocol/runtime/ocpp16/protocolClock";
 import type {
-  SimulatorEvent,
-  SimulatorEventBus,
-  SimulatorEventMap,
-  SimulatorEventType,
+  ChargingPointSimulatorEvent,
+  ChargingPointSimulatorEventBus,
+  ChargingPointSimulatorEventMap,
+  ChargingPointSimulatorEventType,
 } from "../types";
 
 export class EventEnvelopePublisher {
   private readonly emitter = new EventEmitter();
   private sequence = 0;
 
-  readonly events: SimulatorEventBus = {
+  readonly events: ChargingPointSimulatorEventBus = {
     subscribe: (type, listener) => {
-      const wrapped = listener as (event: SimulatorEvent) => void;
+      const wrapped = listener as (event: ChargingPointSimulatorEvent) => void;
       this.emitter.on(type, wrapped);
       return () => {
         this.emitter.off(type, wrapped);
@@ -25,18 +25,18 @@ export class EventEnvelopePublisher {
 
   constructor(
     private readonly options: {
-      simulatorId: string;
+      chargingPointSimulatorId: string;
       protocol: ProtocolVersion;
       clock: ProtocolClock;
       idGenerator: () => string;
     },
   ) {}
 
-  publish<TType extends SimulatorEventType>(
+  publish<TType extends ChargingPointSimulatorEventType>(
     type: TType,
     event: Omit<
-      SimulatorEventMap[TType],
-      "id" | "sequence" | "type" | "simulatorId" | "protocol" | "occurredAt"
+      ChargingPointSimulatorEventMap[TType],
+      "id" | "sequence" | "type" | "chargingPointSimulatorId" | "protocol" | "occurredAt"
     >,
     occurredAt?: Date,
   ): void {
@@ -46,11 +46,11 @@ export class EventEnvelopePublisher {
       id: this.options.idGenerator(),
       sequence: this.sequence,
       type,
-      simulatorId: this.options.simulatorId,
+      chargingPointSimulatorId: this.options.chargingPointSimulatorId,
       protocol: this.options.protocol,
       occurredAt: eventOccurredAt.toISOString(),
       ...event,
-    } as SimulatorEventMap[TType]);
+    } as ChargingPointSimulatorEventMap[TType]);
   }
 
   dispose(): void {

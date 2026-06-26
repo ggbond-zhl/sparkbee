@@ -4,7 +4,7 @@ import type { AppBindings } from "../types/app";
 import { createAuthRoute } from "./auth.route";
 import { createEventRoute } from "./event.route";
 import { createHealthRoute } from "./health.route";
-import { createStationRoute } from "./station.route";
+import { createChargingPointRoute } from "./charging-point.route";
 
 export function createRoutes() {
   const routes = new Hono<AppBindings>();
@@ -12,7 +12,7 @@ export function createRoutes() {
   routes.route("/", createHealthRoute());
   routes.route("/api/auth", createAuthRoute());
   routes.route("/api/events", createEventRoute());
-  routes.route("/api/stations", createStationRoute());
+  routes.route("/api/chargingPoints", createChargingPointRoute());
 
   return routes;
 }

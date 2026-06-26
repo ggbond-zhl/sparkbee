@@ -10,7 +10,7 @@ const db = createDatabase(config.databaseUrl);
 const services = createServices(config, db);
 const app = createApp(services);
 
-await services.stations.restoreRunningStations();
+await services.chargingPoints.restoreRunningChargingPoints();
 
 serve({
   fetch: app.fetch,

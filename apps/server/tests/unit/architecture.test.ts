@@ -25,9 +25,9 @@ function sourceFiles(): string[] {
 }
 
 describe("server architecture", () => {
-  test("station app interface hides runtime command dispatch", () => {
+  test("charging point app interface hides runtime command dispatch", () => {
     const files = sourceFiles();
-    const forbidden = ["executeCommand", "StationCommand", "services.runtime"];
+    const forbidden = ["executeCommand", "ChargingPointCommand", "services.runtime"];
     const matches = files.flatMap((filePath) => {
       const source = readFileSync(filePath, "utf8");
       return forbidden
@@ -39,39 +39,39 @@ describe("server architecture", () => {
   });
 
   test("runtime event subscription choices stay in protocol projection", () => {
-    const stationSource = readFileSync(join(srcRoot, "services/station.service.ts"), "utf8");
+    const chargingPointSource = readFileSync(join(srcRoot, "services/charging-point.service.ts"), "utf8");
     const projectionSource = readFileSync(
       join(srcRoot, "services/protocol-event-projection.ts"),
       "utf8",
     );
-    const registrySource = readFileSync(join(srcRoot, "services/station-runtime-registry.ts"), "utf8");
+    const registrySource = readFileSync(join(srcRoot, "services/charging-point-runtime-registry.ts"), "utf8");
 
-    expect(stationSource).not.toContain("SIMULATOR_EVENT_TYPES");
+    expect(chargingPointSource).not.toContain("CHARGING_POINT_SIMULATOR_EVENT_TYPES");
     expect(registrySource).toContain("this.eventProjection.subscribeToRuntime");
     expect(projectionSource).toContain("subscribeToRuntime");
   });
 
-  test("station controller delegates HTTP input assembly", () => {
-    const controllerSource = readFileSync(join(srcRoot, "controllers/station.controller.ts"), "utf8");
-    const inputSource = readFileSync(join(srcRoot, "controllers/station-request-input.ts"), "utf8");
+  test("charging point controller delegates HTTP input assembly", () => {
+    const controllerSource = readFileSync(join(srcRoot, "controllers/charging-point.controller.ts"), "utf8");
+    const inputSource = readFileSync(join(srcRoot, "controllers/charging-point-request-input.ts"), "utf8");
 
     expect(controllerSource).not.toContain("parseJson");
     expect(controllerSource).not.toContain("parseParams");
     expect(controllerSource).not.toContain("parseQuery");
     expect(controllerSource).not.toContain("new Date(");
-    expect(controllerSource).toContain("StationRequestInput");
+    expect(controllerSource).toContain("ChargingPointRequestInput");
     expect(inputSource).toContain("parseJson");
     expect(inputSource).toContain("parseParams");
     expect(inputSource).toContain("parseQuery");
   });
 
   test("runtime registry ownership stays outside runtime commands", () => {
-    const stationSource = readFileSync(join(srcRoot, "services/station.service.ts"), "utf8");
-    const registrySource = readFileSync(join(srcRoot, "services/station-runtime-registry.ts"), "utf8");
+    const chargingPointSource = readFileSync(join(srcRoot, "services/charging-point.service.ts"), "utf8");
+    const registrySource = readFileSync(join(srcRoot, "services/charging-point-runtime-registry.ts"), "utf8");
 
-    expect(stationSource).not.toContain("new Map<string, RuntimeEntry>");
-    expect(stationSource).not.toContain("disposeRuntime");
-    expect(stationSource).toContain("StationRuntimeRegistry");
+    expect(chargingPointSource).not.toContain("new Map<string, RuntimeEntry>");
+    expect(chargingPointSource).not.toContain("disposeRuntime");
+    expect(chargingPointSource).toContain("ChargingPointRuntimeRegistry");
     expect(registrySource).toContain("new Map<string, RuntimeEntry>");
     expect(registrySource).toContain("dispose");
   });
@@ -92,40 +92,40 @@ describe("server architecture", () => {
     const repositorySource = readFileSync(join(srcRoot, "repositories/postgres-event.repository.ts"), "utf8");
 
     expect(existsSync(join(srcRoot, "services/protocol-event-history.ts"))).toBe(false);
-    expect(ledgerSource).toContain("trimStationEvents");
+    expect(ledgerSource).toContain("trimChargingPointEvents");
     expect(ledgerSource).toContain("listener(event)");
     expect(repositorySource).toContain("or(");
     expect(repositorySource).toContain("and(");
     expect(repositorySource).toContain("gt(eventLogs.id");
   });
 
-  test("station runtime adapter hides simulator-core operation types", () => {
-    const adapterSource = readFileSync(join(srcRoot, "services/station-runtime.adapter.ts"), "utf8");
+  test("charging point runtime adapter hides simulator-core operation types", () => {
+    const adapterSource = readFileSync(join(srcRoot, "services/charging-point-runtime.adapter.ts"), "utf8");
 
     const leakedTypeNames = [
-      "SimulatorStartResult",
-      "SimulatorStopResult",
-      "SimulatorAuthorizeResult",
-      "SimulatorMeterValueInput",
-      "SimulatorMeterValueResult",
-      "SimulatorStartTransactionInput",
-      "SimulatorStopTransactionInput",
-      "SimulatorStopTransactionResult",
-      "SimulatorTransactionStartResult",
+      "ChargingPointSimulatorStartResult",
+      "ChargingPointSimulatorStopResult",
+      "ChargingPointSimulatorAuthorizeResult",
+      "ChargingPointSimulatorMeterValueInput",
+      "ChargingPointSimulatorMeterValueResult",
+      "ChargingPointSimulatorStartTransactionInput",
+      "ChargingPointSimulatorStopTransactionInput",
+      "ChargingPointSimulatorStopTransactionResult",
+      "ChargingPointSimulatorTransactionStartResult",
     ];
 
     for (const leakedTypeName of leakedTypeNames) {
       expect(adapterSource).not.toContain(`type ${leakedTypeName}`);
       expect(adapterSource).not.toContain(`Promise<${leakedTypeName}`);
     }
-    expect(adapterSource).toContain("StationRuntimeStartResult");
-    expect(adapterSource).toContain("StationRuntimeTransactionStartResult");
+    expect(adapterSource).toContain("ChargingPointRuntimeStartResult");
+    expect(adapterSource).toContain("ChargingPointRuntimeTransactionStartResult");
   });
 
-  test("server production code reaches simulator core only through station runtime adapter", () => {
+  test("server production code reaches simulator core only through charging point runtime adapter", () => {
     const matches = sourceFiles().flatMap((filePath) => {
       const relativePath = relative(serverRoot, filePath).replaceAll("\\", "/");
-      if (relativePath === "src/services/station-runtime.adapter.ts") {
+      if (relativePath === "src/services/charging-point-runtime.adapter.ts") {
         return [];
       }
 

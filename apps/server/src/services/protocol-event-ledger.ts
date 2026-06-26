@@ -12,16 +12,16 @@ export class ProtocolEventLedger {
 
   constructor(
     private readonly events: EventRepository,
-    private readonly config: Pick<ServerConfig, "eventLogRetentionPerStation">,
+    private readonly config: Pick<ServerConfig, "eventLogRetentionPerChargingPoint">,
   ) {}
 
   async append(input: CreateEventInput): Promise<EventRecord> {
     const event = await this.events.append(input);
 
     if (event.stationId !== null) {
-      void this.events.trimStationEvents(
+      void this.events.trimChargingPointEvents(
         event.stationId,
-        this.config.eventLogRetentionPerStation,
+        this.config.eventLogRetentionPerChargingPoint,
       );
     }
 
@@ -32,11 +32,11 @@ export class ProtocolEventLedger {
     return event;
   }
 
-  listByStation(
+  listByChargingPoint(
     stationId: string,
     options: { after?: string; limit: number },
   ): Promise<EventRecord[]> {
-    return this.events.listByStation(stationId, options);
+    return this.events.listByChargingPoint(stationId, options);
   }
 
   subscribe(listener: ProtocolEventListener): () => void {

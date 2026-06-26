@@ -5,12 +5,12 @@ import { z } from "zod";
 
 export const serverEnvPath = fileURLToPath(new URL("../../../../.env", import.meta.url));
 
-loadDotenv({ path: serverEnvPath });
+loadDotenv({ path: serverEnvPath, quiet: true });
 
 export interface ServerConfig {
   adminPassword: string;
   databaseUrl: string;
-  eventLogRetentionPerStation: number;
+  eventLogRetentionPerChargingPoint: number;
   port: number;
   sessionSecret: string;
 }
@@ -36,7 +36,7 @@ export function loadServerConfig(rawEnv: NodeJS.ProcessEnv = process.env): Serve
   return {
     adminPassword: result.data.ADMIN_PASSWORD,
     databaseUrl: result.data.DATABASE_URL,
-    eventLogRetentionPerStation: result.data.EVENT_LOG_RETENTION_PER_STATION,
+    eventLogRetentionPerChargingPoint: result.data.EVENT_LOG_RETENTION_PER_STATION,
     port: result.data.PORT,
     sessionSecret: result.data.SESSION_SECRET
   };

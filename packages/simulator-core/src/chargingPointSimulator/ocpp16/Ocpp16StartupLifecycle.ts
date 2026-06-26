@@ -1,20 +1,20 @@
 import type { Ocpp16Runtime } from "../../protocol/runtime";
 import type { ISession } from "../../protocol/session/types";
-import { SimulatorError } from "../errors";
+import { ChargingPointSimulatorError } from "../errors";
 import type {
-  SimulatorStartResult,
-  SimulatorStatus,
+  ChargingPointSimulatorStartResult,
+  ChargingPointSimulatorStatus,
 } from "../types";
-import { toSimulatorBootResult } from "./resultMapping";
+import { toChargingPointSimulatorBootResult } from "./resultMapping";
 
 export interface Ocpp16StartupLifecycleOptions {
   chargingPointId: string;
   session: ISession;
   runtime: Ocpp16Runtime;
-  getStatus(): SimulatorStatus;
+  getStatus(): ChargingPointSimulatorStatus;
   isDisposed(): boolean;
   transitionStatus(
-    currentStatus: SimulatorStatus,
+    currentStatus: ChargingPointSimulatorStatus,
     error?: { code: string; message: string },
   ): void;
 }
@@ -24,7 +24,7 @@ export class Ocpp16StartupLifecycle {
 
   constructor(private readonly options: Ocpp16StartupLifecycleOptions) {}
 
-  async start(): Promise<SimulatorStartResult> {
+  async start(): Promise<ChargingPointSimulatorStartResult> {
     try {
       await this.options.session.connect();
 
@@ -35,7 +35,7 @@ export class Ocpp16StartupLifecycle {
 
         return {
           chargingPointId: this.options.chargingPointId,
-          simulatorStatus: "running",
+          chargingPointSimulatorStatus: "running",
           bootStatus: bootResult.status,
         };
       }
@@ -46,26 +46,26 @@ export class Ocpp16StartupLifecycle {
 
         return {
           chargingPointId: this.options.chargingPointId,
-          simulatorStatus: "starting",
+          chargingPointSimulatorStatus: "starting",
           bootStatus: bootResult.status,
           retryAfterSec: bootResult.interval,
         };
       }
 
-      throw new SimulatorError(
-        "SIMULATOR_START_FAILED",
+      throw new ChargingPointSimulatorError(
+        "CHARGING_POINT_SIMULATOR_START_FAILED",
         `BootNotification ${bootResult.status}`,
-        toSimulatorBootResult(bootResult),
+        toChargingPointSimulatorBootResult(bootResult),
       );
     } catch (cause) {
       if (this.options.session.state === "reconnecting") {
         this.options.transitionStatus("starting", {
-          code: cause instanceof Error ? cause.name : "SIMULATOR_START_FAILED",
+          code: cause instanceof Error ? cause.name : "CHARGING_POINT_SIMULATOR_START_FAILED",
           message: toErrorMessage(cause),
         });
         return {
           chargingPointId: this.options.chargingPointId,
-          simulatorStatus: "starting",
+          chargingPointSimulatorStatus: "starting",
           bootStatus: "Pending",
           retryAfterSec: 0,
         };
@@ -73,12 +73,12 @@ export class Ocpp16StartupLifecycle {
 
       await this.stopAfterFailure(cause);
 
-      if (cause instanceof SimulatorError) {
+      if (cause instanceof ChargingPointSimulatorError) {
         throw cause;
       }
 
-      throw new SimulatorError(
-        "SIMULATOR_START_FAILED",
+      throw new ChargingPointSimulatorError(
+        "CHARGING_POINT_SIMULATOR_START_FAILED",
         "simulator 启动失败",
         cause,
       );
@@ -164,10 +164,10 @@ export class Ocpp16StartupLifecycle {
         return;
       }
 
-      await this.stopAfterFailure(new SimulatorError(
-        "SIMULATOR_START_FAILED",
+      await this.stopAfterFailure(new ChargingPointSimulatorError(
+        "CHARGING_POINT_SIMULATOR_START_FAILED",
         `BootNotification ${bootResult.status}`,
-        toSimulatorBootResult(bootResult),
+        toChargingPointSimulatorBootResult(bootResult),
       ));
     } catch (cause) {
       await this.stopAfterFailure(cause);
@@ -181,9 +181,9 @@ export class Ocpp16StartupLifecycle {
       await this.options.session.disconnect();
     }
     this.options.transitionStatus("stopped", {
-      code: cause instanceof SimulatorError
+      code: cause instanceof ChargingPointSimulatorError
         ? cause.code
-        : "SIMULATOR_START_FAILED",
+        : "CHARGING_POINT_SIMULATOR_START_FAILED",
       message: toErrorMessage(cause),
     });
   }

@@ -20,4 +20,4 @@ export type {
   SessionOptions,
   ReconnectOptions,
 } from "./protocol/session/types";
-export * from "./simulator";
+export * from "./chargingPointSimulator";

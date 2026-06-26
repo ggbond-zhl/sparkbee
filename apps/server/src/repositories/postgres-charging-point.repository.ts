@@ -5,15 +5,15 @@ import { connectorSnapshots, stations } from "../db/schema";
 import { notFound } from "../utils/errors";
 import type {
   ConnectorSnapshotRecord,
-  CreateStationInput,
-  StationRecord,
-  StationRepository,
-  StationRuntimeStatus,
-  UpdateStationInput,
+  CreateChargingPointInput,
+  ChargingPointRecord,
+  ChargingPointRepository,
+  ChargingPointRuntimeStatus,
+  UpdateChargingPointInput,
   UpsertConnectorSnapshotInput
-} from "./station.repository";
+} from "./charging-point.repository";
 
-function toStationRecord(row: typeof stations.$inferSelect): StationRecord {
+function toChargingPointRecord(row: typeof stations.$inferSelect): ChargingPointRecord {
   return {
     id: row.id,
     name: row.name,
@@ -31,10 +31,10 @@ function toStationRecord(row: typeof stations.$inferSelect): StationRecord {
   };
 }
 
-export class PostgresStationRepository implements StationRepository {
+export class PostgresChargingPointRepository implements ChargingPointRepository {
   constructor(private readonly db: Database) {}
 
-  async create(input: CreateStationInput): Promise<StationRecord> {
+  async create(input: CreateChargingPointInput): Promise<ChargingPointRecord> {
     const [row] = await this.db
       .insert(stations)
       .values({
@@ -45,26 +45,26 @@ export class PostgresStationRepository implements StationRepository {
       })
       .returning();
 
-    return toStationRecord(row!);
+    return toChargingPointRecord(row!);
   }
 
   async delete(id: string): Promise<void> {
     await this.db.delete(stations).where(eq(stations.id, id));
   }
 
-  async findById(id: string): Promise<StationRecord | null> {
+  async findById(id: string): Promise<ChargingPointRecord | null> {
     const [row] = await this.db.select().from(stations).where(eq(stations.id, id)).limit(1);
-    return row === undefined ? null : toStationRecord(row);
+    return row === undefined ? null : toChargingPointRecord(row);
   }
 
-  async list(): Promise<StationRecord[]> {
+  async list(): Promise<ChargingPointRecord[]> {
     const rows = await this.db.select().from(stations);
-    return rows.map(toStationRecord);
+    return rows.map(toChargingPointRecord);
   }
 
-  async listByDesiredStatus(status: "running" | "stopped"): Promise<StationRecord[]> {
+  async listByDesiredStatus(status: "running" | "stopped"): Promise<ChargingPointRecord[]> {
     const rows = await this.db.select().from(stations).where(eq(stations.desiredStatus, status));
-    return rows.map(toStationRecord);
+    return rows.map(toChargingPointRecord);
   }
 
   async listConnectorSnapshots(stationId: string): Promise<ConnectorSnapshotRecord[]> {
@@ -82,7 +82,7 @@ export class PostgresStationRepository implements StationRepository {
     }));
   }
 
-  async update(id: string, input: UpdateStationInput): Promise<StationRecord> {
+  async update(id: string, input: UpdateChargingPointInput): Promise<ChargingPointRecord> {
     const [row] = await this.db
       .update(stations)
       .set({ ...input, updatedAt: new Date() })
@@ -93,7 +93,7 @@ export class PostgresStationRepository implements StationRepository {
       throw notFound(`桩实例 ${id} 不存在`);
     }
 
-    return toStationRecord(row);
+    return toChargingPointRecord(row);
   }
 
   async updateDesiredStatus(id: string, status: "running" | "stopped"): Promise<void> {
@@ -103,7 +103,7 @@ export class PostgresStationRepository implements StationRepository {
       .where(eq(stations.id, id));
   }
 
-  async updateRuntimeStatus(id: string, status: StationRuntimeStatus): Promise<void> {
+  async updateRuntimeStatus(id: string, status: ChargingPointRuntimeStatus): Promise<void> {
     await this.db
       .update(stations)
       .set({ runtimeStatus: status, updatedAt: new Date() })

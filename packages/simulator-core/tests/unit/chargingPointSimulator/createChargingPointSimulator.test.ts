@@ -1,29 +1,29 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  SIMULATOR_RUNTIME_SUPPORT,
-  SimulatorError,
-  createSimulator,
-  isSimulatorRuntimeSupported,
-  type SimulatorOptions,
+  CHARGING_POINT_SIMULATOR_RUNTIME_SUPPORT,
+  ChargingPointSimulatorError,
+  createChargingPointSimulator,
+  isChargingPointSimulatorRuntimeSupported,
+  type ChargingPointSimulatorOptions,
 } from "../../../src";
 import { createChargingPoint } from "../protocolRuntime/ocpp16/helpers";
 
 function createOptions(
-  overrides: Partial<SimulatorOptions> = {},
-): SimulatorOptions {
+  overrides: Partial<ChargingPointSimulatorOptions> = {},
+): ChargingPointSimulatorOptions {
   return {
     protocol: "OCPP16J",
     id: "cp-1",
     centralSystemUrl: "ws://localhost/cp-1",
     chargingPoint: createChargingPoint(),
     ...overrides,
-  } as SimulatorOptions;
+  } as ChargingPointSimulatorOptions;
 }
 
-describe("createSimulator", () => {
+describe("createChargingPointSimulator", () => {
   test("creates an OCPP 1.6 simulator instance", () => {
-    const simulator = createSimulator(createOptions());
+    const simulator = createChargingPointSimulator(createOptions());
 
     expect(simulator.id).toBe("cp-1");
     expect(simulator.protocol).toBe("OCPP16J");
@@ -39,15 +39,15 @@ describe("createSimulator", () => {
 
   test("rejects unsupported OCPP 2.0.1 at runtime with a stable error", () => {
     expect(() =>
-      createSimulator({
+      createChargingPointSimulator({
         protocol: "OCPP201",
         id: "cp-201",
         centralSystemUrl: "ws://localhost/cp-201",
       })
-    ).toThrow(SimulatorError);
+    ).toThrow(ChargingPointSimulatorError);
 
     expect(() =>
-      createSimulator({
+      createChargingPointSimulator({
         protocol: "OCPP201",
         id: "cp-201",
         centralSystemUrl: "ws://localhost/cp-201",
@@ -55,47 +55,47 @@ describe("createSimulator", () => {
     ).toThrow("OCPP201 暂不支持运行");
 
     try {
-      createSimulator({
+      createChargingPointSimulator({
         protocol: "OCPP201",
         id: "cp-201",
         centralSystemUrl: "ws://localhost/cp-201",
       });
     } catch (error) {
       expect(error).toMatchObject({
-        code: "SIMULATOR_PROTOCOL_UNSUPPORTED",
+        code: "CHARGING_POINT_SIMULATOR_PROTOCOL_UNSUPPORTED",
         cause: {
           protocol: "OCPP201",
-          support: SIMULATOR_RUNTIME_SUPPORT.OCPP201,
+          support: CHARGING_POINT_SIMULATOR_RUNTIME_SUPPORT.OCPP201,
         },
       });
     }
   });
 
   test("documents protocol toolkit support separately from simulator runtime support", () => {
-    expect(SIMULATOR_RUNTIME_SUPPORT.OCPP16J).toEqual({
+    expect(CHARGING_POINT_SIMULATOR_RUNTIME_SUPPORT.OCPP16J).toEqual({
       protocolToolkit: true,
-      simulatorRuntime: true,
+      chargingPointSimulatorRuntime: true,
       status: "supported",
     });
-    expect(SIMULATOR_RUNTIME_SUPPORT.OCPP201).toEqual({
+    expect(CHARGING_POINT_SIMULATOR_RUNTIME_SUPPORT.OCPP201).toEqual({
       protocolToolkit: true,
-      simulatorRuntime: false,
+      chargingPointSimulatorRuntime: false,
       status: "protocol-only",
     });
-    expect(isSimulatorRuntimeSupported("OCPP16J")).toBe(true);
-    expect(isSimulatorRuntimeSupported("OCPP201")).toBe(false);
+    expect(isChargingPointSimulatorRuntimeSupported("OCPP16J")).toBe(true);
+    expect(isChargingPointSimulatorRuntimeSupported("OCPP201")).toBe(false);
   });
 
   test("requires charging point topology for normal OCPP16J creation", () => {
     expect(() =>
-      createSimulator({
+      createChargingPointSimulator({
         protocol: "OCPP16J",
         id: "cp-1",
         centralSystemUrl: "ws://localhost/cp-1",
       } as never)
     ).toThrow(
       expect.objectContaining({
-        code: "SIMULATOR_INVALID_OPERATION",
+        code: "CHARGING_POINT_SIMULATOR_INVALID_OPERATION",
       }),
     );
   });

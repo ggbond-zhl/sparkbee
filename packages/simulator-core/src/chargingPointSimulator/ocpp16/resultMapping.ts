@@ -8,19 +8,19 @@ import type {
   Ocpp16TransactionStartResult,
 } from "../../protocol/runtime";
 import type {
-  SimulatorAuthorizeResult,
-  SimulatorAuthorizationStatus,
-  SimulatorMeterValueResult,
-  SimulatorStopTransactionResult,
-  SimulatorTransactionStartResult,
+  ChargingPointSimulatorAuthorizeResult,
+  ChargingPointSimulatorAuthorizationStatus,
+  ChargingPointSimulatorMeterValueResult,
+  ChargingPointSimulatorStopTransactionResult,
+  ChargingPointSimulatorTransactionStartResult,
 } from "../types";
 import type {
-  Ocpp16SimulatorAuthorizeResult,
-  Ocpp16SimulatorConnectorActionResult,
-  Ocpp16SimulatorTransactionStartResult,
+  Ocpp16ChargingPointSimulatorAuthorizeResult,
+  Ocpp16ChargingPointSimulatorConnectorActionResult,
+  Ocpp16ChargingPointSimulatorTransactionStartResult,
 } from "./types";
 
-export function toSimulatorBootResult(result: Ocpp16BootResult): {
+export function toChargingPointSimulatorBootResult(result: Ocpp16BootResult): {
   status: "accepted" | "pending" | "rejected";
   protocolStatus: string;
   currentTime: Date;
@@ -38,9 +38,9 @@ export function toSimulatorBootResult(result: Ocpp16BootResult): {
   };
 }
 
-export function toSimulatorConnectorActionResult(
+export function toChargingPointSimulatorConnectorActionResult(
   result: Ocpp16ConnectorActionResult,
-): Ocpp16SimulatorConnectorActionResult {
+): Ocpp16ChargingPointSimulatorConnectorActionResult {
   return {
     evseId: result.evseId,
     connectorId: result.connectorId,
@@ -50,9 +50,9 @@ export function toSimulatorConnectorActionResult(
   };
 }
 
-export function toSimulatorAuthorizeResult(
+export function toChargingPointSimulatorAuthorizeResult(
   result: Ocpp16AuthorizeResult,
-): Ocpp16SimulatorAuthorizeResult {
+): Ocpp16ChargingPointSimulatorAuthorizeResult {
   if (result.outcome === "Accepted") {
     return {
       status: "accepted",
@@ -85,9 +85,9 @@ export function toSimulatorAuthorizeResult(
   };
 }
 
-export function toSimulatorTransactionStartResult(
+export function toChargingPointSimulatorTransactionStartResult(
   result: Ocpp16TransactionStartResult,
-): Ocpp16SimulatorTransactionStartResult {
+): Ocpp16ChargingPointSimulatorTransactionStartResult {
   if (result.status === "Accepted") {
     return {
       status: "accepted",
@@ -116,9 +116,9 @@ export function toSimulatorTransactionStartResult(
   };
 }
 
-export function toSimulatorMeterValueResult(
+export function toChargingPointSimulatorMeterValueResult(
   result: Ocpp16MeterValuesResult,
-): SimulatorMeterValueResult {
+): ChargingPointSimulatorMeterValueResult {
   if (result.outcome === "Accepted") {
     return {
       status: "accepted",
@@ -136,9 +136,9 @@ export function toSimulatorMeterValueResult(
   };
 }
 
-export function toSimulatorStopTransactionResult(
+export function toChargingPointSimulatorStopTransactionResult(
   result: Ocpp16StopTransactionResult,
-): SimulatorStopTransactionResult {
+): ChargingPointSimulatorStopTransactionResult {
   if (result.outcome === "Accepted") {
     return {
       status: "accepted",
@@ -157,8 +157,8 @@ export function toSimulatorStopTransactionResult(
 }
 
 export function toPublicAuthorizeResult(
-  result: Ocpp16SimulatorAuthorizeResult,
-): SimulatorAuthorizeResult {
+  result: Ocpp16ChargingPointSimulatorAuthorizeResult,
+): ChargingPointSimulatorAuthorizeResult {
   if (result.status === "accepted") {
     return { status: "accepted" };
   }
@@ -182,8 +182,8 @@ export function toPublicAuthorizeResult(
 }
 
 export function toPublicTransactionStartResult(
-  result: Ocpp16SimulatorTransactionStartResult,
-): SimulatorTransactionStartResult {
+  result: Ocpp16ChargingPointSimulatorTransactionStartResult,
+): ChargingPointSimulatorTransactionStartResult {
   if (result.status === "accepted") {
     return {
       status: "accepted",
@@ -202,7 +202,7 @@ export function toPublicTransactionStartResult(
 
 function mapAuthorizationStatus(
   status: Ocpp16AuthorizationStatus,
-): SimulatorAuthorizationStatus {
+): ChargingPointSimulatorAuthorizationStatus {
   switch (status) {
     case "Accepted":
       return "accepted";

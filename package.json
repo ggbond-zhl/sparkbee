@@ -7,6 +7,7 @@
     "dev": "pnpm --parallel --filter @spark-bee/server --filter @spark-bee/web dev",
     "build": "pnpm --recursive --if-present build",
     "test": "pnpm --recursive --if-present test",
+    "test:db": "pnpm --filter @spark-bee/server test:db",
     "test:unit": "pnpm --recursive --if-present test:unit",
     "typecheck": "pnpm --recursive --if-present typecheck"
   },

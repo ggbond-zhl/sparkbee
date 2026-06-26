@@ -7,14 +7,14 @@ import type {
 } from "../../protocol/session/types";
 import type { ProtocolClock } from "../../protocol/runtime/ocpp16/protocolClock";
 import type {
-  SimulatorEventBus,
-  SimulatorSessionStatus,
-  SimulatorStatus,
+  ChargingPointSimulatorEventBus,
+  ChargingPointSimulatorSessionStatus,
+  ChargingPointSimulatorStatus,
 } from "../types";
 import { EventEnvelopePublisher } from "./EventEnvelopePublisher";
 
 export interface Ocpp16EventEnvelopeOptions {
-  simulatorId: string;
+  chargingPointSimulatorId: string;
   protocol: ProtocolVersion;
   clock: ProtocolClock;
   idGenerator: () => string;
@@ -25,13 +25,13 @@ export interface Ocpp16EventEnvelopeOptions {
 
 export class Ocpp16EventEnvelope {
   private readonly publisher: EventEnvelopePublisher;
-  private sessionStatus: SimulatorSessionStatus = "offline";
+  private sessionStatus: ChargingPointSimulatorSessionStatus = "offline";
 
-  readonly events: SimulatorEventBus;
+  readonly events: ChargingPointSimulatorEventBus;
 
   constructor(private readonly options: Ocpp16EventEnvelopeOptions) {
     this.publisher = new EventEnvelopePublisher({
-      simulatorId: options.simulatorId,
+      chargingPointSimulatorId: options.chargingPointSimulatorId,
       protocol: options.protocol,
       clock: options.clock,
       idGenerator: options.idGenerator,
@@ -40,13 +40,13 @@ export class Ocpp16EventEnvelope {
     this.bind();
   }
 
-  publishSimulatorStatus(
-    previousStatus: SimulatorStatus,
-    currentStatus: SimulatorStatus,
+  publishChargingPointSimulatorStatus(
+    previousStatus: ChargingPointSimulatorStatus,
+    currentStatus: ChargingPointSimulatorStatus,
     error?: { code: string; message: string },
   ): void {
-    this.publisher.publish("simulator.status", {
-      resource: { scope: "simulator" },
+    this.publisher.publish("chargingPointSimulator.status", {
+      resource: { scope: "chargingPointSimulator" },
       previousStatus,
       currentStatus,
       ...(error === undefined ? {} : { error }),
@@ -161,7 +161,7 @@ export class Ocpp16EventEnvelope {
   };
 
   private publishSessionStatus(
-    currentStatus: SimulatorSessionStatus,
+    currentStatus: ChargingPointSimulatorSessionStatus,
     extra: { attempt?: number; reason?: SessionOfflineReason } = {},
   ): void {
     const previousStatus = this.sessionStatus;

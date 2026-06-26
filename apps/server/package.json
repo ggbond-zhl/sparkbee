@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node --import tsx src/index.ts",
-    "test": "vitest run",
+    "test": "vitest run tests/unit",
     "test:unit": "vitest run tests/unit",
+    "test:db": "vitest run tests/integration",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
@@ -22,6 +23,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.3",
     "@types/node": "^24.0.8",
     "drizzle-kit": "^0.31.8",
     "tsx": "^4.21.0",

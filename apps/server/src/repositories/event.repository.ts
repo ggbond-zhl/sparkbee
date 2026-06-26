@@ -17,6 +17,6 @@ export interface CreateEventInput {
 
 export interface EventRepository {
   append(input: CreateEventInput): Promise<EventRecord>;
-  listByStation(stationId: string, options: { after?: string; limit: number }): Promise<EventRecord[]>;
-  trimStationEvents(stationId: string, keep: number): Promise<void>;
+  listByChargingPoint(stationId: string, options: { after?: string; limit: number }): Promise<EventRecord[]>;
+  trimChargingPointEvents(stationId: string, keep: number): Promise<void>;
 }

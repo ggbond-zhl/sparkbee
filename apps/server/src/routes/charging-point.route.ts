@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 
-import { StationController } from "../controllers/station.controller";
+import { ChargingPointController } from "../controllers/charging-point.controller";
 import type { AppBindings } from "../types/app";
 
-export function createStationRoute() {
+export function createChargingPointRoute() {
   const route = new Hono<AppBindings>();
-  const controller = new StationController();
+  const controller = new ChargingPointController();
 
   route.get("/", (context) => controller.list(context));
   route.post("/", (context) => controller.create(context));

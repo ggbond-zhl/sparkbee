@@ -1,16 +1,16 @@
 import type { CreateEventInput } from "../repositories/event.repository";
 import type {
-  StationRuntimeStatus,
+  ChargingPointRuntimeStatus,
   UpsertConnectorSnapshotInput
-} from "../repositories/station.repository";
+} from "../repositories/charging-point.repository";
 import type {
-  StationRuntimeEvent,
-  StationRuntimeEventBus,
-  StationRuntimeEventType
-} from "./station-runtime.adapter";
+  ChargingPointRuntimeEvent,
+  ChargingPointRuntimeEventBus,
+  ChargingPointRuntimeEventType
+} from "./charging-point-runtime.adapter";
 
 export interface ProtocolEventProjectionStore {
-  updateRuntimeStatus(stationId: string, status: StationRuntimeStatus): Promise<void>;
+  updateRuntimeStatus(stationId: string, status: ChargingPointRuntimeStatus): Promise<void>;
   upsertConnectorSnapshot(stationId: string, input: UpsertConnectorSnapshotInput): Promise<void>;
 }
 
@@ -18,8 +18,8 @@ export interface ProtocolEventLog {
   append(input: CreateEventInput): Promise<unknown>;
 }
 
-const SIMULATOR_EVENT_TYPES: StationRuntimeEventType[] = [
-  "simulator.status",
+const CHARGING_POINT_SIMULATOR_EVENT_TYPES: ChargingPointRuntimeEventType[] = [
+  "chargingPointSimulator.status",
   "session.status",
   "chargingPoint.status",
   "evse.status",
@@ -36,16 +36,16 @@ export class ProtocolEventProjection {
     private readonly eventLog: ProtocolEventLog,
   ) {}
 
-  subscribeToRuntime(stationId: string, events: StationRuntimeEventBus): Array<() => void> {
-    return SIMULATOR_EVENT_TYPES.map((type) =>
+  subscribeToRuntime(stationId: string, events: ChargingPointRuntimeEventBus): Array<() => void> {
+    return CHARGING_POINT_SIMULATOR_EVENT_TYPES.map((type) =>
       events.subscribe(type, (event) => {
         void this.apply(stationId, event);
       }),
     );
   }
 
-  async apply(stationId: string, event: StationRuntimeEvent): Promise<void> {
-    if (event.type === "simulator.status") {
+  async apply(stationId: string, event: ChargingPointRuntimeEvent): Promise<void> {
+    if (event.type === "chargingPointSimulator.status") {
       await this.store.updateRuntimeStatus(stationId, event.currentStatus);
     }
 
@@ -65,7 +65,7 @@ export class ProtocolEventProjection {
     });
   }
 
-  async appendStationEvent(input: {
+  async appendChargingPointEvent(input: {
     stationId: string;
     type: string;
     payload: unknown;

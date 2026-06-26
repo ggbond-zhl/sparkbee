@@ -6,34 +6,34 @@ import type {
 } from "../../src/repositories/event.repository";
 import type {
   ConnectorSnapshotRecord,
-  CreateStationInput,
-  StationRecord,
-  StationRepository,
-  StationRuntimeStatus,
-  UpdateStationInput,
+  CreateChargingPointInput,
+  ChargingPointRecord,
+  ChargingPointRepository,
+  ChargingPointRuntimeStatus,
+  UpdateChargingPointInput,
   UpsertConnectorSnapshotInput
-} from "../../src/repositories/station.repository";
+} from "../../src/repositories/charging-point.repository";
 import type {
   CreateTransactionInput,
   EndTransactionInput,
   TransactionRepository
 } from "../../src/repositories/transaction.repository";
 import { ProtocolEventProjection } from "../../src/services/protocol-event-projection";
-import { StationService } from "../../src/services/station.service";
-import type { StationRuntime } from "../../src/services/station-runtime.adapter";
-import type { SimulatorEventBus } from "@spark-bee/simulator-core";
+import { ChargingPointService } from "../../src/services/charging-point.service";
+import type { ChargingPointRuntime } from "../../src/services/charging-point-runtime.adapter";
+import type { ChargingPointSimulatorEventBus } from "@spark-bee/simulator-core";
 
-class FakeStationRepository implements StationRepository {
-  readonly stations = new Map<string, StationRecord>();
+class FakeChargingPointRepository implements ChargingPointRepository {
+  readonly stations = new Map<string, ChargingPointRecord>();
 
-  constructor(seed: StationRecord[]) {
+  constructor(seed: ChargingPointRecord[]) {
     for (const station of seed) {
       this.stations.set(station.id, station);
     }
   }
 
-  async create(input: CreateStationInput): Promise<StationRecord> {
-    const station = createStation({ ...input, id: crypto.randomUUID() });
+  async create(input: CreateChargingPointInput): Promise<ChargingPointRecord> {
+    const station = createChargingPoint({ ...input, id: crypto.randomUUID() });
     this.stations.set(station.id, station);
     return station;
   }
@@ -42,15 +42,15 @@ class FakeStationRepository implements StationRepository {
     this.stations.delete(id);
   }
 
-  async findById(id: string): Promise<StationRecord | null> {
+  async findById(id: string): Promise<ChargingPointRecord | null> {
     return this.stations.get(id) ?? null;
   }
 
-  async list(): Promise<StationRecord[]> {
+  async list(): Promise<ChargingPointRecord[]> {
     return [...this.stations.values()];
   }
 
-  async listByDesiredStatus(status: "running" | "stopped"): Promise<StationRecord[]> {
+  async listByDesiredStatus(status: "running" | "stopped"): Promise<ChargingPointRecord[]> {
     return [...this.stations.values()].filter((station) => station.desiredStatus === status);
   }
 
@@ -58,7 +58,7 @@ class FakeStationRepository implements StationRepository {
     return [];
   }
 
-  async update(id: string, input: UpdateStationInput): Promise<StationRecord> {
+  async update(id: string, input: UpdateChargingPointInput): Promise<ChargingPointRecord> {
     const current = this.stations.get(id)!;
     const next = { ...current, ...input, updatedAt: new Date() };
     this.stations.set(id, next);
@@ -70,7 +70,7 @@ class FakeStationRepository implements StationRepository {
     this.stations.set(id, { ...station, desiredStatus: status });
   }
 
-  async updateRuntimeStatus(id: string, status: StationRuntimeStatus): Promise<void> {
+  async updateRuntimeStatus(id: string, status: ChargingPointRuntimeStatus): Promise<void> {
     const station = this.stations.get(id)!;
     this.stations.set(id, { ...station, runtimeStatus: status });
   }
@@ -104,17 +104,17 @@ class FakeEventLog {
   }
 }
 
-class FakeStationRuntime implements StationRuntime {
+class FakeChargingPointRuntime implements ChargingPointRuntime {
   readonly id = "CP-001";
   readonly protocol = "OCPP16J";
-  readonly events: SimulatorEventBus = {
+  readonly events: ChargingPointSimulatorEventBus = {
     subscribe: () => () => {}
   };
 
   async start() {
     return {
       chargingPointId: this.id,
-      simulatorStatus: "running" as const,
+      chargingPointSimulatorStatus: "running" as const,
       bootStatus: "Accepted" as const
     };
   }
@@ -122,7 +122,7 @@ class FakeStationRuntime implements StationRuntime {
   async stop() {
     return {
       chargingPointId: this.id,
-      simulatorStatus: "stopped" as const
+      chargingPointSimulatorStatus: "stopped" as const
     };
   }
 
@@ -175,20 +175,20 @@ class FakeStationRuntime implements StationRuntime {
   }
 }
 
-describe("StationService", () => {
+describe("ChargingPointService", () => {
   test("records accepted transaction lifecycle", async () => {
-    const station = createStation();
-    const stations = new FakeStationRepository([station]);
+    const station = createChargingPoint();
+    const stations = new FakeChargingPointRepository([station]);
     const transactions = new FakeTransactionRepository();
-    const runtime = new FakeStationRuntime();
-    const service = new StationService(
+    const runtime = new FakeChargingPointRuntime();
+    const service = new ChargingPointService(
       stations,
       transactions,
       new ProtocolEventProjection(stations, new FakeEventLog()),
       () => runtime,
     );
 
-    await service.startStation(station.id);
+    await service.startChargingPoint(station.id);
     const startResult = await service.startTransaction(station.id, {
       connectorId: 1,
       idTag: "TAG-1",
@@ -221,7 +221,7 @@ describe("StationService", () => {
   });
 });
 
-function createStation(overrides: Partial<StationRecord & CreateStationInput> = {}): StationRecord {
+function createChargingPoint(overrides: Partial<ChargingPointRecord & CreateChargingPointInput> = {}): ChargingPointRecord {
   return {
     id: overrides.id ?? "11111111-1111-4111-8111-111111111111",
     name: overrides.name ?? "测试桩",

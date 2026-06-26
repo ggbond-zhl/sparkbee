@@ -1,33 +1,33 @@
-import type { StationRecord } from "../repositories/station.repository";
+import type { ChargingPointRecord } from "../repositories/charging-point.repository";
 import type { ProtocolEventProjection } from "./protocol-event-projection";
 import {
-  createStationRuntime,
-  type StationRuntime,
-  type StationRuntimeFactory
-} from "./station-runtime.adapter";
+  createChargingPointRuntime,
+  type ChargingPointRuntime,
+  type ChargingPointRuntimeFactory
+} from "./charging-point-runtime.adapter";
 
 interface RuntimeEntry {
-  runtime: StationRuntime;
+  runtime: ChargingPointRuntime;
   unsubscribe: Array<() => void>;
 }
 
-export class StationRuntimeRegistry {
+export class ChargingPointRuntimeRegistry {
   private readonly runtimes = new Map<string, RuntimeEntry>();
 
   constructor(
     private readonly eventProjection: ProtocolEventProjection,
-    private readonly runtimeFactory: StationRuntimeFactory = createStationRuntime,
+    private readonly runtimeFactory: ChargingPointRuntimeFactory = createChargingPointRuntime,
   ) {}
 
   has(stationId: string): boolean {
     return this.runtimes.has(stationId);
   }
 
-  get(stationId: string): StationRuntime | undefined {
+  get(stationId: string): ChargingPointRuntime | undefined {
     return this.runtimes.get(stationId)?.runtime;
   }
 
-  async start(station: StationRecord): Promise<StationRuntime> {
+  async start(station: ChargingPointRecord): Promise<ChargingPointRuntime> {
     const existing = this.get(station.id);
     if (existing !== undefined) {
       return existing;

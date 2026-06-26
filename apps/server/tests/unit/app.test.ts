@@ -9,10 +9,10 @@ function createTestApp() {
     auth: new AuthService("password-123", "x".repeat(32)),
     events: {
       subscribe: () => () => undefined,
-      listByStation: async () => []
+      listByChargingPoint: async () => []
     },
-    stations: {
-      listStations: async () => []
+    chargingPoints: {
+      listChargingPoints: async () => []
     }
   } as unknown as Services;
 
@@ -23,7 +23,7 @@ describe("createApp", () => {
   test("protects API routes until login succeeds", async () => {
     const app = createTestApp();
 
-    const rejected = await app.request("/api/stations");
+    const rejected = await app.request("/api/chargingPoints");
     expect(rejected.status).toBe(401);
 
     const login = await app.request("/api/auth/login", {
@@ -36,7 +36,7 @@ describe("createApp", () => {
     const cookie = login.headers.get("set-cookie");
     expect(cookie).toContain("sparkbee_session=");
 
-    const accepted = await app.request("/api/stations", {
+    const accepted = await app.request("/api/chargingPoints", {
       headers: { cookie: cookie ?? "" }
     });
     expect(accepted.status).toBe(200);

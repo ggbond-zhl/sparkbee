@@ -1,19 +1,19 @@
 import { describe, expect, test } from "vitest";
 
 import type {
-  SimulatorEventBus,
-  SimulatorEventMap,
-  SimulatorEventType
+  ChargingPointSimulatorEventBus,
+  ChargingPointSimulatorEventMap,
+  ChargingPointSimulatorEventType
 } from "@spark-bee/simulator-core";
 import type { CreateEventInput } from "../../src/repositories/event.repository";
-import type { StationRuntimeStatus, UpsertConnectorSnapshotInput } from "../../src/repositories/station.repository";
+import type { ChargingPointRuntimeStatus, UpsertConnectorSnapshotInput } from "../../src/repositories/charging-point.repository";
 import { ProtocolEventProjection } from "../../src/services/protocol-event-projection";
 
 class FakeProjectionStore {
-  readonly runtimeStatuses: Array<{ stationId: string; status: StationRuntimeStatus }> = [];
+  readonly runtimeStatuses: Array<{ stationId: string; status: ChargingPointRuntimeStatus }> = [];
   readonly connectorSnapshots: Array<{ stationId: string; input: UpsertConnectorSnapshotInput }> = [];
 
-  async updateRuntimeStatus(stationId: string, status: StationRuntimeStatus): Promise<void> {
+  async updateRuntimeStatus(stationId: string, status: ChargingPointRuntimeStatus): Promise<void> {
     this.runtimeStatuses.push({ stationId, status });
   }
 
@@ -41,12 +41,12 @@ class FakeEventLog {
   }
 }
 
-class FakeEventBus implements SimulatorEventBus {
-  readonly subscriptions: Array<{ type: SimulatorEventType; unsubscribed: boolean }> = [];
+class FakeEventBus implements ChargingPointSimulatorEventBus {
+  readonly subscriptions: Array<{ type: ChargingPointSimulatorEventType; unsubscribed: boolean }> = [];
 
-  subscribe<TType extends SimulatorEventType>(
+  subscribe<TType extends ChargingPointSimulatorEventType>(
     type: TType,
-    _listener: (event: SimulatorEventMap[TType]) => void,
+    _listener: (event: ChargingPointSimulatorEventMap[TType]) => void,
   ): () => void {
     const subscription = { type, unsubscribed: false };
     this.subscriptions.push(subscription);
@@ -69,7 +69,7 @@ describe("ProtocolEventProjection", () => {
     }
 
     expect(events.subscriptions.map((subscription) => subscription.type)).toEqual([
-      "simulator.status",
+      "chargingPointSimulator.status",
       "session.status",
       "chargingPoint.status",
       "evse.status",
@@ -90,10 +90,10 @@ describe("ProtocolEventProjection", () => {
     await projection.apply("station-1", {
       id: "event-1",
       sequence: 1,
-      type: "simulator.status",
-      simulatorId: "CP-001",
+      type: "chargingPointSimulator.status",
+      chargingPointSimulatorId: "CP-001",
       protocol: "OCPP16J",
-      resource: { scope: "simulator" },
+      resource: { scope: "chargingPointSimulator" },
       occurredAt: "2026-01-01T00:00:00.000Z",
       previousStatus: "starting",
       currentStatus: "running"
@@ -102,7 +102,7 @@ describe("ProtocolEventProjection", () => {
       id: "event-2",
       sequence: 2,
       type: "connector.status",
-      simulatorId: "CP-001",
+      chargingPointSimulatorId: "CP-001",
       protocol: "OCPP16J",
       resource: { scope: "connector", evseId: 9, connectorId: 2 },
       occurredAt: "2026-01-01T00:00:01.000Z",
@@ -113,7 +113,7 @@ describe("ProtocolEventProjection", () => {
       id: "event-3",
       sequence: 3,
       type: "protocol.message",
-      simulatorId: "CP-001",
+      chargingPointSimulatorId: "CP-001",
       protocol: "OCPP16J",
       resource: { scope: "protocol" },
       occurredAt: "2026-01-01T00:00:02.000Z",
@@ -141,7 +141,7 @@ describe("ProtocolEventProjection", () => {
       occurredAt: event.occurredAt?.toISOString()
     }))).toEqual([
       {
-        type: "simulator.status",
+        type: "chargingPointSimulator.status",
         protocolMessage: false,
         occurredAt: "2026-01-01T00:00:00.000Z"
       },

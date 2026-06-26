@@ -1,39 +1,39 @@
 import type {
-  CreateStationInput,
-  StationRecord,
-  StationRepository,
-  UpdateStationInput
-} from "../repositories/station.repository";
+  CreateChargingPointInput,
+  ChargingPointRecord,
+  ChargingPointRepository,
+  UpdateChargingPointInput
+} from "../repositories/charging-point.repository";
 import type { TransactionRepository } from "../repositories/transaction.repository";
 import { badRequest, notFound } from "../utils/errors";
 import type { ProtocolEventProjection } from "./protocol-event-projection";
 import {
-  createStationRuntime,
-  type StationRuntime,
-  type StationRuntimeFactory
-} from "./station-runtime.adapter";
-import { StationRuntimeRegistry } from "./station-runtime-registry";
+  createChargingPointRuntime,
+  type ChargingPointRuntime,
+  type ChargingPointRuntimeFactory
+} from "./charging-point-runtime.adapter";
+import { ChargingPointRuntimeRegistry } from "./charging-point-runtime-registry";
 
-export class StationService {
-  private readonly registry: StationRuntimeRegistry;
+export class ChargingPointService {
+  private readonly registry: ChargingPointRuntimeRegistry;
 
   constructor(
-    private readonly stations: StationRepository,
+    private readonly stations: ChargingPointRepository,
     private readonly transactions: TransactionRepository,
     eventProjection: ProtocolEventProjection,
-    runtimeFactory: StationRuntimeFactory = createStationRuntime,
+    runtimeFactory: ChargingPointRuntimeFactory = createChargingPointRuntime,
   ) {
-    this.registry = new StationRuntimeRegistry(
+    this.registry = new ChargingPointRuntimeRegistry(
       eventProjection,
       runtimeFactory,
     );
   }
 
-  listStations() {
+  listChargingPoints() {
     return this.stations.list();
   }
 
-  async getStation(id: string) {
+  async getChargingPoint(id: string) {
     const station = await this.stations.findById(id);
     if (station === null) {
       throw notFound(`桩实例 ${id} 不存在`);
@@ -43,26 +43,26 @@ export class StationService {
     return { station, connectors };
   }
 
-  createStation(input: CreateStationInput) {
+  createChargingPoint(input: CreateChargingPointInput) {
     return this.stations.create(input);
   }
 
-  updateStation(id: string, input: UpdateStationInput) {
+  updateChargingPoint(id: string, input: UpdateChargingPointInput) {
     return this.stations.update(id, input);
   }
 
-  async deleteStation(id: string) {
+  async deleteChargingPoint(id: string) {
     await this.registry.dispose(id);
     await this.stations.delete(id);
   }
 
-  async restoreRunningStations(): Promise<void> {
+  async restoreRunningChargingPoints(): Promise<void> {
     const stations = await this.stations.listByDesiredStatus("running");
-    await Promise.allSettled(stations.map((station) => this.startStation(station.id)));
+    await Promise.allSettled(stations.map((station) => this.startChargingPoint(station.id)));
   }
 
-  async startStation(id: string): Promise<StationRecord> {
-    const station = await this.requireStation(id);
+  async startChargingPoint(id: string): Promise<ChargingPointRecord> {
+    const station = await this.requireChargingPoint(id);
 
     if (this.registry.has(id)) {
       return station;
@@ -81,8 +81,8 @@ export class StationService {
     }
   }
 
-  async stopStation(id: string): Promise<void> {
-    await this.requireStation(id);
+  async stopChargingPoint(id: string): Promise<void> {
+    await this.requireChargingPoint(id);
     await this.stations.updateDesiredStatus(id, "stopped");
     await this.registry.stop(id);
     await this.stations.updateRuntimeStatus(id, "stopped");
@@ -151,7 +151,7 @@ export class StationService {
     return result;
   }
 
-  private requireRuntime(stationId: string): StationRuntime {
+  private requireRuntime(stationId: string): ChargingPointRuntime {
     const runtime = this.registry.get(stationId);
     if (runtime === undefined) {
       throw badRequest("桩实例未运行");
@@ -160,7 +160,7 @@ export class StationService {
     return runtime;
   }
 
-  private async requireStation(stationId: string): Promise<StationRecord> {
+  private async requireChargingPoint(stationId: string): Promise<ChargingPointRecord> {
     const station = await this.stations.findById(stationId);
     if (station === null) {
       throw notFound(`桩实例 ${stationId} 不存在`);

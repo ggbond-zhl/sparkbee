@@ -1,23 +1,23 @@
 import { z } from "zod";
 
-export const stationIdParamSchema = z.object({
+export const chargingPointIdParamSchema = z.object({
   id: z.string().uuid()
 });
 
-export const connectorParamSchema = stationIdParamSchema.extend({
+export const connectorParamSchema = chargingPointIdParamSchema.extend({
   connectorId: z.coerce.number().int().positive()
 });
 
-export const transactionParamSchema = stationIdParamSchema.extend({
+export const transactionParamSchema = chargingPointIdParamSchema.extend({
   transactionId: z.string().min(1)
 });
 
-export const stationEventQuerySchema = z.object({
+export const chargingPointEventQuerySchema = z.object({
   after: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100)
 });
 
-export const createStationSchema = z.object({
+export const createChargingPointSchema = z.object({
   name: z.string().min(1).max(80),
   csmsBaseUrl: z.string().url().refine((value) => value.startsWith("ws://") || value.startsWith("wss://"), {
     message: "CSMS base URL 必须以 ws:// 或 wss:// 开头"
@@ -29,7 +29,7 @@ export const createStationSchema = z.object({
   connectorMaxPowerW: z.number().int().min(1)
 });
 
-export const updateStationSchema = createStationSchema.partial();
+export const updateChargingPointSchema = createChargingPointSchema.partial();
 
 export const authorizeSchema = z.object({
   connectorId: z.number().int().positive(),
@@ -50,5 +50,5 @@ export const stopTransactionSchema = z.object({
   meterStopWh: z.number().int().min(0).optional()
 });
 
-export type CreateStationInput = z.infer<typeof createStationSchema>;
-export type UpdateStationInput = z.infer<typeof updateStationSchema>;
+export type CreateChargingPointInput = z.infer<typeof createChargingPointSchema>;
+export type UpdateChargingPointInput = z.infer<typeof updateChargingPointSchema>;

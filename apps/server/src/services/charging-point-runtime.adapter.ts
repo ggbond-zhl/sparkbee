@@ -1,20 +1,20 @@
 import {
-  createSimulator,
-  type Simulator,
-  type SimulatorEvent,
-  type SimulatorEventBus,
-  type SimulatorEventType,
-  type SimulatorProtocol,
+  createChargingPointSimulator,
+  type ChargingPointSimulator,
+  type ChargingPointSimulatorEvent,
+  type ChargingPointSimulatorEventBus,
+  type ChargingPointSimulatorEventType,
+  type ChargingPointSimulatorProtocol,
 } from "@spark-bee/simulator-core";
 import type { ChargingPointOptions } from "@spark-bee/simulator-core/model";
 
-import type { StationRecord } from "../repositories/station.repository";
+import type { ChargingPointRecord } from "../repositories/charging-point.repository";
 
-export type StationRuntimeEvent = SimulatorEvent;
-export type StationRuntimeEventBus = SimulatorEventBus;
-export type StationRuntimeEventType = SimulatorEventType;
+export type ChargingPointRuntimeEvent = ChargingPointSimulatorEvent;
+export type ChargingPointRuntimeEventBus = ChargingPointSimulatorEventBus;
+export type ChargingPointRuntimeEventType = ChargingPointSimulatorEventType;
 
-export interface StationConnectorActionResult {
+export interface ChargingPointConnectorActionResult {
   chargingPointId: string;
   connectorId: number;
   plugState: "plugged" | "unplugged";
@@ -22,25 +22,25 @@ export interface StationConnectorActionResult {
   connectorStatus: string;
 }
 
-export type StationRuntimeStartResult =
+export type ChargingPointRuntimeStartResult =
   | {
       chargingPointId: string;
-      simulatorStatus: "running";
+      chargingPointSimulatorStatus: "running";
       bootStatus: "Accepted";
     }
   | {
       chargingPointId: string;
-      simulatorStatus: "starting";
+      chargingPointSimulatorStatus: "starting";
       bootStatus: "Pending";
       retryAfterSec: number;
     };
 
-export interface StationRuntimeStopResult {
+export interface ChargingPointRuntimeStopResult {
   chargingPointId: string;
-  simulatorStatus: "stopped";
+  chargingPointSimulatorStatus: "stopped";
 }
 
-export type StationRuntimeAuthorizeResult =
+export type ChargingPointRuntimeAuthorizeResult =
   | { status: "accepted" }
   | { status: "rejected"; reason: string; authorizationStatus?: string }
   | {
@@ -50,24 +50,24 @@ export type StationRuntimeAuthorizeResult =
       shouldReconnect: boolean;
     };
 
-export interface StationRuntimeStartTransactionInput {
+export interface ChargingPointRuntimeStartTransactionInput {
   connectorId: number;
   idTag: string;
   meterStartWh?: number;
   reservationId?: number;
 }
 
-export type StationRuntimeTransactionStartResult =
+export type ChargingPointRuntimeTransactionStartResult =
   | { status: "accepted"; transactionId: string }
   | { status: "rejected"; reason: string; authorizationStatus?: string };
 
-export interface StationRuntimeMeterValueInput {
+export interface ChargingPointRuntimeMeterValueInput {
   transactionId: string;
   meterWh: number;
   sampledAt?: Date;
 }
 
-export type StationRuntimeMeterValueResult =
+export type ChargingPointRuntimeMeterValueResult =
   | {
       status: "accepted";
       transactionId: string;
@@ -81,7 +81,7 @@ export type StationRuntimeMeterValueResult =
       shouldReconnect: boolean;
     };
 
-export type StationRuntimeTransactionStopReason =
+export type ChargingPointRuntimeTransactionStopReason =
   | "local"
   | "remote"
   | "unlock-command"
@@ -90,15 +90,15 @@ export type StationRuntimeTransactionStopReason =
   | "emergency-stop"
   | "other";
 
-export interface StationRuntimeStopTransactionInput {
+export interface ChargingPointRuntimeStopTransactionInput {
   transactionId: string;
-  reason: StationRuntimeTransactionStopReason;
+  reason: ChargingPointRuntimeTransactionStopReason;
   meterStopWh?: number;
   stoppedAt?: Date;
   idTag?: string;
 }
 
-export type StationRuntimeStopTransactionResult =
+export type ChargingPointRuntimeStopTransactionResult =
   | {
       status: "accepted";
       transactionId: string;
@@ -112,48 +112,48 @@ export type StationRuntimeStopTransactionResult =
       shouldReconnect: boolean;
     };
 
-export interface StationRuntime {
+export interface ChargingPointRuntime {
   readonly id: string;
-  readonly protocol: SimulatorProtocol;
-  readonly events: StationRuntimeEventBus;
-  start(): Promise<StationRuntimeStartResult>;
-  stop(): Promise<StationRuntimeStopResult>;
+  readonly protocol: ChargingPointSimulatorProtocol;
+  readonly events: ChargingPointRuntimeEventBus;
+  start(): Promise<ChargingPointRuntimeStartResult>;
+  stop(): Promise<ChargingPointRuntimeStopResult>;
   dispose(): Promise<void>;
-  plug(connectorId: number): Promise<StationConnectorActionResult>;
-  unplug(connectorId: number): Promise<StationConnectorActionResult>;
-  authorize(input: { connectorId: number; idTag: string }): Promise<StationRuntimeAuthorizeResult>;
-  startTransaction(input: StationRuntimeStartTransactionInput): Promise<StationRuntimeTransactionStartResult>;
-  reportMeterValue(input: StationRuntimeMeterValueInput): Promise<StationRuntimeMeterValueResult>;
-  stopTransaction(input: StationRuntimeStopTransactionInput): Promise<StationRuntimeStopTransactionResult>;
+  plug(connectorId: number): Promise<ChargingPointConnectorActionResult>;
+  unplug(connectorId: number): Promise<ChargingPointConnectorActionResult>;
+  authorize(input: { connectorId: number; idTag: string }): Promise<ChargingPointRuntimeAuthorizeResult>;
+  startTransaction(input: ChargingPointRuntimeStartTransactionInput): Promise<ChargingPointRuntimeTransactionStartResult>;
+  reportMeterValue(input: ChargingPointRuntimeMeterValueInput): Promise<ChargingPointRuntimeMeterValueResult>;
+  stopTransaction(input: ChargingPointRuntimeStopTransactionInput): Promise<ChargingPointRuntimeStopTransactionResult>;
 }
 
-export type StationRuntimeFactory = (station: StationRecord) => StationRuntime;
+export type ChargingPointRuntimeFactory = (chargingPoint: ChargingPointRecord) => ChargingPointRuntime;
 
-export function createStationRuntime(station: StationRecord): StationRuntime {
-  return new SimulatorStationRuntime(createSimulator({
+export function createChargingPointRuntime(chargingPoint: ChargingPointRecord): ChargingPointRuntime {
+  return new ChargingPointRuntimeAdapter(createChargingPointSimulator({
     protocol: "OCPP16J",
-    id: station.identity,
-    centralSystemUrl: buildOcppUrl(station.csmsBaseUrl, station.identity),
-    chargingPoint: toChargingPointOptions(station)
+    id: chargingPoint.identity,
+    centralSystemUrl: buildOcppUrl(chargingPoint.csmsBaseUrl, chargingPoint.identity),
+    chargingPoint: toChargingPointOptions(chargingPoint)
   }));
 }
 
-class SimulatorStationRuntime implements StationRuntime {
+class ChargingPointRuntimeAdapter implements ChargingPointRuntime {
   readonly id: string;
-  readonly protocol: SimulatorProtocol;
-  readonly events: SimulatorEventBus;
+  readonly protocol: ChargingPointSimulatorProtocol;
+  readonly events: ChargingPointSimulatorEventBus;
 
-  constructor(private readonly simulator: Simulator) {
+  constructor(private readonly simulator: ChargingPointSimulator) {
     this.id = simulator.id;
-    this.protocol = simulator.protocol as SimulatorProtocol;
+    this.protocol = simulator.protocol as ChargingPointSimulatorProtocol;
     this.events = simulator.events;
   }
 
-  start(): Promise<StationRuntimeStartResult> {
+  start(): Promise<ChargingPointRuntimeStartResult> {
     return this.simulator.start();
   }
 
-  stop(): Promise<StationRuntimeStopResult> {
+  stop(): Promise<ChargingPointRuntimeStopResult> {
     return this.simulator.stop();
   }
 
@@ -161,17 +161,17 @@ class SimulatorStationRuntime implements StationRuntime {
     return this.simulator.dispose();
   }
 
-  async plug(connectorId: number): Promise<StationConnectorActionResult> {
+  async plug(connectorId: number): Promise<ChargingPointConnectorActionResult> {
     const result = await this.simulator.plug(toCoreConnectorRef(connectorId));
-    return toStationConnectorActionResult(result);
+    return toChargingPointConnectorActionResult(result);
   }
 
-  async unplug(connectorId: number): Promise<StationConnectorActionResult> {
+  async unplug(connectorId: number): Promise<ChargingPointConnectorActionResult> {
     const result = await this.simulator.unplug(toCoreConnectorRef(connectorId));
-    return toStationConnectorActionResult(result);
+    return toChargingPointConnectorActionResult(result);
   }
 
-  authorize(input: { connectorId: number; idTag: string }): Promise<StationRuntimeAuthorizeResult> {
+  authorize(input: { connectorId: number; idTag: string }): Promise<ChargingPointRuntimeAuthorizeResult> {
     return this.simulator.authorize({
       ...toCoreConnectorRef(input.connectorId),
       idTag: input.idTag
@@ -179,8 +179,8 @@ class SimulatorStationRuntime implements StationRuntime {
   }
 
   startTransaction(
-    input: StationRuntimeStartTransactionInput,
-  ): Promise<StationRuntimeTransactionStartResult> {
+    input: ChargingPointRuntimeStartTransactionInput,
+  ): Promise<ChargingPointRuntimeTransactionStartResult> {
     return this.simulator.startTransaction({
       ...toCoreConnectorRef(input.connectorId),
       idTag: input.idTag,
@@ -189,11 +189,11 @@ class SimulatorStationRuntime implements StationRuntime {
     });
   }
 
-  reportMeterValue(input: StationRuntimeMeterValueInput): Promise<StationRuntimeMeterValueResult> {
+  reportMeterValue(input: ChargingPointRuntimeMeterValueInput): Promise<ChargingPointRuntimeMeterValueResult> {
     return this.simulator.reportMeterValue(input);
   }
 
-  stopTransaction(input: StationRuntimeStopTransactionInput): Promise<StationRuntimeStopTransactionResult> {
+  stopTransaction(input: ChargingPointRuntimeStopTransactionInput): Promise<ChargingPointRuntimeStopTransactionResult> {
     return this.simulator.stopTransaction(input);
   }
 }
@@ -207,13 +207,13 @@ function toCoreConnectorRef(connectorId: number): { evseId: number; connectorId:
   return { evseId: connectorId, connectorId };
 }
 
-function toStationConnectorActionResult(input: {
+function toChargingPointConnectorActionResult(input: {
   chargingPointId: string;
   connectorId: number;
   plugState: "plugged" | "unplugged";
   vehiclePresence: "detected" | "absent";
   connectorStatus: string;
-}): StationConnectorActionResult {
+}): ChargingPointConnectorActionResult {
   return {
     chargingPointId: input.chargingPointId,
     connectorId: input.connectorId,
@@ -223,7 +223,7 @@ function toStationConnectorActionResult(input: {
   };
 }
 
-function toChargingPointOptions(station: StationRecord): ChargingPointOptions {
+function toChargingPointOptions(station: ChargingPointRecord): ChargingPointOptions {
   return {
     id: station.identity,
     vendor: station.vendor,

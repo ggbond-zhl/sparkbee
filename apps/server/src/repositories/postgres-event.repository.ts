@@ -33,7 +33,7 @@ export class PostgresEventRepository implements EventRepository {
     return toEventRecord(row!);
   }
 
-  async listByStation(
+  async listByChargingPoint(
     stationId: string,
     options: { after?: string; limit: number },
   ): Promise<EventRecord[]> {
@@ -69,7 +69,7 @@ export class PostgresEventRepository implements EventRepository {
     return rows.map(toEventRecord);
   }
 
-  async trimStationEvents(stationId: string, keep: number): Promise<void> {
+  async trimChargingPointEvents(stationId: string, keep: number): Promise<void> {
     const staleRows = await this.db
       .select({ id: eventLogs.id })
       .from(eventLogs)
