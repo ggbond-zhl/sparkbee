@@ -137,6 +137,40 @@ describe("simulator package boundary", () => {
     expect(matches).toEqual([]);
   });
 
+  test("OCPP 1.6 transaction delivery owns transaction state helpers", () => {
+    const oldHelperPath = join(
+      repoRoot,
+      "packages/simulator-core/src/protocol/runtime/ocpp16/TransactionDelivery.ts",
+    );
+    const deliverySource = readFileSync(
+      join(repoRoot, "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16TransactionDelivery.ts"),
+      "utf8",
+    );
+
+    expect(existsSync(oldHelperPath)).toBe(false);
+    expect(deliverySource).toContain("recordOnlineTransactionStart");
+    expect(deliverySource).toContain("recordOfflineTransactionStartDelivery");
+    expect(deliverySource).toContain("recordTransactionMeterValue");
+  });
+
+  test("OCPP 1.6 runtime reaches connector topology through a concrete module", () => {
+    const topologyPath = join(
+      repoRoot,
+      "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16ConnectorTopology.ts",
+    );
+    const runtimeSource = readFileSync(
+      join(repoRoot, "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16Runtime.ts"),
+      "utf8",
+    );
+    const topologySource = readFileSync(topologyPath, "utf8");
+
+    expect(existsSync(topologyPath)).toBe(true);
+    expect(runtimeSource).toContain("Ocpp16ConnectorTopology");
+    expect(runtimeSource).not.toContain("listEvses().flatMap");
+    expect(topologySource).toContain("listConnectorRefs");
+    expect(topologySource).toContain("getTransactionResource");
+  });
+
   test("protocol runtime is not exposed through the old public path", () => {
     const oldPublicPath = ["./", "flow"].join("");
     const oldRelativePath = ["../", "flow"].join("");

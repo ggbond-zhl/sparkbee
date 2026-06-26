@@ -13,6 +13,7 @@ import {
   stopHeartbeatLoop as stopHeartbeatLoopAction,
 } from "./actions/heartbeat";
 import { handleInboundRequest as handleInboundRequestAction } from "./commands";
+import { Ocpp16ConnectorTopology } from "./Ocpp16ConnectorTopology";
 import {
   plugConnector as plugConnectorAction,
   unplugConnector as unplugConnectorAction,
@@ -30,7 +31,6 @@ import {
   getOcpp16TransactionDelivery,
   type Ocpp16TransactionDelivery,
 } from "./Ocpp16TransactionDelivery";
-import { resolveOcppTransactionId } from "./resourceAccess";
 import type {
   Ocpp16BootResult,
   Ocpp16AuthorizeInput,
@@ -55,6 +55,8 @@ import type {
 export class Ocpp16Runtime {
   private readonly context: Ocpp16RuntimeContext;
 
+  private readonly connectorTopology: Ocpp16ConnectorTopology;
+
   private readonly transactionDelivery: Ocpp16TransactionDelivery;
 
   private readonly runtimeEventListeners = new Set<Ocpp16RuntimeEventListener>();
@@ -67,6 +69,7 @@ export class Ocpp16Runtime {
 
   constructor(options: Ocpp16RuntimeOptions) {
     this.context = createOcpp16RuntimeContext(options, this.emitRuntimeEvent);
+    this.connectorTopology = new Ocpp16ConnectorTopology(this.context);
     this.transactionDelivery = getOcpp16TransactionDelivery(this.context);
     this.initializeListeners();
     this.bindContextEvents();
@@ -192,26 +195,18 @@ export class Ocpp16Runtime {
   }
 
   getEvseStatus(evseId: number): EVSEStatus | undefined {
-    return this.context.chargingPoint.getEvse(evseId)?.status;
+    return this.connectorTopology.getEvseStatus(evseId);
   }
 
   getConnectorStatus(input: {
     evseId: number;
     connectorId: number;
   }): ConnectorStatus | undefined {
-    return this.context.chargingPoint.getConnector(
-      input.evseId,
-      input.connectorId,
-    )?.status;
+    return this.connectorTopology.getConnectorStatus(input);
   }
 
   listConnectorRefs(): Array<{ evseId: number; connectorId: number }> {
-    return this.context.chargingPoint.listEvses().flatMap((evse) =>
-      evse.listConnectors().map((connector) => ({
-        evseId: evse.id,
-        connectorId: connector.id,
-      }))
-    );
+    return this.connectorTopology.listConnectorRefs();
   }
 
   getTransactionState(transactionId: string): TransactionState | undefined {
@@ -223,23 +218,7 @@ export class Ocpp16Runtime {
     connectorId: number;
     ocppTransactionId: number | null;
   } | undefined {
-    const transaction = this.context.transactions.get(transactionId);
-    if (transaction === undefined || transaction.target.scope !== "connector") {
-      return undefined;
-    }
-
-    let ocppTransactionId: number | null = null;
-    try {
-      ocppTransactionId = resolveOcppTransactionId(this.context, transaction);
-    } catch {
-      ocppTransactionId = null;
-    }
-
-    return {
-      evseId: transaction.target.evseId,
-      connectorId: transaction.target.connectorId,
-      ocppTransactionId,
-    };
+    return this.connectorTopology.getTransactionResource(transactionId);
   }
 
   stopRuntime(): void {

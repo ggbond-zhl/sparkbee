@@ -23,7 +23,7 @@ import {
   recordTransactionMeterValue,
   resolveConnectorMeasurements,
   resolveTransactionMeasurements,
-} from "../TransactionDelivery";
+} from "../Ocpp16TransactionDelivery";
 
 const METER_VALUE_SAMPLE_INTERVAL_KEY = "MeterValueSampleInterval";
 type MeterValueReadingContext = "Sample.Periodic" | "Trigger";

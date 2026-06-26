@@ -28,7 +28,7 @@ import {
   endTransactionDelivery,
   recordOfflineTransactionStopDelivery,
   requireTransactionConnectorRef,
-} from "../TransactionDelivery";
+} from "../Ocpp16TransactionDelivery";
 
 type StopTransactionRequestState = {
   transactionId: string;

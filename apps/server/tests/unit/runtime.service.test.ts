@@ -2,6 +2,11 @@ import { describe, expect, test } from "vitest";
 
 import type { CreateEventInput, EventRecord, EventRepository } from "../../src/repositories/event.repository";
 import type {
+  CreateTransactionInput,
+  EndTransactionInput,
+  TransactionRepository
+} from "../../src/repositories/transaction.repository";
+import type {
   ConnectorSnapshotRecord,
   CreateStationInput,
   StationRecord,
@@ -10,9 +15,9 @@ import type {
   UpdateStationInput,
   UpsertConnectorSnapshotInput
 } from "../../src/repositories/station.repository";
-import { EventService } from "../../src/services/event.service";
+import { ProtocolEventLedger } from "../../src/services/protocol-event-ledger";
 import { ProtocolEventProjection } from "../../src/services/protocol-event-projection";
-import { RuntimeService } from "../../src/services/runtime.service";
+import { StationService } from "../../src/services/station.service";
 import type {
   StationRuntime,
   StationRuntimeFactory,
@@ -104,6 +109,12 @@ class FakeEventRepository implements EventRepository {
   }
 
   async trimStationEvents(): Promise<void> {}
+}
+
+class FakeTransactionRepository implements TransactionRepository {
+  async create(_input: CreateTransactionInput): Promise<void> {}
+
+  async markEnded(_input: EndTransactionInput): Promise<void> {}
 }
 
 class FakeSimulator implements Simulator {
@@ -306,20 +317,21 @@ class FakeStationRuntime implements StationRuntime {
   }
 }
 
-describe("RuntimeService", () => {
+describe("StationService runtime workflow", () => {
   test("restores stations with running intent and persists simulator events", async () => {
     const station = createStation({ desiredStatus: "running" });
     const stationRepository = new FakeStationRepository([station]);
     const eventRepository = new FakeEventRepository();
-    const eventService = new EventService(eventRepository, { eventLogRetentionPerStation: 10 });
+    const eventService = new ProtocolEventLedger(eventRepository, { eventLogRetentionPerStation: 10 });
     const eventProjection = new ProtocolEventProjection(stationRepository, eventService);
-    const runtime = new RuntimeService(
+    const service = new StationService(
       stationRepository,
+      new FakeTransactionRepository(),
       eventProjection,
       () => new FakeSimulator(),
     );
 
-    await runtime.restoreRunningStations();
+    await service.restoreRunningStations();
     await Promise.resolve();
 
     expect(stationRepository.stations.get(station.id)?.runtimeStatus).toBe("running");
@@ -330,18 +342,19 @@ describe("RuntimeService", () => {
     const station = createStation({ desiredStatus: "stopped" });
     const stationRepository = new FakeStationRepository([station]);
     const eventRepository = new FakeEventRepository();
-    const eventService = new EventService(eventRepository, { eventLogRetentionPerStation: 10 });
+    const eventService = new ProtocolEventLedger(eventRepository, { eventLogRetentionPerStation: 10 });
     const eventProjection = new ProtocolEventProjection(stationRepository, eventService);
     const stationRuntime = new FakeStationRuntime();
     const runtimeFactory: StationRuntimeFactory = () => stationRuntime;
-    const runtime = new RuntimeService(
+    const service = new StationService(
       stationRepository,
+      new FakeTransactionRepository(),
       eventProjection,
       runtimeFactory,
     );
 
-    await runtime.startStation(station.id);
-    await runtime.plug(station.id, 2);
+    await service.startStation(station.id);
+    await service.plug(station.id, 2);
     stationRuntime.emit("connector.status", {
       id: "event-2",
       sequence: 2,

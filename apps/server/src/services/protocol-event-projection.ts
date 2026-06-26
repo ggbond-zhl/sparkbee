@@ -1,14 +1,13 @@
-import type {
-  SimulatorEvent,
-  SimulatorEventBus,
-  SimulatorEventType
-} from "@spark-bee/simulator-core";
-
 import type { CreateEventInput } from "../repositories/event.repository";
 import type {
   StationRuntimeStatus,
   UpsertConnectorSnapshotInput
 } from "../repositories/station.repository";
+import type {
+  StationRuntimeEvent,
+  StationRuntimeEventBus,
+  StationRuntimeEventType
+} from "./station-runtime.adapter";
 
 export interface ProtocolEventProjectionStore {
   updateRuntimeStatus(stationId: string, status: StationRuntimeStatus): Promise<void>;
@@ -19,7 +18,7 @@ export interface ProtocolEventLog {
   append(input: CreateEventInput): Promise<unknown>;
 }
 
-const SIMULATOR_EVENT_TYPES: SimulatorEventType[] = [
+const SIMULATOR_EVENT_TYPES: StationRuntimeEventType[] = [
   "simulator.status",
   "session.status",
   "chargingPoint.status",
@@ -37,7 +36,7 @@ export class ProtocolEventProjection {
     private readonly eventLog: ProtocolEventLog,
   ) {}
 
-  subscribeToRuntime(stationId: string, events: SimulatorEventBus): Array<() => void> {
+  subscribeToRuntime(stationId: string, events: StationRuntimeEventBus): Array<() => void> {
     return SIMULATOR_EVENT_TYPES.map((type) =>
       events.subscribe(type, (event) => {
         void this.apply(stationId, event);
@@ -45,7 +44,7 @@ export class ProtocolEventProjection {
     );
   }
 
-  async apply(stationId: string, event: SimulatorEvent): Promise<void> {
+  async apply(stationId: string, event: StationRuntimeEvent): Promise<void> {
     if (event.type === "simulator.status") {
       await this.store.updateRuntimeStatus(stationId, event.currentStatus);
     }

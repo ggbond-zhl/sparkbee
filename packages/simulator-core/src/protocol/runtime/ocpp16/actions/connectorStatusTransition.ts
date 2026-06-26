@@ -3,8 +3,7 @@ import {
   captureConnectorStatusSnapshot,
   emitChangedConnectorStatuses,
 } from "../events";
-import { ProtocolRuntimeError } from "../errors";
-import { mapConnectorStatus } from "../mappings";
+import { resolveConnectorOcppStatus } from "../Ocpp16ConnectorTopology";
 import type { Ocpp16RuntimeContext } from "../state";
 import type {
   Ocpp16ConnectorActionInput,
@@ -12,6 +11,8 @@ import type {
   Ocpp16StatusNotificationResult,
 } from "../types";
 import { sendStatusNotification } from "./statusNotification";
+
+export { resolveConnectorOcppStatus } from "../Ocpp16ConnectorTopology";
 
 export type ConnectorStatusTransition = Ocpp16ConnectorActionInput & {
   previousStatus: ConnectorStatusSnapshot;
@@ -88,25 +89,4 @@ export async function reportConnectorStatusTransition(
     status: nextOcppStatus,
     at,
   });
-}
-
-export function resolveConnectorOcppStatus(
-  context: Ocpp16RuntimeContext,
-  input: Ocpp16ConnectorActionInput,
-  options: { fallback?: Ocpp16ConnectorStatus } = {},
-): Ocpp16ConnectorStatus {
-  const evse = context.chargingPoint.getEvse(input.evseId);
-  const connector = evse?.getConnector(input.connectorId);
-  if (evse === undefined || connector === undefined) {
-    if (options.fallback !== undefined) {
-      return options.fallback;
-    }
-
-    throw new ProtocolRuntimeError(
-      "PROTOCOL_RUNTIME_CONNECTOR_NOT_FOUND",
-      `枪口 ${input.evseId}/${input.connectorId} 不存在`,
-    );
-  }
-
-  return mapConnectorStatus({ evse, connector });
 }

@@ -5,7 +5,11 @@ import type {
   EventRepository
 } from "../repositories/event.repository";
 
-export class ProtocolEventHistory {
+export type ProtocolEventListener = (event: EventRecord) => void;
+
+export class ProtocolEventLedger {
+  private readonly listeners = new Set<ProtocolEventListener>();
+
   constructor(
     private readonly events: EventRepository,
     private readonly config: Pick<ServerConfig, "eventLogRetentionPerStation">,
@@ -21,6 +25,10 @@ export class ProtocolEventHistory {
       );
     }
 
+    for (const listener of [...this.listeners]) {
+      listener(event);
+    }
+
     return event;
   }
 
@@ -29,5 +37,10 @@ export class ProtocolEventHistory {
     options: { after?: string; limit: number },
   ): Promise<EventRecord[]> {
     return this.events.listByStation(stationId, options);
+  }
+
+  subscribe(listener: ProtocolEventListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 }

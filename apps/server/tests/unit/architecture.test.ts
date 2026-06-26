@@ -39,14 +39,14 @@ describe("server architecture", () => {
   });
 
   test("runtime event subscription choices stay in protocol projection", () => {
-    const runtimeSource = readFileSync(join(srcRoot, "services/runtime.service.ts"), "utf8");
+    const stationSource = readFileSync(join(srcRoot, "services/station.service.ts"), "utf8");
     const projectionSource = readFileSync(
       join(srcRoot, "services/protocol-event-projection.ts"),
       "utf8",
     );
     const registrySource = readFileSync(join(srcRoot, "services/station-runtime-registry.ts"), "utf8");
 
-    expect(runtimeSource).not.toContain("SIMULATOR_EVENT_TYPES");
+    expect(stationSource).not.toContain("SIMULATOR_EVENT_TYPES");
     expect(registrySource).toContain("this.eventProjection.subscribeToRuntime");
     expect(projectionSource).toContain("subscribeToRuntime");
   });
@@ -66,12 +66,12 @@ describe("server architecture", () => {
   });
 
   test("runtime registry ownership stays outside runtime commands", () => {
-    const runtimeSource = readFileSync(join(srcRoot, "services/runtime.service.ts"), "utf8");
+    const stationSource = readFileSync(join(srcRoot, "services/station.service.ts"), "utf8");
     const registrySource = readFileSync(join(srcRoot, "services/station-runtime-registry.ts"), "utf8");
 
-    expect(runtimeSource).not.toContain("new Map<string, RuntimeEntry>");
-    expect(runtimeSource).not.toContain("disposeRuntime");
-    expect(runtimeSource).toContain("StationRuntimeRegistry");
+    expect(stationSource).not.toContain("new Map<string, RuntimeEntry>");
+    expect(stationSource).not.toContain("disposeRuntime");
+    expect(stationSource).toContain("StationRuntimeRegistry");
     expect(registrySource).toContain("new Map<string, RuntimeEntry>");
     expect(registrySource).toContain("dispose");
   });
@@ -87,14 +87,13 @@ describe("server architecture", () => {
     expect(deliverySource).toContain("text/event-stream");
   });
 
-  test("protocol event history owns retention and cursor semantics", () => {
-    const eventServiceSource = readFileSync(join(srcRoot, "services/event.service.ts"), "utf8");
-    const historySource = readFileSync(join(srcRoot, "services/protocol-event-history.ts"), "utf8");
+  test("protocol event ledger owns retention and stream notification", () => {
+    const ledgerSource = readFileSync(join(srcRoot, "services/protocol-event-ledger.ts"), "utf8");
     const repositorySource = readFileSync(join(srcRoot, "repositories/postgres-event.repository.ts"), "utf8");
 
-    expect(eventServiceSource).toContain("ProtocolEventHistory");
-    expect(eventServiceSource).not.toContain("trimStationEvents");
-    expect(historySource).toContain("trimStationEvents");
+    expect(existsSync(join(srcRoot, "services/protocol-event-history.ts"))).toBe(false);
+    expect(ledgerSource).toContain("trimStationEvents");
+    expect(ledgerSource).toContain("listener(event)");
     expect(repositorySource).toContain("or(");
     expect(repositorySource).toContain("and(");
     expect(repositorySource).toContain("gt(eventLogs.id");
@@ -123,16 +122,20 @@ describe("server architecture", () => {
     expect(adapterSource).toContain("StationRuntimeTransactionStartResult");
   });
 
-  test("web station workbench exposes grouped view models", () => {
-    const appSource = readFileSync(join(serverRoot, "../web/src/App.tsx"), "utf8");
-    const workbenchSource = readFileSync(join(serverRoot, "../web/src/useStationWorkbench.ts"), "utf8");
+  test("server production code reaches simulator core only through station runtime adapter", () => {
+    const matches = sourceFiles().flatMap((filePath) => {
+      const relativePath = relative(serverRoot, filePath).replaceAll("\\", "/");
+      if (relativePath === "src/services/station-runtime.adapter.ts") {
+        return [];
+      }
 
-    expect(workbenchSource).toContain("authPanel");
-    expect(workbenchSource).toContain("stationEditor");
-    expect(workbenchSource).toContain("transactionPanel");
-    expect(workbenchSource).toContain("eventTimeline");
-    expect(appSource).not.toContain("setLoginPassword");
-    expect(appSource).not.toContain("setConnectorId");
-    expect(appSource).not.toContain("setActiveTransactionId");
+      const source = readFileSync(filePath, "utf8");
+      return source.includes("@spark-bee/simulator-core")
+        ? [relativePath]
+        : [];
+    });
+
+    expect(matches).toEqual([]);
   });
+
 });

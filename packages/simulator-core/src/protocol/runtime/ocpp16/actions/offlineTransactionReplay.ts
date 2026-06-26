@@ -9,6 +9,7 @@ import {
   emitTransactionStatus,
 } from "../events";
 import { mapConnectorFlowStatus, mapStopReason } from "../mappings";
+import { recordOfflineTransactionStopDelivery } from "../Ocpp16TransactionDelivery";
 import { createMeterValue, createStopTransactionPayload } from "../payloadBuilders";
 import type { Ocpp16RuntimeContext } from "../state";
 import type { Ocpp16StartTransactionCallResult } from "../types";
@@ -26,7 +27,6 @@ import {
   emitConnectorStatusTransition,
   resolveConnectorOcppStatus,
 } from "./connectorStatusTransition";
-import { recordOfflineTransactionStopDelivery } from "../TransactionDelivery";
 
 export async function replayOfflineTransactions(
   context: Ocpp16RuntimeContext,

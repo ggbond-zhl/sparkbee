@@ -1,12 +1,18 @@
 import {
   createSimulator,
   type Simulator,
+  type SimulatorEvent,
   type SimulatorEventBus,
+  type SimulatorEventType,
   type SimulatorProtocol,
 } from "@spark-bee/simulator-core";
 import type { ChargingPointOptions } from "@spark-bee/simulator-core/model";
 
 import type { StationRecord } from "../repositories/station.repository";
+
+export type StationRuntimeEvent = SimulatorEvent;
+export type StationRuntimeEventBus = SimulatorEventBus;
+export type StationRuntimeEventType = SimulatorEventType;
 
 export interface StationConnectorActionResult {
   chargingPointId: string;
@@ -109,7 +115,7 @@ export type StationRuntimeStopTransactionResult =
 export interface StationRuntime {
   readonly id: string;
   readonly protocol: SimulatorProtocol;
-  readonly events: SimulatorEventBus;
+  readonly events: StationRuntimeEventBus;
   start(): Promise<StationRuntimeStartResult>;
   stop(): Promise<StationRuntimeStopResult>;
   dispose(): Promise<void>;

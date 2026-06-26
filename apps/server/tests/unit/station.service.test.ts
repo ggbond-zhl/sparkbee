@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
 import type {
+  CreateEventInput,
+  EventRecord,
+} from "../../src/repositories/event.repository";
+import type {
   ConnectorSnapshotRecord,
   CreateStationInput,
   StationRecord,
@@ -14,7 +18,10 @@ import type {
   EndTransactionInput,
   TransactionRepository
 } from "../../src/repositories/transaction.repository";
+import { ProtocolEventProjection } from "../../src/services/protocol-event-projection";
 import { StationService } from "../../src/services/station.service";
+import type { StationRuntime } from "../../src/services/station-runtime.adapter";
+import type { SimulatorEventBus } from "@spark-bee/simulator-core";
 
 class FakeStationRepository implements StationRepository {
   readonly stations = new Map<string, StationRecord>();
@@ -84,23 +91,61 @@ class FakeTransactionRepository implements TransactionRepository {
   }
 }
 
-class FakeRuntime {
-  async restoreRunningStations(): Promise<void> {}
+class FakeEventLog {
+  async append(input: CreateEventInput): Promise<EventRecord> {
+    return {
+      id: "event-1",
+      stationId: input.stationId ?? null,
+      type: input.type,
+      payload: input.payload,
+      protocolMessage: input.protocolMessage ?? false,
+      occurredAt: input.occurredAt ?? new Date("2026-01-01T00:00:00.000Z")
+    };
+  }
+}
 
-  async disposeStation(): Promise<void> {}
+class FakeStationRuntime implements StationRuntime {
+  readonly id = "CP-001";
+  readonly protocol = "OCPP16J";
+  readonly events: SimulatorEventBus = {
+    subscribe: () => () => {}
+  };
 
-  async startStation() {
-    return createStation({ desiredStatus: "running", runtimeStatus: "running" });
+  async start() {
+    return {
+      chargingPointId: this.id,
+      simulatorStatus: "running" as const,
+      bootStatus: "Accepted" as const
+    };
   }
 
-  async stopStation(): Promise<void> {}
+  async stop() {
+    return {
+      chargingPointId: this.id,
+      simulatorStatus: "stopped" as const
+    };
+  }
+
+  async dispose(): Promise<void> {}
 
   async plug() {
-    return {};
+    return {
+      chargingPointId: this.id,
+      connectorId: 1,
+      plugState: "plugged" as const,
+      vehiclePresence: "detected" as const,
+      connectorStatus: "occupied"
+    };
   }
 
   async unplug() {
-    return {};
+    return {
+      chargingPointId: this.id,
+      connectorId: 1,
+      plugState: "unplugged" as const,
+      vehiclePresence: "absent" as const,
+      connectorStatus: "available"
+    };
   }
 
   async authorize() {
@@ -112,7 +157,12 @@ class FakeRuntime {
   }
 
   async reportMeterValue() {
-    return { status: "accepted" as const, transactionId: "tx-1" };
+    return {
+      status: "accepted" as const,
+      transactionId: "tx-1",
+      meterWh: 1200,
+      sampledAt: new Date("2026-01-01T00:00:30.000Z")
+    };
   }
 
   async stopTransaction() {
@@ -130,13 +180,15 @@ describe("StationService", () => {
     const station = createStation();
     const stations = new FakeStationRepository([station]);
     const transactions = new FakeTransactionRepository();
-    const runtime = new FakeRuntime();
+    const runtime = new FakeStationRuntime();
     const service = new StationService(
       stations,
-      runtime as never,
       transactions,
+      new ProtocolEventProjection(stations, new FakeEventLog()),
+      () => runtime,
     );
 
+    await service.startStation(station.id);
     const startResult = await service.startTransaction(station.id, {
       connectorId: 1,
       idTag: "TAG-1",
