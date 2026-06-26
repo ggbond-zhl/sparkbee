@@ -11,6 +11,37 @@ import { createApp } from "../../src/app";
 import { createTestDatabase } from "../support/testDatabase";
 
 describe("chargingPoint management API", () => {
+  test("documents chargingPoint and connector APIs in Chinese", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+
+    const response = await app.request("/openapi.json");
+
+    expect(response.status).toBe(200);
+    const document = await response.json();
+    expect(document.paths["/chargingPoints"].get.summary).toBe("查询桩实例列表");
+    expect(document.paths["/chargingPoints"].post.summary).toBe("创建桩实例");
+    expect(document.paths["/chargingPoints/{id}"].get.summary).toBe("查看桩实例详情");
+    expect(document.paths["/chargingPoints/{id}"].patch.summary).toBe("更新桩实例");
+    expect(document.paths["/chargingPoints/{id}"].delete.summary).toBe("删除桩实例");
+    expect(document.paths["/chargingPoints/{chargingPointId}/connectors"].get.summary).toBe(
+      "查询枪口列表",
+    );
+    expect(document.paths["/chargingPoints/{chargingPointId}/connectors"].post.summary).toBe(
+      "创建枪口",
+    );
+    expect(
+      document.paths["/chargingPoints/{chargingPointId}/connectors/{id}"].patch.summary,
+    ).toBe("更新枪口");
+
+    const serializedDocument = JSON.stringify(document);
+    expect(serializedDocument).toContain(
+      "桩实例连接 CSMS 时使用的 charge point identity",
+    );
+    expect(serializedDocument).toContain("CSMS 基础 WebSocket 地址");
+    expect(serializedDocument).toContain("枪口在所属桩实例内的 connectorId");
+  });
+
   test("creates and reads a chargingPoint without connectors", async () => {
     const database = await createTestDatabase();
     const app = createApp({ database });

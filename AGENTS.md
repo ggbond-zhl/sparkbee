@@ -29,6 +29,13 @@ subject 要求：
 
 type 可选值：feat,fix,refactor,perf,style,docs,test,chore
 
+## 后端 API 文档规范
+
+- 新增或修改后端接口时，必须同步维护 OpenAPI/Scalar 文档。
+- 接口级 `summary`、`description` 和响应说明使用中文，写在后端 route 的 `createRoute` metadata 中。
+- 请求参数、请求体和响应字段说明使用中文，优先写在 `@spark-bee/contracts` 的 Zod schema metadata 中。
+- 测试需要覆盖关键接口是否出现在 `/openapi.json`，以及重要中文说明是否存在。
+
 ## 四个原则详解
 
 ### 1. 编码前思考
