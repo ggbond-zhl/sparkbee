@@ -8,24 +8,16 @@
     "start": "node --import tsx src/index.ts",
     "test": "vitest run tests/unit",
     "test:unit": "vitest run tests/unit",
-    "test:db": "vitest run tests/integration",
-    "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.7",
-    "@spark-bee/simulator-core": "workspace:*",
     "dotenv": "^17.2.3",
-    "drizzle-orm": "^0.45.1",
     "hono": "^4.10.7",
-    "postgres": "^3.4.7",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.3",
     "@types/node": "^24.0.8",
-    "drizzle-kit": "^0.31.8",
     "tsx": "^4.21.0",
     "typescript": "^5.9.2",
     "vitest": "^4.0.15"

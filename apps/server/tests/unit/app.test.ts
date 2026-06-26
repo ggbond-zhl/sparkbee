@@ -1,45 +1,22 @@
 import { describe, expect, test } from "vitest";
 
 import { createApp } from "../../src/app";
-import { AuthService } from "../../src/services/auth.service";
-import type { Services } from "../../src/services";
-
-function createTestApp() {
-  const services = {
-    auth: new AuthService("password-123", "x".repeat(32)),
-    events: {
-      subscribe: () => () => undefined,
-      listByChargingPoint: async () => []
-    },
-    chargingPoints: {
-      listChargingPoints: async () => []
-    }
-  } as unknown as Services;
-
-  return createApp(services);
-}
 
 describe("createApp", () => {
-  test("protects API routes until login succeeds", async () => {
-    const app = createTestApp();
+  test("serves the health check from the backend skeleton", async () => {
+    const app = createApp();
 
-    const rejected = await app.request("/api/chargingPoints");
-    expect(rejected.status).toBe(401);
+    const response = await app.request("/health");
 
-    const login = await app.request("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ password: "password-123" }),
-      headers: { "Content-Type": "application/json" }
-    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ status: "ok" });
+  });
 
-    expect(login.status).toBe(200);
-    const cookie = login.headers.get("set-cookie");
-    expect(cookie).toContain("sparkbee_session=");
+  test("does not expose business API routes", async () => {
+    const app = createApp();
 
-    const accepted = await app.request("/api/chargingPoints", {
-      headers: { cookie: cookie ?? "" }
-    });
-    expect(accepted.status).toBe(200);
-    await expect(accepted.json()).resolves.toEqual({ data: [] });
+    const response = await app.request("/api/chargingPoints");
+
+    expect(response.status).toBe(404);
   });
 });

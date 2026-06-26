@@ -1,5 +1,5 @@
 {
-  "name": "@spark-bee/simulator-core",
+  "name": "@spark-bee/simulator",
   "version": "0.0.1",
   "private": true,
   "type": "module",

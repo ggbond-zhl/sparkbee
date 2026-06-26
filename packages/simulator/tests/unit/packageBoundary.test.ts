@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const ignoredDirs = new Set([".git", "node_modules", ".understand-anything"]);
 const scannedRoots = ["apps", "packages", "package.json", "pnpm-lock.yaml"];
-const forbidden = ["core", "transport"].map((name) => `@spark-sim/${name}`);
+const forbidden = [
+  ...["core", "transport"].map((name) => `@spark-sim/${name}`),
+  ["@spark-bee", "simulator-core"].join("/"),
+];
 const removedPackageDirs = ["core", "transport"].map((name) =>
   join(repoRoot, "packages", name)
 );
@@ -50,22 +53,33 @@ function filesToScan(): string[] {
 }
 
 describe("simulator package boundary", () => {
+  test("package directory and workspace name use simulator", () => {
+    const simulatorPackageJsonPath = join(repoRoot, "packages/simulator/package.json");
+    const packageJson = JSON.parse(readFileSync(simulatorPackageJsonPath, "utf8")) as {
+      name: string;
+    };
+
+    expect(existsSync(join(repoRoot, "packages/simulator"))).toBe(true);
+    expect(existsSync(join(repoRoot, "packages/simulator-core"))).toBe(false);
+    expect(packageJson.name).toBe("@spark-bee/simulator");
+  });
+
   test("charging point simulator public API uses explicit charging point simulator naming", () => {
     const rootIndexSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/index.ts"),
+      join(repoRoot, "packages/simulator/src/index.ts"),
       "utf8",
     );
     const packageJson = JSON.parse(
-      readFileSync(join(repoRoot, "packages/simulator-core/package.json"), "utf8"),
+      readFileSync(join(repoRoot, "packages/simulator/package.json"), "utf8"),
     ) as {
       exports: Record<string, { import?: string; types?: string }>;
     };
     const publicIndexPath = join(
       repoRoot,
-      "packages/simulator-core/src/chargingPointSimulator/index.ts",
+      "packages/simulator/src/chargingPointSimulator/index.ts",
     );
 
-    expect(existsSync(join(repoRoot, "packages/simulator-core/src/simulator"))).toBe(false);
+    expect(existsSync(join(repoRoot, "packages/simulator/src/simulator"))).toBe(false);
     expect(existsSync(publicIndexPath)).toBe(true);
     expect(rootIndexSource).toContain("./chargingPointSimulator");
     expect(packageJson.exports["./chargingPointSimulator"]).toEqual({
@@ -100,16 +114,16 @@ describe("simulator package boundary", () => {
   test("OCPP 1.6 runtime uses concise runtime naming", () => {
     const oldRuntimeFile = join(
       repoRoot,
-      "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16ProtocolRuntime.ts",
+      "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16ProtocolRuntime.ts",
     );
     const runtimeFile = join(
       repoRoot,
-      "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16Runtime.ts",
+      "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16Runtime.ts",
     );
     const sourceFiles = filesToScan().filter((filePath) =>
       relative(repoRoot, filePath)
         .replaceAll("\\", "/")
-        .startsWith("packages/simulator-core/src/")
+        .startsWith("packages/simulator/src/")
     );
     const forbiddenNames: Array<[string, RegExp]> = [
       ["Ocpp16ProtocolRuntime", /\bOcpp16ProtocolRuntime\b/],
@@ -132,7 +146,7 @@ describe("simulator package boundary", () => {
 
   test("OCPP 1.6 runtime keeps normal constructor path", () => {
     const source = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16Runtime.ts"),
+      join(repoRoot, "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16Runtime.ts"),
       "utf8",
     );
 
@@ -141,7 +155,7 @@ describe("simulator package boundary", () => {
 
   test("OCPP 1.6 runtime reaches transaction delivery through a concrete module", () => {
     const source = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16Runtime.ts"),
+      join(repoRoot, "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16Runtime.ts"),
       "utf8",
     );
 
@@ -154,8 +168,8 @@ describe("simulator package boundary", () => {
   test("OCPP 1.6 transaction delivery construction stays local", () => {
     const sourceFiles = filesToScan().filter((filePath) => {
       const relativePath = relative(repoRoot, filePath).replaceAll("\\", "/");
-      return relativePath.startsWith("packages/simulator-core/src/protocol/runtime/ocpp16/") &&
-        relativePath !== "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16TransactionDelivery.ts";
+      return relativePath.startsWith("packages/simulator/src/protocol/runtime/ocpp16/") &&
+        relativePath !== "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16TransactionDelivery.ts";
     });
     const matches = sourceFiles.flatMap((filePath) => {
       const source = readFileSync(filePath, "utf8");
@@ -170,10 +184,10 @@ describe("simulator package boundary", () => {
   test("OCPP 1.6 transaction delivery owns transaction state helpers", () => {
     const oldHelperPath = join(
       repoRoot,
-      "packages/simulator-core/src/protocol/runtime/ocpp16/TransactionDelivery.ts",
+      "packages/simulator/src/protocol/runtime/ocpp16/TransactionDelivery.ts",
     );
     const deliverySource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16TransactionDelivery.ts"),
+      join(repoRoot, "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16TransactionDelivery.ts"),
       "utf8",
     );
 
@@ -186,10 +200,10 @@ describe("simulator package boundary", () => {
   test("OCPP 1.6 runtime reaches connector topology through a concrete module", () => {
     const topologyPath = join(
       repoRoot,
-      "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16ConnectorTopology.ts",
+      "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16ConnectorTopology.ts",
     );
     const runtimeSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/protocol/runtime/ocpp16/Ocpp16Runtime.ts"),
+      join(repoRoot, "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16Runtime.ts"),
       "utf8",
     );
     const topologySource = readFileSync(topologyPath, "utf8");
@@ -204,11 +218,11 @@ describe("simulator package boundary", () => {
   test("protocol runtime is not exposed through the old public path", () => {
     const oldPublicPath = ["./", "flow"].join("");
     const oldRelativePath = ["../", "flow"].join("");
-    const oldSourcePath = ["packages/simulator-core/src", "flow"].join("/");
+    const oldSourcePath = ["packages/simulator/src", "flow"].join("/");
     const sourceFiles = filesToScan().filter((filePath) => {
       const relativePath = relative(repoRoot, filePath).replaceAll("\\", "/");
-      return relativePath === "packages/simulator-core/package.json" ||
-        relativePath.startsWith("packages/simulator-core/src/");
+      return relativePath === "packages/simulator/package.json" ||
+        relativePath.startsWith("packages/simulator/src/");
     });
 
     const matches = sourceFiles.flatMap((filePath) => {
@@ -219,7 +233,7 @@ describe("simulator package boundary", () => {
     });
 
     expect(matches).toEqual([]);
-    expect(existsSync(join(repoRoot, "packages/simulator-core/src", "flow"))).toBe(false);
+    expect(existsSync(join(repoRoot, "packages/simulator/src", "flow"))).toBe(false);
   });
 
   test("protocol runtime API does not expose old charging flow names", () => {
@@ -239,7 +253,7 @@ describe("simulator package boundary", () => {
     const sourceFiles = filesToScan().filter((filePath) =>
       relative(repoRoot, filePath)
         .replaceAll("\\", "/")
-        .startsWith("packages/simulator-core/src/")
+        .startsWith("packages/simulator/src/")
     );
 
     const matches = sourceFiles.flatMap((filePath) => {
@@ -254,7 +268,7 @@ describe("simulator package boundary", () => {
 
   test("generic simulator API does not expose OCPP 1.6 result types", () => {
     const source = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/types.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/types.ts"),
       "utf8",
     );
 
@@ -274,11 +288,11 @@ describe("simulator package boundary", () => {
 
   test("root public API keeps protocol runtime behind explicit subpath", () => {
     const rootIndexSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/index.ts"),
+      join(repoRoot, "packages/simulator/src/index.ts"),
       "utf8",
     );
     const packageJson = JSON.parse(
-      readFileSync(join(repoRoot, "packages/simulator-core/package.json"), "utf8"),
+      readFileSync(join(repoRoot, "packages/simulator/package.json"), "utf8"),
     ) as {
       exports: Record<string, { import?: string; types?: string }>;
     };
@@ -292,7 +306,7 @@ describe("simulator package boundary", () => {
 
   test("generic simulator API does not expose protocol connector identifiers", () => {
     const source = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/types.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/types.ts"),
       "utf8",
     );
 
@@ -304,7 +318,7 @@ describe("simulator package boundary", () => {
 
   test("generic simulator API uses transaction id naming instead of session id", () => {
     const source = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/types.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/types.ts"),
       "utf8",
     );
 
@@ -317,8 +331,8 @@ describe("simulator package boundary", () => {
   test("business charging state uses transaction naming instead of session naming", () => {
     const sourceFiles = filesToScan().filter((filePath) => {
       const relativePath = relative(repoRoot, filePath).replaceAll("\\", "/");
-      return relativePath.startsWith("packages/simulator-core/src/model/") ||
-        relativePath.startsWith("packages/simulator-core/src/protocol/runtime/");
+      return relativePath.startsWith("packages/simulator/src/model/") ||
+        relativePath.startsWith("packages/simulator/src/protocol/runtime/");
     });
     const forbiddenNames = [
       ["active", "Session", "Id"].join(""),
@@ -348,9 +362,9 @@ describe("simulator package boundary", () => {
 
   test("generic simulator API does not expose connection state queries", () => {
     const publicApiFiles = [
-      "packages/simulator-core/src/chargingPointSimulator/types.ts",
-      "packages/simulator-core/src/chargingPointSimulator/index.ts",
-      "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts",
+      "packages/simulator/src/chargingPointSimulator/types.ts",
+      "packages/simulator/src/chargingPointSimulator/index.ts",
+      "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts",
     ];
     const forbiddenNames = [
       "SessionConnectionState",
@@ -369,9 +383,9 @@ describe("simulator package boundary", () => {
 
   test("generic simulator API does not expose runtime state queries", () => {
     const publicApiFiles = [
-      "packages/simulator-core/src/chargingPointSimulator/types.ts",
-      "packages/simulator-core/src/chargingPointSimulator/index.ts",
-      "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts",
+      "packages/simulator/src/chargingPointSimulator/types.ts",
+      "packages/simulator/src/chargingPointSimulator/index.ts",
+      "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts",
     ];
     const forbiddenNames: Array<[string, RegExp]> = [
       ["ChargingPointSimulatorRuntimeState", /\bChargingPointSimulatorRuntimeState\b/],
@@ -391,8 +405,8 @@ describe("simulator package boundary", () => {
 
   test("generic simulator API does not expose a catch-all event channel", () => {
     const publicApiFiles = [
-      "packages/simulator-core/src/chargingPointSimulator/types.ts",
-      "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts",
+      "packages/simulator/src/chargingPointSimulator/types.ts",
+      "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts",
     ];
     const matches = publicApiFiles.flatMap((relativePath) => {
       const source = readFileSync(join(repoRoot, relativePath), "utf8");
@@ -410,7 +424,7 @@ describe("simulator package boundary", () => {
 
   test("generic simulator factory wires protocol dependencies internally", () => {
     const source = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/createChargingPointSimulator.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/createChargingPointSimulator.ts"),
       "utf8",
     );
     const signature = source.slice(
@@ -425,27 +439,27 @@ describe("simulator package boundary", () => {
   });
 
   test("OCPP 1.6 simulator test dependencies stay private", () => {
-    const oldChargingPointSimulatorPath = join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/Ocpp16ChargingPointSimulator.ts");
+    const oldChargingPointSimulatorPath = join(repoRoot, "packages/simulator/src/chargingPointSimulator/Ocpp16ChargingPointSimulator.ts");
     const simulatorPath = join(
       repoRoot,
-      "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts",
+      "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts",
     );
     const simulatorSource = readFileSync(
       simulatorPath,
       "utf8",
     );
     const typesSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/types.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/types.ts"),
       "utf8",
     );
     const indexSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/index.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/index.ts"),
       "utf8",
     );
     expect(existsSync(oldChargingPointSimulatorPath)).toBe(false);
     expect(existsSync(simulatorPath)).toBe(true);
     const privateTypesSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/ocpp16/types.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/ocpp16/types.ts"),
       "utf8",
     );
 
@@ -457,12 +471,12 @@ describe("simulator package boundary", () => {
 
   test("OCPP 1.6 simulator keeps event envelope mapping local", () => {
     const simulatorSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts"),
       "utf8",
     );
     const envelopePath = join(
       repoRoot,
-      "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16EventEnvelope.ts",
+      "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16EventEnvelope.ts",
     );
 
     expect(existsSync(envelopePath)).toBe(true);
@@ -475,12 +489,12 @@ describe("simulator package boundary", () => {
 
   test("OCPP 1.6 simulator keeps startup lifecycle local", () => {
     const simulatorSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts"),
       "utf8",
     );
     const lifecyclePath = join(
       repoRoot,
-      "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16StartupLifecycle.ts",
+      "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16StartupLifecycle.ts",
     );
 
     expect(existsSync(lifecyclePath)).toBe(true);
@@ -493,12 +507,12 @@ describe("simulator package boundary", () => {
 
   test("OCPP 1.6 remote command dispatch uses a registry module", () => {
     const commandIndexSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/protocol/runtime/ocpp16/commands/index.ts"),
+      join(repoRoot, "packages/simulator/src/protocol/runtime/ocpp16/commands/index.ts"),
       "utf8",
     );
     const dispatchPath = join(
       repoRoot,
-      "packages/simulator-core/src/protocol/runtime/ocpp16/commands/Ocpp16CommandDispatch.ts",
+      "packages/simulator/src/protocol/runtime/ocpp16/commands/Ocpp16CommandDispatch.ts",
     );
 
     expect(existsSync(dispatchPath)).toBe(true);
@@ -508,10 +522,10 @@ describe("simulator package boundary", () => {
 
   test("pre-abstracted simulator orchestration layers are removed", () => {
     const removedFiles = [
-      "packages/simulator-core/src/chargingPointSimulator/ChargingPointSimulator.ts",
-      "packages/simulator-core/src/chargingPointSimulator/runtimeAdapter.ts",
-      "packages/simulator-core/src/chargingPointSimulator/ocpp16/createOcpp16ChargingPointSimulatorStack.ts",
-      "packages/simulator-core/src/chargingPointSimulator/ocpp16/runtimeAdapter.ts",
+      "packages/simulator/src/chargingPointSimulator/ChargingPointSimulator.ts",
+      "packages/simulator/src/chargingPointSimulator/runtimeAdapter.ts",
+      "packages/simulator/src/chargingPointSimulator/ocpp16/createOcpp16ChargingPointSimulatorStack.ts",
+      "packages/simulator/src/chargingPointSimulator/ocpp16/runtimeAdapter.ts",
     ];
 
     for (const relativePath of removedFiles) {
@@ -520,7 +534,7 @@ describe("simulator package boundary", () => {
   });
 
   test("OCPP 1.6 simulator implementation lives under protocol-specific simulator directory", () => {
-    const ocpp16Dir = join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/ocpp16");
+    const ocpp16Dir = join(repoRoot, "packages/simulator/src/chargingPointSimulator/ocpp16");
     const expectedFiles = [
       "Ocpp16ChargingPointSimulator.ts",
       "defaults.ts",
@@ -530,9 +544,9 @@ describe("simulator package boundary", () => {
     const oldRootFiles = [
       "Ocpp16ChargingPointSimulator.ts",
       "protocolRuntimeAdapter.ts",
-    ].map((name) => join(repoRoot, "packages/simulator-core/src/chargingPointSimulator", name));
+    ].map((name) => join(repoRoot, "packages/simulator/src/chargingPointSimulator", name));
     const indexSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/index.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/index.ts"),
       "utf8",
     );
 
@@ -551,7 +565,7 @@ describe("simulator package boundary", () => {
 
   test("simulator public index does not expose protocol-private implementation", () => {
     const indexSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/index.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/index.ts"),
       "utf8",
     );
     const privateExports = [
@@ -584,15 +598,15 @@ describe("simulator package boundary", () => {
 
   test("simulator options do not expose lower-layer options", () => {
     const simulatorSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts"),
       "utf8",
     );
     const typesSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/types.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/types.ts"),
       "utf8",
     );
     const indexSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/index.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/index.ts"),
       "utf8",
     );
 
@@ -611,10 +625,10 @@ describe("simulator package boundary", () => {
 
   test("simulator creation inputs use options naming", () => {
     const files = [
-      "packages/simulator-core/src/chargingPointSimulator/types.ts",
-      "packages/simulator-core/src/chargingPointSimulator/index.ts",
-      "packages/simulator-core/src/chargingPointSimulator/createChargingPointSimulator.ts",
-      "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts",
+      "packages/simulator/src/chargingPointSimulator/types.ts",
+      "packages/simulator/src/chargingPointSimulator/index.ts",
+      "packages/simulator/src/chargingPointSimulator/createChargingPointSimulator.ts",
+      "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts",
     ];
     const sourceByPath = new Map(
       files.map((relativePath) => [
@@ -622,11 +636,11 @@ describe("simulator package boundary", () => {
         readFileSync(join(repoRoot, relativePath), "utf8"),
       ]),
     );
-    const typesSource = sourceByPath.get("packages/simulator-core/src/chargingPointSimulator/types.ts") ?? "";
+    const typesSource = sourceByPath.get("packages/simulator/src/chargingPointSimulator/types.ts") ?? "";
     const createChargingPointSimulatorSource =
-      sourceByPath.get("packages/simulator-core/src/chargingPointSimulator/createChargingPointSimulator.ts") ?? "";
+      sourceByPath.get("packages/simulator/src/chargingPointSimulator/createChargingPointSimulator.ts") ?? "";
     const wrapperSource =
-      sourceByPath.get("packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts") ?? "";
+      sourceByPath.get("packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts") ?? "";
     const oldTypeNames = [
       ["ChargingPointSimulator", "Config"].join(""),
       ["Ocpp16", "ChargingPointSimulator", "Config"].join(""),
@@ -652,16 +666,16 @@ describe("simulator package boundary", () => {
 
   test("protocol runtime binding state directories are removed", () => {
     const removedBindingsDirs = [
-      "packages/simulator-core/src/model/bindings",
-      "packages/simulator-core/src/protocol/runtime/bindings",
-      "packages/simulator-core/src/protocol/runtime/ocpp16/bindings",
-      "packages/simulator-core/src/protocol/runtime/ocpp201/bindings",
+      "packages/simulator/src/model/bindings",
+      "packages/simulator/src/protocol/runtime/bindings",
+      "packages/simulator/src/protocol/runtime/ocpp16/bindings",
+      "packages/simulator/src/protocol/runtime/ocpp201/bindings",
     ].map((relativePath) => join(repoRoot, relativePath));
-    const modelIndex = join(repoRoot, "packages/simulator-core/src/model/index.ts");
+    const modelIndex = join(repoRoot, "packages/simulator/src/model/index.ts");
     const sourceFiles = filesToScan().filter((filePath) =>
       relative(repoRoot, filePath)
         .replaceAll("\\", "/")
-        .startsWith("packages/simulator-core/src/")
+        .startsWith("packages/simulator/src/")
     );
     const forbiddenNames = [
       "Ocpp16ChargingPointBindingState",
@@ -692,18 +706,18 @@ describe("simulator package boundary", () => {
   });
 
   test("domain model source is not nested under core directory", () => {
-    const oldCoreDir = join(repoRoot, "packages/simulator-core/src/model/core");
+    const oldCoreDir = join(repoRoot, "packages/simulator/src/model/core");
     const expectedModelDirs = [
       "device",
       "transaction",
       "authorization",
       "configuration",
       "shared",
-    ].map((name) => join(repoRoot, "packages/simulator-core/src/model", name));
+    ].map((name) => join(repoRoot, "packages/simulator/src/model", name));
     const sourceFiles = filesToScan().filter((filePath) =>
       relative(repoRoot, filePath)
         .replaceAll("\\", "/")
-        .startsWith("packages/simulator-core/src/")
+        .startsWith("packages/simulator/src/")
     );
     const matches = sourceFiles.flatMap((filePath) => {
       const relativePath = relative(repoRoot, filePath).replaceAll("\\", "/");
@@ -721,13 +735,13 @@ describe("simulator package boundary", () => {
   });
 
   test("protocol stack source lives under protocol directory", () => {
-    const protocolDir = join(repoRoot, "packages/simulator-core/src/protocol");
+    const protocolDir = join(repoRoot, "packages/simulator/src/protocol");
     const oldScopedSessionDirName = ["protocol", "Session"].join("");
     const oldTopLevelProtocolDirs = [
       "protocolRuntime",
       oldScopedSessionDirName,
       "transport",
-    ].map((name) => join(repoRoot, "packages/simulator-core/src", name));
+    ].map((name) => join(repoRoot, "packages/simulator/src", name));
     const expectedProtocolDirs = ["runtime", "session", "transport"].map((name) =>
       join(protocolDir, name)
     );
@@ -742,8 +756,8 @@ describe("simulator package boundary", () => {
   });
 
   test("protocol communication layer uses session naming under protocol scope", () => {
-    const oldSessionDir = join(repoRoot, "packages/simulator-core/src/session");
-    const sessionDir = join(repoRoot, "packages/simulator-core/src/protocol/session");
+    const oldSessionDir = join(repoRoot, "packages/simulator/src/session");
+    const sessionDir = join(repoRoot, "packages/simulator/src/protocol/session");
     const oldSessionExport = ["./protocol", "Session"].join("");
     const oldClassName = ["ChargingPoint", "Protocol", "Session"].join("");
     const oldInterfaceName = ["I", "Protocol", "Session"].join("");
@@ -751,11 +765,11 @@ describe("simulator package boundary", () => {
     const oldOptionsName = ["Protocol", "Session", "Options"].join("");
     const oldConnectionStateName = ["Protocol", "Session", "ConnectionState"].join("");
     const rootIndexSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/index.ts"),
+      join(repoRoot, "packages/simulator/src/index.ts"),
       "utf8",
     );
     const packageSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/package.json"),
+      join(repoRoot, "packages/simulator/package.json"),
       "utf8",
     );
     const sessionSource = readFileSync(
@@ -788,15 +802,15 @@ describe("simulator package boundary", () => {
 
   test("generic simulator API exposes typed event bus instead of on off events", () => {
     const typesSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/types.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/types.ts"),
       "utf8",
     );
     const simulatorSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator.ts"),
       "utf8",
     );
     const indexSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/index.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/index.ts"),
       "utf8",
     );
     const eventBusStart = typesSource.indexOf("export interface ChargingPointSimulatorEventBus");
@@ -888,7 +902,7 @@ describe("simulator package boundary", () => {
 
   test("generic simulator API does not expose protocol details wrapper", () => {
     const typesSource = readFileSync(
-      join(repoRoot, "packages/simulator-core/src/chargingPointSimulator/types.ts"),
+      join(repoRoot, "packages/simulator/src/chargingPointSimulator/types.ts"),
       "utf8",
     );
 

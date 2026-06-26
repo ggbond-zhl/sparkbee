@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0006
+---
+
 # 使用 PostgreSQL 做持久化
 
 SparkBee V1 需要保存桩实例、运行意图、事件日志、协议报文和交易记录，以便服务重启后恢复运行桩并支持调试回看。SQLite 更轻，但 PostgreSQL 更适合服务器长期运行、后续并发访问和备份运维。

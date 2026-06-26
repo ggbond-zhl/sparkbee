@@ -8,19 +8,11 @@ export const serverEnvPath = fileURLToPath(new URL("../../../../.env", import.me
 loadDotenv({ path: serverEnvPath, quiet: true });
 
 export interface ServerConfig {
-  adminPassword: string;
-  databaseUrl: string;
-  eventLogRetentionPerChargingPoint: number;
   port: number;
-  sessionSecret: string;
 }
 
 const envSchema = z.object({
-  ADMIN_PASSWORD: z.string().min(8),
-  DATABASE_URL: z.string().min(1).url(),
-  EVENT_LOG_RETENTION_PER_STATION: z.coerce.number().int().positive().default(10_000),
-  PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
-  SESSION_SECRET: z.string().min(32)
+  PORT: z.coerce.number().int().min(1).max(65_535).default(3000)
 });
 
 export function loadServerConfig(rawEnv: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -34,10 +26,6 @@ export function loadServerConfig(rawEnv: NodeJS.ProcessEnv = process.env): Serve
   }
 
   return {
-    adminPassword: result.data.ADMIN_PASSWORD,
-    databaseUrl: result.data.DATABASE_URL,
-    eventLogRetentionPerChargingPoint: result.data.EVENT_LOG_RETENTION_PER_STATION,
-    port: result.data.PORT,
-    sessionSecret: result.data.SESSION_SECRET
+    port: result.data.PORT
   };
 }
