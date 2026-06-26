@@ -73,6 +73,25 @@ describe("server architecture", () => {
     expect(matches).toEqual([]);
   });
 
+  test("keeps connector management in its own module", () => {
+    const connectorModule = join(srcRoot, "modules/connector");
+    const chargingPointRoute = join(srcRoot, "modules/chargingPoint/chargingPoint.route.ts");
+    const chargingPointRepo = join(srcRoot, "modules/chargingPoint/chargingPoint.repo.ts");
+
+    expect(existsSync(join(connectorModule, "connector.route.ts"))).toBe(true);
+    expect(existsSync(join(connectorModule, "connector.repo.ts"))).toBe(true);
+
+    const chargingPointRouteSource = readFileSync(chargingPointRoute, "utf8");
+    expect(chargingPointRouteSource).not.toContain("createConnectorRequestSchema");
+    expect(chargingPointRouteSource).not.toContain("connectorResponseSchema");
+    expect(chargingPointRouteSource).not.toContain("/connectors");
+
+    const chargingPointRepoSource = readFileSync(chargingPointRepo, "utf8");
+    expect(chargingPointRepoSource).not.toContain("CreateConnectorRequest");
+    expect(chargingPointRepoSource).not.toContain("UpdateConnectorRequest");
+    expect(chargingPointRepoSource).not.toContain("CONNECTOR_CONFLICT");
+  });
+
   test("keeps Drizzle migrations under apps/server", () => {
     const rootMigrationsDir = join(dirname(serverRoot), "..", "drizzle/migrations");
 

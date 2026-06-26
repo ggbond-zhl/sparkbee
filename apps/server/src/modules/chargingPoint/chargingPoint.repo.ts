@@ -1,9 +1,7 @@
 import type {
   CreateChargingPointRequest,
-  CreateConnectorRequest,
   ListChargingPointsQuery,
   UpdateChargingPointRequest,
-  UpdateConnectorRequest,
 } from "@spark-bee/contracts";
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 
@@ -149,120 +147,6 @@ export class ChargingPointRepository {
     });
   }
 
-  async createConnector(chargingPointId: string, input: CreateConnectorRequest) {
-    await this.requireActiveChargingPoint(chargingPointId);
-    await this.ensureConnectorNumbersAvailable(chargingPointId, input.evseId, input.connectorId);
-
-    const [sortOrderRow] = await this.db
-      .select({ maxSortOrder: sql<number>`coalesce(max(${connectors.sortOrder}), 0)` })
-      .from(connectors)
-      .where(and(eq(connectors.chargingPointId, chargingPointId), isNull(connectors.deletedAt)));
-
-    const [row] = await this.db
-      .insert(connectors)
-      .values({
-        ...input,
-        chargingPointId,
-        maxVoltage: input.maxVoltage ?? null,
-        maxCurrent: input.maxCurrent ?? null,
-        maxPower: input.maxPower ?? null,
-        sortOrder: (sortOrderRow?.maxSortOrder ?? 0) + 1,
-      })
-      .returning();
-
-    if (row === undefined) {
-      throw new AppError(500, "INTERNAL_SERVER_ERROR", "Internal server error");
-    }
-
-    return this.toConnector(row);
-  }
-
-  async listConnectors(chargingPointId: string) {
-    await this.requireActiveChargingPoint(chargingPointId);
-    return (await this.listActiveConnectors(chargingPointId)).map((connector) =>
-      this.toConnector(connector)
-    );
-  }
-
-  async getConnector(chargingPointId: string, connectorId: string) {
-    await this.requireActiveChargingPoint(chargingPointId);
-    const connector = await this.requireActiveConnector(chargingPointId, connectorId);
-    return this.toConnector(connector);
-  }
-
-  async updateConnector(
-    chargingPointId: string,
-    connectorId: string,
-    input: UpdateConnectorRequest,
-  ) {
-    await this.requireActiveChargingPoint(chargingPointId);
-    const existing = await this.requireActiveConnector(chargingPointId, connectorId);
-    const values: Partial<typeof connectors.$inferInsert> = {
-      evseId: input.evseId,
-      connectorId: input.connectorId,
-      type: input.type,
-      format: input.format,
-      powerType: input.powerType,
-      updatedAt: sql`now()` as unknown as Date,
-    };
-
-    if ("maxVoltage" in input) {
-      values.maxVoltage = input.maxVoltage ?? null;
-    }
-
-    if ("maxCurrent" in input) {
-      values.maxCurrent = input.maxCurrent ?? null;
-    }
-
-    if ("maxPower" in input) {
-      values.maxPower = input.maxPower ?? null;
-    }
-
-    await this.ensureConnectorNumbersAvailable(
-      chargingPointId,
-      input.evseId ?? existing.evseId,
-      input.connectorId ?? existing.connectorId,
-      connectorId,
-    );
-
-    const [row] = await this.db
-      .update(connectors)
-      .set(values)
-      .where(
-        and(
-          eq(connectors.id, connectorId),
-          eq(connectors.chargingPointId, chargingPointId),
-          isNull(connectors.deletedAt),
-        ),
-      )
-      .returning();
-
-    if (row === undefined) {
-      throw new AppError(404, "CONNECTOR_NOT_FOUND", "Connector not found");
-    }
-
-    return this.toConnector(row);
-  }
-
-  async softDeleteConnector(chargingPointId: string, connectorId: string) {
-    await this.requireActiveChargingPoint(chargingPointId);
-    await this.requireActiveConnector(chargingPointId, connectorId);
-
-    await this.db
-      .update(connectors)
-      .set({
-        deletedAt: sql`now()` as unknown as Date,
-        updatedAt: sql`now()` as unknown as Date,
-      })
-      .where(
-        and(
-          eq(connectors.id, connectorId),
-          eq(connectors.chargingPointId, chargingPointId),
-          isNull(connectors.deletedAt),
-        ),
-      );
-  }
-
   private createListWhere(keyword: string | undefined) {
     const base = isNull(chargingPoints.deletedAt);
     const normalizedKeyword = keyword?.trim();
@@ -299,51 +183,6 @@ export class ChargingPointRepository {
       .from(connectors)
       .where(and(eq(connectors.chargingPointId, chargingPointId), isNull(connectors.deletedAt)))
       .orderBy(asc(connectors.sortOrder), asc(connectors.createdAt));
-  }
-
-  private async requireActiveConnector(
-    chargingPointId: string,
-    connectorId: string,
-  ): Promise<ConnectorRow> {
-    const [row] = await this.db
-      .select()
-      .from(connectors)
-      .where(
-        and(
-          eq(connectors.id, connectorId),
-          eq(connectors.chargingPointId, chargingPointId),
-          isNull(connectors.deletedAt),
-        ),
-      )
-      .limit(1);
-
-    if (row === undefined) {
-      throw new AppError(404, "CONNECTOR_NOT_FOUND", "Connector not found");
-    }
-
-    return row;
-  }
-
-  private async ensureConnectorNumbersAvailable(
-    chargingPointId: string,
-    evseId: number,
-    connectorId: number,
-    excludingId?: string,
-  ): Promise<void> {
-    const activeConnectors = await this.listActiveConnectors(chargingPointId);
-    const conflictingEvse = activeConnectors.some((connector) =>
-      connector.evseId === evseId && connector.id !== excludingId
-    );
-    if (conflictingEvse) {
-      throw new AppError(409, "CONNECTOR_CONFLICT", "EVSE ID already exists");
-    }
-
-    const conflictingConnector = activeConnectors.some((connector) =>
-      connector.connectorId === connectorId && connector.id !== excludingId
-    );
-    if (conflictingConnector) {
-      throw new AppError(409, "CONNECTOR_CONFLICT", "Connector ID already exists");
-    }
   }
 
   private toSummary(row: ChargingPointRow, connectorCount: number) {
