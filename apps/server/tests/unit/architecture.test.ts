@@ -42,6 +42,22 @@ describe("server skeleton architecture", () => {
     expect(unexpectedEntries).toEqual([]);
   });
 
+  test("does not create target business structure before the first backend use case", () => {
+    const futureEntries = [
+      join(srcRoot, "db"),
+      join(srcRoot, "modules"),
+      join(srcRoot, "runtime"),
+      join(serverRoot, "drizzle"),
+      join(serverRoot, "drizzle.config.ts"),
+    ];
+
+    const existingEntries = futureEntries
+      .filter((entry) => existsSync(entry))
+      .map((entry) => relative(serverRoot, entry));
+
+    expect(existingEntries).toEqual([]);
+  });
+
   test("does not reference cleared business modules or simulator package", () => {
     const forbidden = [
       "@spark-bee/simulator",
@@ -64,7 +80,7 @@ describe("server skeleton architecture", () => {
   });
 
   test("has no database migrations after clearing the database model", () => {
-    const migrationsDir = join(srcRoot, "db/migrations");
+    const migrationsDir = join(serverRoot, "drizzle/migrations");
 
     expect(existsSync(join(srcRoot, "db/schema.ts"))).toBe(false);
     expect(existsSync(migrationsDir)).toBe(false);

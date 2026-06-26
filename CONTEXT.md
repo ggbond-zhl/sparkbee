@@ -9,8 +9,8 @@ SparkBee 是一个可自部署的充电桩模拟调试台，用于让少量虚�
 _Avoid_: 平台、中心端、后台平台
 
 **桩实例**:
-SparkBee 中一个长期存在、可启动或停止的虚拟充电桩。它包含 OCPP 协议、CSMS 地址、桩身份和枪口拓扑。
-_Avoid_: 设备、模拟器、充电桩配置
+SparkBee 中一个长期存在、可启动或停止的虚拟充电桩，英文上下文统一称为 chargingPoint。它包含 OCPP 协议、CSMS 地址、桩身份和枪口拓扑。
+_Avoid_: station、设备、模拟器、充电桩配置
 
 **桩身份**:
 桩实例连接 CSMS 时使用的 charge point identity，并参与生成最终 WebSocket 地址。
