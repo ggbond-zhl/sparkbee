@@ -8,19 +8,19 @@ import type {
   Ocpp16TransactionStartResult,
 } from "../../protocol/runtime";
 import type {
-  ChargingPointSimulatorAuthorizeResult,
-  ChargingPointSimulatorAuthorizationStatus,
-  ChargingPointSimulatorMeterValueResult,
-  ChargingPointSimulatorStopTransactionResult,
-  ChargingPointSimulatorTransactionStartResult,
+  ChargingPointActorAuthorizeResult,
+  ChargingPointActorAuthorizationStatus,
+  ChargingPointActorMeterValueResult,
+  ChargingPointActorStopTransactionResult,
+  ChargingPointActorTransactionStartResult,
 } from "../types";
 import type {
-  Ocpp16ChargingPointSimulatorAuthorizeResult,
-  Ocpp16ChargingPointSimulatorConnectorActionResult,
-  Ocpp16ChargingPointSimulatorTransactionStartResult,
+  Ocpp16ChargingPointActorAuthorizeResult,
+  Ocpp16ChargingPointActorConnectorActionResult,
+  Ocpp16ChargingPointActorTransactionStartResult,
 } from "./types";
 
-export function toChargingPointSimulatorBootResult(result: Ocpp16BootResult): {
+export function toChargingPointActorBootResult(result: Ocpp16BootResult): {
   status: "accepted" | "pending" | "rejected";
   protocolStatus: string;
   currentTime: Date;
@@ -38,9 +38,9 @@ export function toChargingPointSimulatorBootResult(result: Ocpp16BootResult): {
   };
 }
 
-export function toChargingPointSimulatorConnectorActionResult(
+export function toChargingPointActorConnectorActionResult(
   result: Ocpp16ConnectorActionResult,
-): Ocpp16ChargingPointSimulatorConnectorActionResult {
+): Ocpp16ChargingPointActorConnectorActionResult {
   return {
     evseId: result.evseId,
     connectorId: result.connectorId,
@@ -50,9 +50,9 @@ export function toChargingPointSimulatorConnectorActionResult(
   };
 }
 
-export function toChargingPointSimulatorAuthorizeResult(
+export function toChargingPointActorAuthorizeResult(
   result: Ocpp16AuthorizeResult,
-): Ocpp16ChargingPointSimulatorAuthorizeResult {
+): Ocpp16ChargingPointActorAuthorizeResult {
   if (result.outcome === "Accepted") {
     return {
       status: "accepted",
@@ -85,9 +85,9 @@ export function toChargingPointSimulatorAuthorizeResult(
   };
 }
 
-export function toChargingPointSimulatorTransactionStartResult(
+export function toChargingPointActorTransactionStartResult(
   result: Ocpp16TransactionStartResult,
-): Ocpp16ChargingPointSimulatorTransactionStartResult {
+): Ocpp16ChargingPointActorTransactionStartResult {
   if (result.status === "Accepted") {
     return {
       status: "accepted",
@@ -116,9 +116,9 @@ export function toChargingPointSimulatorTransactionStartResult(
   };
 }
 
-export function toChargingPointSimulatorMeterValueResult(
+export function toChargingPointActorMeterValueResult(
   result: Ocpp16MeterValuesResult,
-): ChargingPointSimulatorMeterValueResult {
+): ChargingPointActorMeterValueResult {
   if (result.outcome === "Accepted") {
     return {
       status: "accepted",
@@ -136,9 +136,9 @@ export function toChargingPointSimulatorMeterValueResult(
   };
 }
 
-export function toChargingPointSimulatorStopTransactionResult(
+export function toChargingPointActorStopTransactionResult(
   result: Ocpp16StopTransactionResult,
-): ChargingPointSimulatorStopTransactionResult {
+): ChargingPointActorStopTransactionResult {
   if (result.outcome === "Accepted") {
     return {
       status: "accepted",
@@ -157,8 +157,8 @@ export function toChargingPointSimulatorStopTransactionResult(
 }
 
 export function toPublicAuthorizeResult(
-  result: Ocpp16ChargingPointSimulatorAuthorizeResult,
-): ChargingPointSimulatorAuthorizeResult {
+  result: Ocpp16ChargingPointActorAuthorizeResult,
+): ChargingPointActorAuthorizeResult {
   if (result.status === "accepted") {
     return { status: "accepted" };
   }
@@ -182,8 +182,8 @@ export function toPublicAuthorizeResult(
 }
 
 export function toPublicTransactionStartResult(
-  result: Ocpp16ChargingPointSimulatorTransactionStartResult,
-): ChargingPointSimulatorTransactionStartResult {
+  result: Ocpp16ChargingPointActorTransactionStartResult,
+): ChargingPointActorTransactionStartResult {
   if (result.status === "accepted") {
     return {
       status: "accepted",
@@ -202,7 +202,7 @@ export function toPublicTransactionStartResult(
 
 function mapAuthorizationStatus(
   status: Ocpp16AuthorizationStatus,
-): ChargingPointSimulatorAuthorizationStatus {
+): ChargingPointActorAuthorizationStatus {
   switch (status) {
     case "Accepted":
       return "accepted";

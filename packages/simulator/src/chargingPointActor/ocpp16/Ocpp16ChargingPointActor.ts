@@ -8,25 +8,25 @@ import {
   createProtocolClock,
   type ProtocolClock,
 } from "../../protocol/runtime/ocpp16/protocolClock";
-import { ChargingPointSimulatorError } from "../errors";
+import { ChargingPointActorError } from "../errors";
 import type {
-  Ocpp16ChargingPointSimulatorOptions,
-  ChargingPointSimulator,
-  ChargingPointSimulatorAuthorizeInput,
-  ChargingPointSimulatorAuthorizeResult,
-  ChargingPointSimulatorConnectorActionInput,
-  ChargingPointSimulatorConnectorActionResult,
-  ChargingPointSimulatorEventBus,
-  ChargingPointSimulatorMeterValueInput,
-  ChargingPointSimulatorMeterValueResult,
-  ChargingPointSimulatorResourceRef,
-  ChargingPointSimulatorStartResult,
-  ChargingPointSimulatorStartTransactionInput,
-  ChargingPointSimulatorStatus,
-  ChargingPointSimulatorStopResult,
-  ChargingPointSimulatorStopTransactionInput,
-  ChargingPointSimulatorStopTransactionResult,
-  ChargingPointSimulatorTransactionStartResult,
+  Ocpp16ChargingPointActorOptions,
+  ChargingPointActor,
+  ChargingPointActorAuthorizeInput,
+  ChargingPointActorAuthorizeResult,
+  ChargingPointActorConnectorActionInput,
+  ChargingPointActorConnectorActionResult,
+  ChargingPointActorEventBus,
+  ChargingPointActorMeterValueInput,
+  ChargingPointActorMeterValueResult,
+  ChargingPointActorResourceRef,
+  ChargingPointActorStartResult,
+  ChargingPointActorStartTransactionInput,
+  ChargingPointActorStatus,
+  ChargingPointActorStopResult,
+  ChargingPointActorStopTransactionInput,
+  ChargingPointActorStopTransactionResult,
+  ChargingPointActorTransactionStartResult,
 } from "../types";
 import {
   createDefaultOcpp16Runtime,
@@ -35,20 +35,20 @@ import {
 import {
   toPublicAuthorizeResult,
   toPublicTransactionStartResult,
-  toChargingPointSimulatorAuthorizeResult,
-  toChargingPointSimulatorConnectorActionResult,
-  toChargingPointSimulatorMeterValueResult,
-  toChargingPointSimulatorStopTransactionResult,
-  toChargingPointSimulatorTransactionStartResult,
+  toChargingPointActorAuthorizeResult,
+  toChargingPointActorConnectorActionResult,
+  toChargingPointActorMeterValueResult,
+  toChargingPointActorStopTransactionResult,
+  toChargingPointActorTransactionStartResult,
 } from "./resultMapping";
 import type {
-  Ocpp16ChargingPointSimulatorDependencies,
+  Ocpp16ChargingPointActorDependencies,
 } from "./types";
 import { Ocpp16EventEnvelope } from "./Ocpp16EventEnvelope";
 import { Ocpp16StartupLifecycle } from "./Ocpp16StartupLifecycle";
 
-export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
-  private status: ChargingPointSimulatorStatus = "stopped";
+export class Ocpp16ChargingPointActor implements ChargingPointActor {
+  private status: ChargingPointActorStatus = "stopped";
   private readonly clock: ProtocolClock;
   private readonly idGenerator: () => string;
   private readonly session: ISession;
@@ -60,15 +60,15 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
 
   readonly id: string;
   readonly protocol = "OCPP16J" as const;
-  readonly events: ChargingPointSimulatorEventBus;
+  readonly events: ChargingPointActorEventBus;
   constructor(
-    options: Ocpp16ChargingPointSimulatorOptions,
-    dependencies: Ocpp16ChargingPointSimulatorDependencies = {},
+    options: Ocpp16ChargingPointActorOptions,
+    dependencies: Ocpp16ChargingPointActorDependencies = {},
   ) {
     if (options.chargingPoint === undefined) {
-      throw new ChargingPointSimulatorError(
-        "CHARGING_POINT_SIMULATOR_INVALID_OPERATION",
-        "OCPP16J simulator 需要 chargingPoint",
+      throw new ChargingPointActorError(
+        "CHARGING_POINT_ACTOR_INVALID_OPERATION",
+        "OCPP16J actor 需要 chargingPoint",
       );
     }
 
@@ -86,7 +86,7 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
           dependencies.configurationCatalog ?? options.configurationCatalog,
       });
     this.eventEnvelope = new Ocpp16EventEnvelope({
-      chargingPointSimulatorId: this.id,
+      chargingPointActorId: this.id,
       protocol: this.protocol,
       clock: this.clock,
       idGenerator: this.idGenerator,
@@ -101,16 +101,16 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
       getStatus: () => this.status,
       isDisposed: () => this.disposed,
       transitionStatus: (currentStatus, error) =>
-        this.transitionChargingPointSimulatorStatus(currentStatus, error),
+        this.transitionChargingPointActorStatus(currentStatus, error),
     });
     this.events = this.eventEnvelope.events;
   }
 
-  async start(): Promise<ChargingPointSimulatorStartResult> {
+  async start(): Promise<ChargingPointActorStartResult> {
     this.requireNotDisposed();
     if (this.status !== "stopped") {
-      throw new ChargingPointSimulatorError(
-        "CHARGING_POINT_SIMULATOR_ALREADY_RUNNING",
+      throw new ChargingPointActorError(
+        "CHARGING_POINT_ACTOR_ALREADY_RUNNING",
         `充电桩 ${this.id} 已在运行`,
       );
     }
@@ -118,11 +118,11 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
     return this.startupLifecycle.start();
   }
 
-  async stop(): Promise<ChargingPointSimulatorStopResult> {
+  async stop(): Promise<ChargingPointActorStopResult> {
     if (this.status === "stopped") {
       return {
         chargingPointId: this.id,
-        chargingPointSimulatorStatus: "stopped",
+        chargingPointActorStatus: "stopped",
       };
     }
 
@@ -132,16 +132,16 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
       if (this.session.isConnected()) {
         await this.session.disconnect();
       }
-      this.transitionChargingPointSimulatorStatus("stopped");
+      this.transitionChargingPointActorStatus("stopped");
 
       return {
         chargingPointId: this.id,
-        chargingPointSimulatorStatus: "stopped",
+        chargingPointActorStatus: "stopped",
       };
     } catch (cause) {
-      throw new ChargingPointSimulatorError(
-        "CHARGING_POINT_SIMULATOR_STOP_FAILED",
-        "simulator 停止失败",
+      throw new ChargingPointActorError(
+        "CHARGING_POINT_ACTOR_STOP_FAILED",
+        "actor 停止失败",
         cause,
       );
     }
@@ -162,10 +162,10 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
   }
 
   async plug(
-    input: ChargingPointSimulatorConnectorActionInput,
-  ): Promise<ChargingPointSimulatorConnectorActionResult> {
+    input: ChargingPointActorConnectorActionInput,
+  ): Promise<ChargingPointActorConnectorActionResult> {
     this.requireStarted();
-    const result = toChargingPointSimulatorConnectorActionResult(
+    const result = toChargingPointActorConnectorActionResult(
       await this.ocpp16Runtime.plugConnector(input),
     );
 
@@ -173,10 +173,10 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
   }
 
   async unplug(
-    input: ChargingPointSimulatorConnectorActionInput,
-  ): Promise<ChargingPointSimulatorConnectorActionResult> {
+    input: ChargingPointActorConnectorActionInput,
+  ): Promise<ChargingPointActorConnectorActionResult> {
     this.requireStarted();
-    const result = toChargingPointSimulatorConnectorActionResult(
+    const result = toChargingPointActorConnectorActionResult(
       await this.ocpp16Runtime.unplugConnector(input),
     );
 
@@ -184,10 +184,10 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
   }
 
   async authorize(
-    input: ChargingPointSimulatorAuthorizeInput,
-  ): Promise<ChargingPointSimulatorAuthorizeResult> {
+    input: ChargingPointActorAuthorizeInput,
+  ): Promise<ChargingPointActorAuthorizeResult> {
     this.requireStarted();
-    const result = toChargingPointSimulatorAuthorizeResult(
+    const result = toChargingPointActorAuthorizeResult(
       await this.ocpp16Runtime.authorize({
         connectorId: input.connectorId,
         idTag: input.idTag,
@@ -198,8 +198,8 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
   }
 
   async startTransaction(
-    input: ChargingPointSimulatorStartTransactionInput,
-  ): Promise<ChargingPointSimulatorTransactionStartResult> {
+    input: ChargingPointActorStartTransactionInput,
+  ): Promise<ChargingPointActorTransactionStartResult> {
     this.requireStarted();
     if (this.ocpp16Runtime.getConnectorStatus(input) === undefined) {
       return {
@@ -208,7 +208,7 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
       };
     }
 
-    const result = toChargingPointSimulatorTransactionStartResult(
+    const result = toChargingPointActorTransactionStartResult(
       await this.ocpp16Runtime.startLocalTransaction({
         connectorId: input.connectorId,
         idTag: input.idTag,
@@ -221,30 +221,30 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
   }
 
   async reportMeterValue(
-    input: ChargingPointSimulatorMeterValueInput,
-  ): Promise<ChargingPointSimulatorMeterValueResult> {
+    input: ChargingPointActorMeterValueInput,
+  ): Promise<ChargingPointActorMeterValueResult> {
     this.requireStarted();
     this.requireTransactionResource(input.transactionId);
-    return toChargingPointSimulatorMeterValueResult(
+    return toChargingPointActorMeterValueResult(
       await this.ocpp16Runtime.reportMeterValue(input),
     );
   }
 
   async stopTransaction(
-    input: ChargingPointSimulatorStopTransactionInput,
-  ): Promise<ChargingPointSimulatorStopTransactionResult> {
+    input: ChargingPointActorStopTransactionInput,
+  ): Promise<ChargingPointActorStopTransactionResult> {
     this.requireStarted();
     this.requireTransactionResource(input.transactionId);
-    return toChargingPointSimulatorStopTransactionResult(
+    return toChargingPointActorStopTransactionResult(
       await this.ocpp16Runtime.stopTransaction(input),
     );
   }
 
   private requireNotDisposed(): void {
     if (this.disposed) {
-      throw new ChargingPointSimulatorError(
-        "CHARGING_POINT_SIMULATOR_INVALID_OPERATION",
-        "simulator 已释放，不能继续使用",
+      throw new ChargingPointActorError(
+        "CHARGING_POINT_ACTOR_INVALID_OPERATION",
+        "actor 已释放，不能继续使用",
       );
     }
   }
@@ -252,7 +252,7 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
   private requireStarted(): void {
     this.requireNotDisposed();
     if (this.status !== "running" && this.status !== "starting") {
-      throw new ChargingPointSimulatorError("CHARGING_POINT_SIMULATOR_NOT_RUNNING", "simulator 未运行");
+      throw new ChargingPointActorError("CHARGING_POINT_ACTOR_NOT_RUNNING", "actor 未运行");
     }
   }
 
@@ -260,29 +260,29 @@ export class Ocpp16ChargingPointSimulator implements ChargingPointSimulator {
     this.startupLifecycle.handleOnline();
   };
 
-  private transitionChargingPointSimulatorStatus(
-    currentStatus: ChargingPointSimulatorStatus,
+  private transitionChargingPointActorStatus(
+    currentStatus: ChargingPointActorStatus,
     error?: { code: string; message: string },
   ): void {
     const previousStatus = this.status;
     this.status = currentStatus;
-    this.eventEnvelope.publishChargingPointSimulatorStatus(previousStatus, currentStatus, error);
+    this.eventEnvelope.publishChargingPointActorStatus(previousStatus, currentStatus, error);
   }
 
   private requireTransactionResource(
     transactionId: string | undefined,
-  ): Extract<ChargingPointSimulatorResourceRef, { scope: "transaction" }> {
+  ): Extract<ChargingPointActorResourceRef, { scope: "transaction" }> {
     if (transactionId === undefined || transactionId.length === 0) {
-      throw new ChargingPointSimulatorError(
-        "CHARGING_POINT_SIMULATOR_INVALID_OPERATION",
+      throw new ChargingPointActorError(
+        "CHARGING_POINT_ACTOR_INVALID_OPERATION",
         "transactionId 不能为空",
       );
     }
 
     const resource = this.ocpp16Runtime.getTransactionResource(transactionId);
     if (resource === undefined) {
-      throw new ChargingPointSimulatorError(
-        "CHARGING_POINT_SIMULATOR_INVALID_OPERATION",
+      throw new ChargingPointActorError(
+        "CHARGING_POINT_ACTOR_INVALID_OPERATION",
         `交易 ${transactionId} 不存在`,
       );
     }

@@ -1,16 +1,16 @@
 import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, vi, test } from "vitest";
 
-import { Ocpp16ChargingPointSimulator } from "../../../src/chargingPointSimulator/ocpp16/Ocpp16ChargingPointSimulator";
-import { ChargingPointSimulatorError } from "../../../src/chargingPointSimulator/errors";
+import { Ocpp16ChargingPointActor } from "../../../src/chargingPointActor/ocpp16/Ocpp16ChargingPointActor";
+import { ChargingPointActorError } from "../../../src/chargingPointActor/errors";
 import type {
   ISession,
   OutboundRequestResult,
   SessionConnectionState,
   SessionEvents,
   ProtocolMessageEvent,
-  ChargingPointSimulatorEvent,
-  ChargingPointSimulatorEventType,
+  ChargingPointActorEvent,
+  ChargingPointActorEventType,
 } from "../../../src";
 import type {
   Ocpp16Runtime,
@@ -27,8 +27,8 @@ import {
   response as runtimeResponse,
 } from "../protocolRuntime/ocpp16/helpers";
 
-const ALL_CHARGING_POINT_SIMULATOR_EVENT_TYPES = [
-  "chargingPointSimulator.status",
+const ALL_CHARGING_POINT_ACTOR_EVENT_TYPES = [
+  "chargingPointActor.status",
   "session.status",
   "chargingPoint.status",
   "evse.status",
@@ -37,7 +37,7 @@ const ALL_CHARGING_POINT_SIMULATOR_EVENT_TYPES = [
   "transaction.status",
   "transaction.meterValue",
   "protocol.message",
-] satisfies ChargingPointSimulatorEventType[];
+] satisfies ChargingPointActorEventType[];
 
 class FakeSession implements ISession {
   private readonly emitter = new EventEmitter();
@@ -70,7 +70,7 @@ class FakeSession implements ISession {
   }
 
   request(_action: string, _payload: unknown): Promise<OutboundRequestResult> {
-    throw new Error("request should not be called by simulator lifecycle tests");
+    throw new Error("request should not be called by actor lifecycle tests");
   }
 
   on<K extends keyof SessionEvents>(event: K, listener: SessionEvents[K]): this {
@@ -576,7 +576,7 @@ function mapAuthorizationStatus(
 function createHarness() {
   const session = new FakeSession();
   const protocolRuntime = new FakeProtocolRuntime();
-  const simulator = new Ocpp16ChargingPointSimulator(
+  const actor = new Ocpp16ChargingPointActor(
     {
       id: "cp-1",
       protocol: "OCPP16J",
@@ -591,7 +591,7 @@ function createHarness() {
     },
   );
 
-  return { simulator, session, protocolRuntime };
+  return { actor, session, protocolRuntime };
 }
 
 function createRuntimeHarness(
@@ -601,7 +601,7 @@ function createRuntimeHarness(
   } = {},
 ) {
   const session = new RuntimeFakeSession(replies);
-  const simulator = new Ocpp16ChargingPointSimulator(
+  const actor = new Ocpp16ChargingPointActor(
     {
       id: "cp-1",
       protocol: "OCPP16J",
@@ -616,32 +616,32 @@ function createRuntimeHarness(
     },
   );
 
-  return { simulator, session };
+  return { actor, session };
 }
 
-function collectChargingPointSimulatorEvents(
-  simulator: Ocpp16ChargingPointSimulator,
-  types: ChargingPointSimulatorEventType[],
-): ChargingPointSimulatorEvent[] {
-  const events: ChargingPointSimulatorEvent[] = [];
+function collectChargingPointActorEvents(
+  actor: Ocpp16ChargingPointActor,
+  types: ChargingPointActorEventType[],
+): ChargingPointActorEvent[] {
+  const events: ChargingPointActorEvent[] = [];
   for (const type of types) {
-    simulator.events.subscribe(type, (event) => events.push(event));
+    actor.events.subscribe(type, (event) => events.push(event));
   }
 
   return events;
 }
 
-describe("Ocpp16ChargingPointSimulator", () => {
+describe("Ocpp16ChargingPointActor", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
   test("uses direct connector id for StartTransaction", async () => {
-    const { simulator, protocolRuntime } = createHarness();
+    const { actor, protocolRuntime } = createHarness();
     protocolRuntime.setConnectorStatus(1, 7, "available");
-    await simulator.start();
+    await actor.start();
 
-    await simulator.startTransaction({
+    await actor.startTransaction({
       evseId: 1,
       connectorId: 7,
       idTag: "CARD001",
@@ -654,12 +654,12 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("uses direct connector id for Authorize and emits authorization status", async () => {
-    const { simulator, protocolRuntime } = createHarness();
+    const { actor, protocolRuntime } = createHarness();
     protocolRuntime.setConnectorStatus(1, 7, "available");
-    const events = collectChargingPointSimulatorEvents(simulator, ["authorization.status"]);
-    await simulator.start();
+    const events = collectChargingPointActorEvents(actor, ["authorization.status"]);
+    await actor.start();
 
-    const result = await simulator.authorize({
+    const result = await actor.authorize({
       evseId: 1,
       connectorId: 7,
       idTag: "CARD007",
@@ -685,8 +685,8 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("authorize returns rejected results and emits rejected authorization status", async () => {
-    const { simulator, protocolRuntime } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, ["authorization.status"]);
+    const { actor, protocolRuntime } = createHarness();
+    const events = collectChargingPointActorEvents(actor, ["authorization.status"]);
     protocolRuntime.authorizeResult = {
       outcome: "Rejected",
       idTag: "CARD001",
@@ -700,9 +700,9 @@ describe("Ocpp16ChargingPointSimulator", () => {
       platformCommunicationStatus: "online",
       shouldReconnect: false,
     };
-    await simulator.start();
+    await actor.start();
 
-    const result = await simulator.authorize({
+    const result = await actor.authorize({
       evseId: 1,
       connectorId: 1,
       idTag: "CARD001",
@@ -728,17 +728,17 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("start connects, boots, reports status, starts heartbeat, and emits events", async () => {
-    const { simulator, session, protocolRuntime } = createHarness();
+    const { actor, session, protocolRuntime } = createHarness();
     protocolRuntime.setConnectorStatus(2, 2, "available");
-    const events = collectChargingPointSimulatorEvents(simulator, [
-      "chargingPointSimulator.status",
+    const events = collectChargingPointActorEvents(actor, [
+      "chargingPointActor.status",
       "chargingPoint.status",
       "connector.status",
     ]);
 
-    await expect(simulator.start()).resolves.toEqual({
+    await expect(actor.start()).resolves.toEqual({
       chargingPointId: "cp-1",
-      chargingPointSimulatorStatus: "running",
+      chargingPointActorStatus: "running",
       bootStatus: "Accepted",
     });
 
@@ -752,7 +752,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
     ]);
     expect(events).toContainEqual(expect.objectContaining({
       type: "chargingPoint.status",
-      chargingPointSimulatorId: "cp-1",
+      chargingPointActorId: "cp-1",
       protocol: "OCPP16J",
       resource: { scope: "chargingPoint" },
       previousStatus: null,
@@ -761,7 +761,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
     }));
     expect(events).toContainEqual(expect.objectContaining({
       type: "connector.status",
-      chargingPointSimulatorId: "cp-1",
+      chargingPointActorId: "cp-1",
       protocol: "OCPP16J",
       resource: { scope: "connector", evseId: 1, connectorId: 1 },
       previousStatus: null,
@@ -770,7 +770,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
     }));
     expect(events).toContainEqual(expect.objectContaining({
       type: "connector.status",
-      chargingPointSimulatorId: "cp-1",
+      chargingPointActorId: "cp-1",
       protocol: "OCPP16J",
       resource: { scope: "connector", evseId: 2, connectorId: 2 },
       previousStatus: null,
@@ -778,17 +778,17 @@ describe("Ocpp16ChargingPointSimulator", () => {
       occurredAt: "2026-01-01T00:00:00.000Z",
     }));
     expect(events).toContainEqual(expect.objectContaining({
-      type: "chargingPointSimulator.status",
-      chargingPointSimulatorId: "cp-1",
+      type: "chargingPointActor.status",
+      chargingPointActorId: "cp-1",
       protocol: "OCPP16J",
-      resource: { scope: "chargingPointSimulator" },
+      resource: { scope: "chargingPointActor" },
       previousStatus: "stopped",
       currentStatus: "running",
       occurredAt: "2026-01-01T00:00:00.000Z",
     }));
   });
 
-  test("uses synchronized protocol clock for simulator events", async () => {
+  test("uses synchronized protocol clock for actor events", async () => {
     const session = new RuntimeFakeSession([
       runtimeResponse("BootNotification", {
         status: "Accepted",
@@ -798,7 +798,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
       runtimeResponse("StatusNotification", {}),
       runtimeResponse("StatusNotification", {}),
     ]);
-    const simulator = new Ocpp16ChargingPointSimulator(
+    const actor = new Ocpp16ChargingPointActor(
       {
         id: "cp-1",
         protocol: "OCPP16J",
@@ -811,20 +811,20 @@ describe("Ocpp16ChargingPointSimulator", () => {
         idGenerator: () => "event-1",
       },
     );
-    const events = collectChargingPointSimulatorEvents(simulator, [
-      "chargingPointSimulator.status",
+    const events = collectChargingPointActorEvents(actor, [
+      "chargingPointActor.status",
       "chargingPoint.status",
       "connector.status",
     ]);
 
-    await simulator.start();
+    await actor.start();
 
     expect(events).toContainEqual(expect.objectContaining({
       type: "chargingPoint.status",
       occurredAt: "2026-01-01T00:00:02.000Z",
     }));
     expect(events).toContainEqual(expect.objectContaining({
-      type: "chargingPointSimulator.status",
+      type: "chargingPointActor.status",
       currentStatus: "running",
       occurredAt: "2026-01-01T00:00:02.000Z",
     }));
@@ -832,8 +832,8 @@ describe("Ocpp16ChargingPointSimulator", () => {
 
   test("start returns immediately when boot is pending and keeps retrying in the background", async () => {
     vi.useFakeTimers();
-    const { simulator, session, protocolRuntime } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, ["chargingPointSimulator.status"]);
+    const { actor, session, protocolRuntime } = createHarness();
+    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
     protocolRuntime.bootResults = [
       {
         status: "Pending",
@@ -847,9 +847,9 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     ];
 
-    await expect(simulator.start()).resolves.toEqual({
+    await expect(actor.start()).resolves.toEqual({
       chargingPointId: "cp-1",
-      chargingPointSimulatorStatus: "starting",
+      chargingPointActorStatus: "starting",
       bootStatus: "Pending",
       retryAfterSec: 2,
     });
@@ -859,8 +859,8 @@ describe("Ocpp16ChargingPointSimulator", () => {
     expect(protocolRuntime.calls).toEqual(["boot"]);
     expect(events).toEqual([
       expect.objectContaining({
-        type: "chargingPointSimulator.status",
-        resource: { scope: "chargingPointSimulator" },
+        type: "chargingPointActor.status",
+        resource: { scope: "chargingPointActor" },
         previousStatus: "stopped",
         currentStatus: "starting",
       }),
@@ -884,7 +884,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("allows local charging operations while boot retry is pending", async () => {
-    const { simulator, protocolRuntime } = createHarness();
+    const { actor, protocolRuntime } = createHarness();
     protocolRuntime.bootResults = [
       {
         status: "Pending",
@@ -893,15 +893,15 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     ];
 
-    await simulator.start();
-    await expect(simulator.plug({ evseId: 1, connectorId: 1 }))
+    await actor.start();
+    await expect(actor.plug({ evseId: 1, connectorId: 1 }))
       .resolves.toMatchObject({ plugState: "plugged" });
-    await expect(simulator.authorize({
+    await expect(actor.authorize({
       evseId: 1,
       connectorId: 1,
       idTag: "CARD001",
     })).resolves.toEqual({ status: "accepted" });
-    await expect(simulator.startTransaction({
+    await expect(actor.startTransaction({
       evseId: 1,
       connectorId: 1,
       idTag: "CARD001",
@@ -918,15 +918,15 @@ describe("Ocpp16ChargingPointSimulator", () => {
     ]);
   });
 
-  test("keeps the simulator starting when the initial connection enters reconnecting", async () => {
-    const { simulator, session, protocolRuntime } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, ["chargingPointSimulator.status"]);
+  test("keeps the actor starting when the initial connection enters reconnecting", async () => {
+    const { actor, session, protocolRuntime } = createHarness();
+    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
     session.connectError = new Error("network down");
     session.stateAfterConnectError = "reconnecting";
 
-    await expect(simulator.start()).resolves.toEqual({
+    await expect(actor.start()).resolves.toEqual({
       chargingPointId: "cp-1",
-      chargingPointSimulatorStatus: "starting",
+      chargingPointActorStatus: "starting",
       bootStatus: "Pending",
       retryAfterSec: 0,
     });
@@ -942,11 +942,11 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("boots after the reconnecting initial connection becomes online", async () => {
-    const { simulator, session, protocolRuntime } = createHarness();
+    const { actor, session, protocolRuntime } = createHarness();
     session.connectError = new Error("network down");
     session.stateAfterConnectError = "reconnecting";
 
-    await simulator.start();
+    await actor.start();
     session.connectError = null;
     session.emitOnline();
     await flushMicrotasks();
@@ -959,11 +959,11 @@ describe("Ocpp16ChargingPointSimulator", () => {
     ]);
   });
 
-  test("background boot retry moves simulator from starting to running after accepted boot", async () => {
+  test("background boot retry moves actor from starting to running after accepted boot", async () => {
     vi.useFakeTimers();
-    const { simulator, protocolRuntime } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, [
-      "chargingPointSimulator.status",
+    const { actor, protocolRuntime } = createHarness();
+    const events = collectChargingPointActorEvents(actor, [
+      "chargingPointActor.status",
       "chargingPoint.status",
       "connector.status",
     ]);
@@ -980,11 +980,11 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     ];
 
-    await simulator.start();
+    await actor.start();
     await vi.advanceTimersByTimeAsync(2_000);
     await flushMicrotasks();
 
-    expect(events.filter((event) => event.type === "chargingPointSimulator.status"))
+    expect(events.filter((event) => event.type === "chargingPointActor.status"))
       .toEqual([
         expect.objectContaining({
           previousStatus: "stopped",
@@ -1007,8 +1007,8 @@ describe("Ocpp16ChargingPointSimulator", () => {
 
   test("background boot retry stops and disconnects after rejected boot", async () => {
     vi.useFakeTimers();
-    const { simulator, session, protocolRuntime } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, ["chargingPointSimulator.status"]);
+    const { actor, session, protocolRuntime } = createHarness();
+    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
     protocolRuntime.bootResults = [
       {
         status: "Pending",
@@ -1022,7 +1022,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     ];
 
-    await simulator.start();
+    await actor.start();
     vi.advanceTimersByTime(2_000);
     await flushMicrotasks();
 
@@ -1034,26 +1034,26 @@ describe("Ocpp16ChargingPointSimulator", () => {
     ]);
     expect(events).toEqual([
       expect.objectContaining({
-        type: "chargingPointSimulator.status",
+        type: "chargingPointActor.status",
         previousStatus: "stopped",
         currentStatus: "starting",
       }),
       expect.objectContaining({
-        type: "chargingPointSimulator.status",
+        type: "chargingPointActor.status",
         previousStatus: "starting",
         currentStatus: "stopped",
         error: {
-          code: "CHARGING_POINT_SIMULATOR_START_FAILED",
+          code: "CHARGING_POINT_ACTOR_START_FAILED",
           message: "BootNotification Rejected",
         },
       }),
     ]);
   });
 
-  test("stop cancels pending boot retry and moves simulator back to stopped", async () => {
+  test("stop cancels pending boot retry and moves actor back to stopped", async () => {
     vi.useFakeTimers();
-    const { simulator, session, protocolRuntime } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, ["chargingPointSimulator.status"]);
+    const { actor, session, protocolRuntime } = createHarness();
+    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
     protocolRuntime.bootResults = [
       {
         status: "Pending",
@@ -1067,10 +1067,10 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     ];
 
-    await simulator.start();
-    await expect(simulator.stop()).resolves.toEqual({
+    await actor.start();
+    await expect(actor.stop()).resolves.toEqual({
       chargingPointId: "cp-1",
-      chargingPointSimulatorStatus: "stopped",
+      chargingPointActorStatus: "stopped",
     });
     vi.advanceTimersByTime(2_000);
     await flushMicrotasks();
@@ -1079,12 +1079,12 @@ describe("Ocpp16ChargingPointSimulator", () => {
     expect(protocolRuntime.calls).toEqual(["boot", "stopRuntime"]);
     expect(events).toEqual([
       expect.objectContaining({
-        type: "chargingPointSimulator.status",
+        type: "chargingPointActor.status",
         previousStatus: "stopped",
         currentStatus: "starting",
       }),
       expect.objectContaining({
-        type: "chargingPointSimulator.status",
+        type: "chargingPointActor.status",
         previousStatus: "starting",
         currentStatus: "stopped",
       }),
@@ -1092,7 +1092,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("start rejects duplicate calls while boot retry is pending", async () => {
-    const { simulator, session, protocolRuntime } = createHarness();
+    const { actor, session, protocolRuntime } = createHarness();
     protocolRuntime.bootResults = [
       {
         status: "Pending",
@@ -1101,17 +1101,17 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     ];
 
-    await simulator.start();
+    await actor.start();
 
-    await expect(simulator.start()).rejects.toMatchObject({
-      code: "CHARGING_POINT_SIMULATOR_ALREADY_RUNNING",
+    await expect(actor.start()).rejects.toMatchObject({
+      code: "CHARGING_POINT_ACTOR_ALREADY_RUNNING",
     });
     expect(session.connectCalls).toBe(1);
     expect(protocolRuntime.calls).toEqual(["boot"]);
   });
 
   test("transaction start is allowed while background boot is pending", async () => {
-    const { simulator, protocolRuntime } = createHarness();
+    const { actor, protocolRuntime } = createHarness();
     protocolRuntime.bootResults = [
       {
         status: "Pending",
@@ -1120,8 +1120,8 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     ];
 
-    await simulator.start();
-    await expect(simulator.startTransaction({
+    await actor.start();
+    await expect(actor.startTransaction({
       evseId: 1,
       connectorId: 1,
       idTag: "CARD001",
@@ -1133,39 +1133,39 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("start failure stops runtime without permanently disposing protocolRuntime", async () => {
-    const { simulator, session, protocolRuntime } = createHarness();
+    const { actor, session, protocolRuntime } = createHarness();
     protocolRuntime.bootStatus = "Rejected";
-    const events = collectChargingPointSimulatorEvents(simulator, ["chargingPointSimulator.status"]);
+    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
 
-    await expect(simulator.start()).rejects.toMatchObject({
-      code: "CHARGING_POINT_SIMULATOR_START_FAILED",
+    await expect(actor.start()).rejects.toMatchObject({
+      code: "CHARGING_POINT_ACTOR_START_FAILED",
     });
 
     expect(protocolRuntime.calls).toContain("stopRuntime");
     expect(protocolRuntime.disposed).toBe(false);
     expect(session.disconnectCalls).toBe(1);
     expect(events).toContainEqual(expect.objectContaining({
-      type: "chargingPointSimulator.status",
-      resource: { scope: "chargingPointSimulator" },
+      type: "chargingPointActor.status",
+      resource: { scope: "chargingPointActor" },
       previousStatus: "stopped",
       currentStatus: "stopped",
       error: {
-        code: "CHARGING_POINT_SIMULATOR_START_FAILED",
+        code: "CHARGING_POINT_ACTOR_START_FAILED",
         message: "BootNotification Rejected",
       },
     }));
   });
 
-  test("stop is idempotent, disconnects running simulator, and preserves restartability", async () => {
-    const { simulator, session, protocolRuntime } = createHarness();
+  test("stop is idempotent, disconnects running actor, and preserves restartability", async () => {
+    const { actor, session, protocolRuntime } = createHarness();
 
-    await expect(simulator.stop()).resolves.toEqual({
+    await expect(actor.stop()).resolves.toEqual({
       chargingPointId: "cp-1",
-      chargingPointSimulatorStatus: "stopped",
+      chargingPointActorStatus: "stopped",
     });
-    await simulator.start();
-    await simulator.stop();
-    await simulator.start();
+    await actor.start();
+    await actor.stop();
+    await actor.start();
 
     expect(protocolRuntime.calls).toEqual([
       "boot",
@@ -1183,23 +1183,23 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("online operations delegate to protocolRuntime and emit events", async () => {
-    const { simulator, protocolRuntime } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, [
+    const { actor, protocolRuntime } = createHarness();
+    const events = collectChargingPointActorEvents(actor, [
       "authorization.status",
       "connector.status",
       "evse.status",
       "transaction.status",
       "transaction.meterValue",
     ]);
-    await simulator.start();
+    await actor.start();
 
-    const plugResult = await simulator.plug({ evseId: 1, connectorId: 1 });
-    const authorizeResult = await simulator.authorize({
+    const plugResult = await actor.plug({ evseId: 1, connectorId: 1 });
+    const authorizeResult = await actor.authorize({
       evseId: 1,
       connectorId: 1,
       idTag: "CARD001",
     });
-    const startResult = await simulator.startTransaction({
+    const startResult = await actor.startTransaction({
       evseId: 1,
       connectorId: 1,
       idTag: "CARD001",
@@ -1207,16 +1207,16 @@ describe("Ocpp16ChargingPointSimulator", () => {
     const transactionId = startResult.status === "accepted"
       ? startResult.transactionId
       : "";
-    const meterValueResult = await simulator.reportMeterValue({
+    const meterValueResult = await actor.reportMeterValue({
       transactionId,
       meterWh: 100,
     });
-    const stopResult = await simulator.stopTransaction({
+    const stopResult = await actor.stopTransaction({
       transactionId,
       reason: "local",
       meterStopWh: 100,
     });
-    const unplugResult = await simulator.unplug({ evseId: 1, connectorId: 1 });
+    const unplugResult = await actor.unplug({ evseId: 1, connectorId: 1 });
 
     expect(protocolRuntime.calls).toContain("plugConnector");
     expect(protocolRuntime.calls).toContain("authorize");
@@ -1315,7 +1315,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
 
   test("emits public meter value events from periodic runtime sampling", async () => {
     vi.useFakeTimers();
-    const { simulator } = createRuntimeHarness([
+    const { actor } = createRuntimeHarness([
       runtimeBootAccepted(),
       runtimeResponse("StatusNotification", {}),
       runtimeResponse("StatusNotification", {}),
@@ -1344,19 +1344,19 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     });
 
-    await simulator.start();
-    await simulator.plug({ evseId: 1, connectorId: 1 });
-    await simulator.authorize({
+    await actor.start();
+    await actor.plug({ evseId: 1, connectorId: 1 });
+    await actor.authorize({
       evseId: 1,
       connectorId: 1,
       idTag: "CARD001",
     });
-    const start = await simulator.startTransaction({
+    const start = await actor.startTransaction({
       evseId: 1,
       connectorId: 1,
       idTag: "CARD001",
     });
-    const events = collectChargingPointSimulatorEvents(simulator, ["transaction.meterValue"]);
+    const events = collectChargingPointActorEvents(actor, ["transaction.meterValue"]);
 
     vi.advanceTimersByTime(1_000);
     await flushMicrotasks();
@@ -1378,8 +1378,8 @@ describe("Ocpp16ChargingPointSimulator", () => {
     }));
   });
 
-  test("emits simulator events when RemoteStartTransaction starts a transaction", async () => {
-    const { simulator, session } = createRuntimeHarness([
+  test("emits actor events when RemoteStartTransaction starts a transaction", async () => {
+    const { actor, session } = createRuntimeHarness([
       runtimeBootAccepted(),
       runtimeResponse("StatusNotification", {}),
       runtimeResponse("StatusNotification", {}),
@@ -1391,9 +1391,9 @@ describe("Ocpp16ChargingPointSimulator", () => {
       runtimeResponse("StatusNotification", {}),
     ]);
 
-    await simulator.start();
-    await simulator.plug({ evseId: 1, connectorId: 1 });
-    const events = collectChargingPointSimulatorEvents(simulator, [
+    await actor.start();
+    await actor.plug({ evseId: 1, connectorId: 1 });
+    const events = collectChargingPointActorEvents(actor, [
       "authorization.status",
       "connector.status",
       "transaction.status",
@@ -1433,8 +1433,8 @@ describe("Ocpp16ChargingPointSimulator", () => {
       .toEqual([]);
   });
 
-  test("emits simulator events when RemoteStopTransaction stops a transaction", async () => {
-    const { simulator, session } = createRuntimeHarness([
+  test("emits actor events when RemoteStopTransaction stops a transaction", async () => {
+    const { actor, session } = createRuntimeHarness([
       runtimeBootAccepted(),
       runtimeResponse("StatusNotification", {}),
       runtimeResponse("StatusNotification", {}),
@@ -1452,15 +1452,15 @@ describe("Ocpp16ChargingPointSimulator", () => {
       runtimeResponse("StatusNotification", {}),
     ]);
 
-    await simulator.start();
-    await simulator.plug({ evseId: 1, connectorId: 1 });
-    await simulator.authorize({ evseId: 1, connectorId: 1, idTag: "REMOTE" });
-    const startResult = await simulator.startTransaction({
+    await actor.start();
+    await actor.plug({ evseId: 1, connectorId: 1 });
+    await actor.authorize({ evseId: 1, connectorId: 1, idTag: "REMOTE" });
+    const startResult = await actor.startTransaction({
       evseId: 1,
       connectorId: 1,
       idTag: "REMOTE",
     });
-    const events = collectChargingPointSimulatorEvents(simulator, [
+    const events = collectChargingPointActorEvents(actor, [
       "transaction.status",
       "protocol.message",
     ]);
@@ -1503,16 +1503,16 @@ describe("Ocpp16ChargingPointSimulator", () => {
     }));
   });
 
-  test("emits simulator status events when ChangeAvailability changes a connector", async () => {
-    const { simulator, session } = createRuntimeHarness([
+  test("emits actor status events when ChangeAvailability changes a connector", async () => {
+    const { actor, session } = createRuntimeHarness([
       runtimeBootAccepted(),
       runtimeResponse("StatusNotification", {}),
       runtimeResponse("StatusNotification", {}),
       runtimeResponse("StatusNotification", {}),
     ]);
 
-    await simulator.start();
-    const events = collectChargingPointSimulatorEvents(simulator, [
+    await actor.start();
+    const events = collectChargingPointActorEvents(actor, [
       "evse.status",
       "connector.status",
     ]);
@@ -1544,7 +1544,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("emits authorization events for both remote Authorize and StartTransaction results", async () => {
-    const { simulator, session } = createRuntimeHarness([
+    const { actor, session } = createRuntimeHarness([
       runtimeBootAccepted(),
       runtimeResponse("StatusNotification", {}),
       runtimeResponse("StatusNotification", {}),
@@ -1571,9 +1571,9 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     });
 
-    await simulator.start();
-    await simulator.plug({ evseId: 1, connectorId: 1 });
-    const events = collectChargingPointSimulatorEvents(simulator, [
+    await actor.start();
+    await actor.plug({ evseId: 1, connectorId: 1 });
+    const events = collectChargingPointActorEvents(actor, [
       "authorization.status",
       "transaction.status",
     ]);
@@ -1618,7 +1618,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("emits a rejected transaction event when remote authorization fails", async () => {
-    const { simulator, session } = createRuntimeHarness([
+    const { actor, session } = createRuntimeHarness([
       runtimeBootAccepted(),
       runtimeResponse("StatusNotification", {}),
       runtimeResponse("StatusNotification", {}),
@@ -1638,9 +1638,9 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     });
 
-    await simulator.start();
-    await simulator.plug({ evseId: 1, connectorId: 1 });
-    const events = collectChargingPointSimulatorEvents(simulator, [
+    await actor.start();
+    await actor.plug({ evseId: 1, connectorId: 1 });
+    const events = collectChargingPointActorEvents(actor, [
       "authorization.status",
       "transaction.status",
     ]);
@@ -1672,7 +1672,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("emits authorization and rejected transaction events when remote authorization is rejected", async () => {
-    const { simulator, session } = createRuntimeHarness([
+    const { actor, session } = createRuntimeHarness([
       runtimeBootAccepted(),
       runtimeResponse("StatusNotification", {}),
       runtimeResponse("StatusNotification", {}),
@@ -1694,9 +1694,9 @@ describe("Ocpp16ChargingPointSimulator", () => {
       },
     });
 
-    await simulator.start();
-    await simulator.plug({ evseId: 1, connectorId: 1 });
-    const events = collectChargingPointSimulatorEvents(simulator, [
+    await actor.start();
+    await actor.plug({ evseId: 1, connectorId: 1 });
+    const events = collectChargingPointActorEvents(actor, [
       "authorization.status",
       "transaction.status",
     ]);
@@ -1734,10 +1734,10 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("emits session status events from CSMS connection changes", async () => {
-    const { simulator, session } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, ["session.status"]);
+    const { actor, session } = createHarness();
+    const events = collectChargingPointActorEvents(actor, ["session.status"]);
 
-    await simulator.start();
+    await actor.start();
 
     session.emitOnline();
     session.emitReconnecting(2);
@@ -1768,11 +1768,11 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("does not emit session status after dispose", async () => {
-    const { simulator, session } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, ALL_CHARGING_POINT_SIMULATOR_EVENT_TYPES);
+    const { actor, session } = createHarness();
+    const events = collectChargingPointActorEvents(actor, ALL_CHARGING_POINT_ACTOR_EVENT_TYPES);
 
-    await simulator.start();
-    await simulator.dispose();
+    await actor.start();
+    await actor.dispose();
     const eventCountAfterDispose = events.length;
 
     session.emitReconnecting();
@@ -1782,8 +1782,8 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("emits protocol messages through the protocol event channel", () => {
-    const { simulator, session } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, ["protocol.message"]);
+    const { actor, session } = createHarness();
+    const events = collectChargingPointActorEvents(actor, ["protocol.message"]);
 
     session.emitProtocolMessage({
       protocol: "OCPP16J",
@@ -1797,7 +1797,7 @@ describe("Ocpp16ChargingPointSimulator", () => {
     expect(events).toEqual([
       expect.objectContaining({
         type: "protocol.message",
-        chargingPointSimulatorId: "cp-1",
+        chargingPointActorId: "cp-1",
         protocol: "OCPP16J",
         resource: { scope: "protocol" },
         direction: "sent",
@@ -1809,29 +1809,29 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("event subscriptions can be unsubscribed", async () => {
-    const { simulator } = createHarness();
-    const events: ChargingPointSimulatorEvent[] = [];
-    const unsubscribe = simulator.events.subscribe("chargingPointSimulator.status", (event) => {
+    const { actor } = createHarness();
+    const events: ChargingPointActorEvent[] = [];
+    const unsubscribe = actor.events.subscribe("chargingPointActor.status", (event) => {
       events.push(event);
     });
 
     unsubscribe();
-    await simulator.start();
-    await simulator.dispose();
+    await actor.start();
+    await actor.dispose();
 
     expect(events).toHaveLength(0);
   });
 
-  test("does not expose protocol connector ids in simulator operation results", async () => {
-    const { simulator } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, [
+  test("does not expose protocol connector ids in actor operation results", async () => {
+    const { actor } = createHarness();
+    const events = collectChargingPointActorEvents(actor, [
       "connector.status",
       "transaction.status",
     ]);
-    await simulator.start();
+    await actor.start();
 
-    const plugResult = await simulator.plug({ evseId: 1, connectorId: 1 });
-    const startResult = await simulator.startTransaction({
+    const plugResult = await actor.plug({ evseId: 1, connectorId: 1 });
+    const startResult = await actor.startTransaction({
       evseId: 1,
       connectorId: 1,
       idTag: "CARD001",
@@ -1872,14 +1872,14 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("startTransaction rejects nonexistent connector pair before runtime start", async () => {
-    const { simulator, protocolRuntime } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, [
+    const { actor, protocolRuntime } = createHarness();
+    const events = collectChargingPointActorEvents(actor, [
       "authorization.status",
       "transaction.status",
     ]);
-    await simulator.start();
+    await actor.start();
 
-    const result = await simulator.startTransaction({
+    const result = await actor.startTransaction({
       evseId: 1,
       connectorId: 2,
       idTag: "CARD001",
@@ -1896,11 +1896,11 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("dispose releases embedded runtime resources and session listeners", async () => {
-    const { simulator, session, protocolRuntime } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, ["chargingPointSimulator.status"]);
-    await simulator.start();
+    const { actor, session, protocolRuntime } = createHarness();
+    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
+    await actor.start();
 
-    await simulator.dispose();
+    await actor.dispose();
     const eventCountAfterDispose = events.length;
     session.emitOffline();
 
@@ -1911,8 +1911,8 @@ describe("Ocpp16ChargingPointSimulator", () => {
   });
 
   test("startTransaction returns rejected results", async () => {
-    const { simulator, protocolRuntime } = createHarness();
-    const events = collectChargingPointSimulatorEvents(simulator, [
+    const { actor, protocolRuntime } = createHarness();
+    const events = collectChargingPointActorEvents(actor, [
       "authorization.status",
       "transaction.status",
     ]);
@@ -1922,9 +1922,9 @@ describe("Ocpp16ChargingPointSimulator", () => {
       authorizationStatus: "Invalid",
       statusNotificationResults: [],
     };
-    await simulator.start();
+    await actor.start();
 
-    const result = await simulator.startTransaction({
+    const result = await actor.startTransaction({
       evseId: 1,
       connectorId: 1,
       idTag: "CARD001",
@@ -1960,15 +1960,15 @@ describe("Ocpp16ChargingPointSimulator", () => {
     }));
   });
 
-  test("online operations fail when simulator is stopped", async () => {
-    const { simulator } = createHarness();
+  test("online operations fail when actor is stopped", async () => {
+    const { actor } = createHarness();
 
     await expect(
-      simulator.plug({ evseId: 1, connectorId: 1 }),
-    ).rejects.toBeInstanceOf(ChargingPointSimulatorError);
+      actor.plug({ evseId: 1, connectorId: 1 }),
+    ).rejects.toBeInstanceOf(ChargingPointActorError);
     await expect(
-      simulator.startTransaction({ evseId: 1, connectorId: 1, idTag: "CARD001" }),
-    ).rejects.toMatchObject({ code: "CHARGING_POINT_SIMULATOR_NOT_RUNNING" });
+      actor.startTransaction({ evseId: 1, connectorId: 1, idTag: "CARD001" }),
+    ).rejects.toMatchObject({ code: "CHARGING_POINT_ACTOR_NOT_RUNNING" });
   });
 });
 

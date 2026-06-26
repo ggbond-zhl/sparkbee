@@ -32,9 +32,9 @@
       "types": "./src/shared/deferred.ts",
       "import": "./src/shared/deferred.ts"
     },
-    "./chargingPointSimulator": {
-      "types": "./src/chargingPointSimulator/index.ts",
-      "import": "./src/chargingPointSimulator/index.ts"
+    "./chargingPointActor": {
+      "types": "./src/chargingPointActor/index.ts",
+      "import": "./src/chargingPointActor/index.ts"
     },
     "./transport": {
       "types": "./src/protocol/transport/index.ts",

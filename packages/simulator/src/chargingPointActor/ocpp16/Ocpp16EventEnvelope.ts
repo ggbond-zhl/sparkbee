@@ -7,14 +7,14 @@ import type {
 } from "../../protocol/session/types";
 import type { ProtocolClock } from "../../protocol/runtime/ocpp16/protocolClock";
 import type {
-  ChargingPointSimulatorEventBus,
-  ChargingPointSimulatorSessionStatus,
-  ChargingPointSimulatorStatus,
+  ChargingPointActorEventBus,
+  ChargingPointActorSessionStatus,
+  ChargingPointActorStatus,
 } from "../types";
 import { EventEnvelopePublisher } from "./EventEnvelopePublisher";
 
 export interface Ocpp16EventEnvelopeOptions {
-  chargingPointSimulatorId: string;
+  chargingPointActorId: string;
   protocol: ProtocolVersion;
   clock: ProtocolClock;
   idGenerator: () => string;
@@ -25,13 +25,13 @@ export interface Ocpp16EventEnvelopeOptions {
 
 export class Ocpp16EventEnvelope {
   private readonly publisher: EventEnvelopePublisher;
-  private sessionStatus: ChargingPointSimulatorSessionStatus = "offline";
+  private sessionStatus: ChargingPointActorSessionStatus = "offline";
 
-  readonly events: ChargingPointSimulatorEventBus;
+  readonly events: ChargingPointActorEventBus;
 
   constructor(private readonly options: Ocpp16EventEnvelopeOptions) {
     this.publisher = new EventEnvelopePublisher({
-      chargingPointSimulatorId: options.chargingPointSimulatorId,
+      chargingPointActorId: options.chargingPointActorId,
       protocol: options.protocol,
       clock: options.clock,
       idGenerator: options.idGenerator,
@@ -40,13 +40,13 @@ export class Ocpp16EventEnvelope {
     this.bind();
   }
 
-  publishChargingPointSimulatorStatus(
-    previousStatus: ChargingPointSimulatorStatus,
-    currentStatus: ChargingPointSimulatorStatus,
+  publishChargingPointActorStatus(
+    previousStatus: ChargingPointActorStatus,
+    currentStatus: ChargingPointActorStatus,
     error?: { code: string; message: string },
   ): void {
-    this.publisher.publish("chargingPointSimulator.status", {
-      resource: { scope: "chargingPointSimulator" },
+    this.publisher.publish("chargingPointActor.status", {
+      resource: { scope: "chargingPointActor" },
       previousStatus,
       currentStatus,
       ...(error === undefined ? {} : { error }),
@@ -161,7 +161,7 @@ export class Ocpp16EventEnvelope {
   };
 
   private publishSessionStatus(
-    currentStatus: ChargingPointSimulatorSessionStatus,
+    currentStatus: ChargingPointActorSessionStatus,
     extra: { attempt?: number; reason?: SessionOfflineReason } = {},
   ): void {
     const previousStatus = this.sessionStatus;
