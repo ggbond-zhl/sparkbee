@@ -2,9 +2,11 @@ import { serve } from "@hono/node-server";
 
 import { createApp } from "./app";
 import { loadServerConfig } from "./config/env";
+import { createPostgresDatabase } from "./db/client";
 
 const config = loadServerConfig();
-const app = createApp();
+const database = createPostgresDatabase(config.databaseUrl);
+const app = createApp({ database });
 
 serve({
   fetch: app.fetch,

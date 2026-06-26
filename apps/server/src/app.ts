@@ -1,15 +1,20 @@
 import { Hono } from "hono";
+import { logger } from "hono/logger";
 
+import type { ServerDatabase } from "./db";
 import { errorMiddleware } from "./middlewares/error.middleware";
-import { loggerMiddleware } from "./middlewares/logger.middleware";
 import { createRoutes } from "./routes";
 
-export function createApp() {
+export interface AppDependencies {
+  database?: ServerDatabase;
+}
+
+export function createApp(dependencies: AppDependencies = {}) {
   const app = new Hono();
 
-  app.use("*", loggerMiddleware);
+  app.use("*", logger());
   app.onError(errorMiddleware);
-  app.route("/", createRoutes());
+  app.route("/", createRoutes(dependencies));
 
   return app;
 }

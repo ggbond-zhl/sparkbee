@@ -25,13 +25,15 @@ function sourceFiles(): string[] {
   return walk(srcRoot).filter((filePath) => extname(filePath) === ".ts");
 }
 
-describe("server skeleton architecture", () => {
-  test("keeps only backend skeleton source areas", () => {
+describe("server architecture", () => {
+  test("keeps backend source areas explicit", () => {
     const allowedTopLevelEntries = new Set([
       "app.ts",
       "config",
+      "db",
       "index.ts",
       "middlewares",
+      "modules",
       "routes",
       "utils",
     ]);
@@ -42,13 +44,9 @@ describe("server skeleton architecture", () => {
     expect(unexpectedEntries).toEqual([]);
   });
 
-  test("does not create target business structure before the first backend use case", () => {
+  test("does not introduce runtime orchestration before start/stop use cases", () => {
     const futureEntries = [
-      join(srcRoot, "db"),
-      join(srcRoot, "modules"),
       join(srcRoot, "runtime"),
-      join(serverRoot, "drizzle"),
-      join(serverRoot, "drizzle.config.ts"),
     ];
 
     const existingEntries = futureEntries
@@ -58,15 +56,12 @@ describe("server skeleton architecture", () => {
     expect(existingEntries).toEqual([]);
   });
 
-  test("does not reference cleared business modules or simulator package", () => {
+  test("does not reference simulator runtime from management API", () => {
     const forbidden = [
       "@spark-bee/simulator",
       "charging-point",
-      "ChargingPoint",
       "ProtocolEvent",
-      "TransactionRepository",
       "AuthService",
-      "createDatabase",
     ];
 
     const matches = sourceFiles().flatMap((filePath) => {
@@ -79,10 +74,10 @@ describe("server skeleton architecture", () => {
     expect(matches).toEqual([]);
   });
 
-  test("has no database migrations after clearing the database model", () => {
-    const migrationsDir = join(serverRoot, "drizzle/migrations");
+  test("keeps Drizzle migrations under apps/server", () => {
+    const rootMigrationsDir = join(dirname(serverRoot), "..", "drizzle/migrations");
 
     expect(existsSync(join(srcRoot, "db/schema.ts"))).toBe(false);
-    expect(existsSync(migrationsDir)).toBe(false);
+    expect(existsSync(rootMigrationsDir)).toBe(false);
   });
 });

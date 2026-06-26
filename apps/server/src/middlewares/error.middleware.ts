@@ -21,7 +21,7 @@ export const errorMiddleware: ErrorHandler = (error, context) => {
     {
       error: {
         code: "INTERNAL_SERVER_ERROR",
-        message: "服务器内部错误"
+        message: "Internal server error"
       }
     },
     500,

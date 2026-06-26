@@ -9,10 +9,12 @@ loadDotenv({ path: serverEnvPath, quiet: true });
 
 export interface ServerConfig {
   port: number;
+  databaseUrl: string;
 }
 
 const envSchema = z.object({
-  PORT: z.coerce.number().int().min(1).max(65_535).default(3000)
+  PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
+  DATABASE_URL: z.string().url().default("postgres://postgres:postgres@localhost:5432/sparkbee")
 });
 
 export function loadServerConfig(rawEnv: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -26,6 +28,7 @@ export function loadServerConfig(rawEnv: NodeJS.ProcessEnv = process.env): Serve
   }
 
   return {
-    port: result.data.PORT
+    port: result.data.PORT,
+    databaseUrl: result.data.DATABASE_URL
   };
 }
