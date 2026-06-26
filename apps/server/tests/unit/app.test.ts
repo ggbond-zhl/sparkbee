@@ -1,8 +1,12 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { createApp } from "../../src/app";
 
 describe("createApp", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   test("serves the health check from the backend skeleton", async () => {
     const app = createApp();
 
@@ -18,6 +22,97 @@ describe("createApp", () => {
     const response = await app.request("/health");
 
     expect(response.headers.get("X-Request-Id")).toMatch(/^[\w=-]+$/);
+  });
+
+  test("logs requests in development", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const app = createApp({ environment: "development" });
+
+    await app.request("/health");
+
+    expect(logSpy.mock.calls.some(([message]) => String(message).includes("<-- GET /health"))).toBe(
+      true,
+    );
+    expect(logSpy.mock.calls.some(([message]) => String(message).includes("--> GET /health"))).toBe(
+      true,
+    );
+  });
+
+  test("does not log requests outside development", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const app = createApp({ environment: "test" });
+
+    await app.request("/health");
+
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  test("adds secure response headers", async () => {
+    const app = createApp();
+
+    const response = await app.request("/health");
+
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(response.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
+    expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
+  });
+
+  test("handles CORS preflight requests", async () => {
+    const app = createApp();
+
+    const response = await app.request("/health", {
+      method: "OPTIONS",
+      headers: {
+        "Access-Control-Request-Method": "GET",
+        Origin: "https://admin.sparkbee.local",
+      },
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("Access-Control-Allow-Methods")).toContain("GET");
+  });
+
+  test("compresses large compressible responses in production", async () => {
+    const app = createApp({ environment: "production" });
+    app.get("/large-response", (context) => context.text("x".repeat(2048)));
+
+    const response = await app.request("/large-response", {
+      headers: { "Accept-Encoding": "gzip" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Encoding")).toBe("gzip");
+  });
+
+  test("does not compress responses outside production", async () => {
+    const app = createApp({ environment: "test" });
+    app.get("/large-response", (context) => context.text("x".repeat(2048)));
+
+    const response = await app.request("/large-response", {
+      headers: { "Accept-Encoding": "gzip" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Encoding")).toBeNull();
+  });
+
+  test("returns gateway timeout when a request exceeds the timeout", async () => {
+    const app = createApp({ timeoutMs: 1 });
+    app.get("/slow-response", async (context) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return context.json({ status: "late" });
+    });
+
+    const response = await app.request("/slow-response");
+
+    expect(response.status).toBe(504);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "GATEWAY_TIMEOUT",
+        message: "Gateway Timeout",
+      },
+    });
   });
 
   test("reuses a valid request id from the request header", async () => {

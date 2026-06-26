@@ -1,4 +1,5 @@
 import type { ErrorHandler } from "hono";
+import { HTTPException } from "hono/http-exception";
 
 import { AppError } from "../utils/errors";
 
@@ -10,6 +11,18 @@ export const errorMiddleware: ErrorHandler = (error, context) => {
           code: error.code,
           message: error.message,
           details: error.details
+        }
+      },
+      error.status as never,
+    );
+  }
+
+  if (error instanceof HTTPException) {
+    return context.json(
+      {
+        error: {
+          code: error.status === 504 ? "GATEWAY_TIMEOUT" : "HTTP_EXCEPTION",
+          message: error.message || "HTTP exception"
         }
       },
       error.status as never,
