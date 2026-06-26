@@ -1,6 +1,11 @@
-import "dotenv/config";
+import { fileURLToPath } from "node:url";
 
+import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
+
+export const serverEnvPath = fileURLToPath(new URL("../../../../.env", import.meta.url));
+
+loadDotenv({ path: serverEnvPath });
 
 export interface ServerConfig {
   adminPassword: string;
