@@ -13,7 +13,7 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
 
   routes.route("/", createHealthRoute());
   if (dependencies.database !== undefined) {
-    routes.route("/chargingPoints", createChargingPointRoute(dependencies.database));
+    routes.route("/charging-points", createChargingPointRoute(dependencies.database));
   }
 
   return routes;

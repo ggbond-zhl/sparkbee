@@ -31,6 +31,8 @@ type 可选值：feat,fix,refactor,perf,style,docs,test,chore
 
 ## 后端 API 文档规范
 
+- 业务资源路径使用小写 kebab-case，例如 `/charging-points`，不要使用 camelCase。
+- 路径参数中父资源主键使用 `{id}`；同一路径出现子资源主键时，使用 `{资源名Id}` 避免重名，例如 `/charging-points/{id}/connectors/{connectorId}`。
 - 新增或修改后端接口时，必须同步维护 OpenAPI/Scalar 文档。
 - 接口级 `summary`、`description` 和响应说明使用中文，写在后端 route 的 `createRoute` metadata 中。
 - 请求参数、请求体和响应字段说明使用中文，优先写在 `@spark-bee/contracts` 的 Zod schema metadata 中。

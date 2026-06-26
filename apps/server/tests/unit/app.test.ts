@@ -78,7 +78,7 @@ describe("createApp", () => {
   test("does not expose business API routes", async () => {
     const app = createApp();
 
-    const response = await app.request("/api/chargingPoints");
+    const response = await app.request("/api/charging-points");
 
     expect(response.status).toBe(404);
   });

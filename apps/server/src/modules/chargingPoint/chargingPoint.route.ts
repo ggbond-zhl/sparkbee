@@ -39,11 +39,11 @@ const chargingPointIdParamSchema = z.object({
 });
 
 const chargingPointConnectorParamSchema = z.object({
-  chargingPointId: z.string().uuid().describe("所属桩实例的 UUID 主键。"),
+  id: z.string().uuid().describe("所属桩实例的 UUID 主键。"),
 });
 
 const connectorIdParamSchema = chargingPointConnectorParamSchema.extend({
-  id: z.string().uuid().describe("枪口的 UUID 主键。"),
+  connectorId: z.string().uuid().describe("枪口的 UUID 主键。"),
 });
 
 const listChargingPointsRoute = createRoute({
@@ -147,7 +147,7 @@ const deleteChargingPointRoute = createRoute({
 
 const listConnectorsRoute = createRoute({
   method: "get",
-  path: "/{chargingPointId}/connectors",
+  path: "/{id}/connectors",
   tags: ["Connector"],
   summary: "查询枪口列表",
   description: "查询指定桩实例下当前未删除的枪口，按 sortOrder 和创建时间排序。",
@@ -166,7 +166,7 @@ const listConnectorsRoute = createRoute({
 
 const createConnectorRouteDefinition = createRoute({
   method: "post",
-  path: "/{chargingPointId}/connectors",
+  path: "/{id}/connectors",
   tags: ["Connector"],
   summary: "创建枪口",
   description: "为指定桩实例创建一个枪口配置；EVSE 编号和 connectorId 在桩实例内必须唯一。",
@@ -190,7 +190,7 @@ const createConnectorRouteDefinition = createRoute({
 
 const getConnectorRoute = createRoute({
   method: "get",
-  path: "/{chargingPointId}/connectors/{id}",
+  path: "/{id}/connectors/{connectorId}",
   tags: ["Connector"],
   summary: "查看枪口详情",
   description: "读取指定桩实例下的单个未删除枪口。",
@@ -209,7 +209,7 @@ const getConnectorRoute = createRoute({
 
 const updateConnectorRouteDefinition = createRoute({
   method: "patch",
-  path: "/{chargingPointId}/connectors/{id}",
+  path: "/{id}/connectors/{connectorId}",
   tags: ["Connector"],
   summary: "更新枪口",
   description: "更新枪口的可编辑配置字段，不修改主键、所属桩实例和 sortOrder。",
@@ -233,7 +233,7 @@ const updateConnectorRouteDefinition = createRoute({
 
 const deleteConnectorRoute = createRoute({
   method: "delete",
-  path: "/{chargingPointId}/connectors/{id}",
+  path: "/{id}/connectors/{connectorId}",
   tags: ["Connector"],
   summary: "删除枪口",
   description: "软删除指定桩实例下的枪口；第一阶段允许删除最后一个枪口。",
@@ -293,31 +293,34 @@ export function createChargingPointRoute(database: ServerDatabase) {
   });
 
   route.openapi(createConnectorRouteDefinition, async (context) => {
-    const { chargingPointId } = context.req.valid("param");
+    const { id: chargingPointId } = context.req.valid("param");
     const input = context.req.valid("json");
     const connector = await repository.createConnector(chargingPointId, input);
     return context.json(connector, 201);
   });
 
   route.openapi(listConnectorsRoute, async (context) => {
-    const { chargingPointId } = context.req.valid("param");
+    const { id: chargingPointId } = context.req.valid("param");
     return context.json(await repository.listConnectors(chargingPointId), 200);
   });
 
   route.openapi(getConnectorRoute, async (context) => {
-    const { chargingPointId, id } = context.req.valid("param");
-    return context.json(await repository.getConnector(chargingPointId, id), 200);
+    const { id: chargingPointId, connectorId } = context.req.valid("param");
+    return context.json(await repository.getConnector(chargingPointId, connectorId), 200);
   });
 
   route.openapi(updateConnectorRouteDefinition, async (context) => {
-    const { chargingPointId, id } = context.req.valid("param");
+    const { id: chargingPointId, connectorId } = context.req.valid("param");
     const input = context.req.valid("json");
-    return context.json(await repository.updateConnector(chargingPointId, id, input), 200);
+    return context.json(
+      await repository.updateConnector(chargingPointId, connectorId, input),
+      200,
+    );
   });
 
   route.openapi(deleteConnectorRoute, async (context) => {
-    const { chargingPointId, id } = context.req.valid("param");
-    await repository.softDeleteConnector(chargingPointId, id);
+    const { id: chargingPointId, connectorId } = context.req.valid("param");
+    await repository.softDeleteConnector(chargingPointId, connectorId);
     return context.body(null, 204);
   });
 

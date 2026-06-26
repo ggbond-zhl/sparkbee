@@ -19,19 +19,20 @@ describe("chargingPoint management API", () => {
 
     expect(response.status).toBe(200);
     const document = await response.json();
-    expect(document.paths["/chargingPoints"].get.summary).toBe("查询桩实例列表");
-    expect(document.paths["/chargingPoints"].post.summary).toBe("创建桩实例");
-    expect(document.paths["/chargingPoints/{id}"].get.summary).toBe("查看桩实例详情");
-    expect(document.paths["/chargingPoints/{id}"].patch.summary).toBe("更新桩实例");
-    expect(document.paths["/chargingPoints/{id}"].delete.summary).toBe("删除桩实例");
-    expect(document.paths["/chargingPoints/{chargingPointId}/connectors"].get.summary).toBe(
+    expect(document.paths).not.toHaveProperty("/chargingPoints");
+    expect(document.paths["/charging-points"].get.summary).toBe("查询桩实例列表");
+    expect(document.paths["/charging-points"].post.summary).toBe("创建桩实例");
+    expect(document.paths["/charging-points/{id}"].get.summary).toBe("查看桩实例详情");
+    expect(document.paths["/charging-points/{id}"].patch.summary).toBe("更新桩实例");
+    expect(document.paths["/charging-points/{id}"].delete.summary).toBe("删除桩实例");
+    expect(document.paths["/charging-points/{id}/connectors"].get.summary).toBe(
       "查询枪口列表",
     );
-    expect(document.paths["/chargingPoints/{chargingPointId}/connectors"].post.summary).toBe(
+    expect(document.paths["/charging-points/{id}/connectors"].post.summary).toBe(
       "创建枪口",
     );
     expect(
-      document.paths["/chargingPoints/{chargingPointId}/connectors/{id}"].patch.summary,
+      document.paths["/charging-points/{id}/connectors/{connectorId}"].patch.summary,
     ).toBe("更新枪口");
 
     const serializedDocument = JSON.stringify(document);
@@ -42,11 +43,20 @@ describe("chargingPoint management API", () => {
     expect(serializedDocument).toContain("枪口在所属桩实例内的 connectorId");
   });
 
+  test("does not expose the old camelCase chargingPoint path", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+
+    const response = await app.request("/chargingPoints");
+
+    expect(response.status).toBe(404);
+  });
+
   test("creates and reads a chargingPoint without connectors", async () => {
     const database = await createTestDatabase();
     const app = createApp({ database });
 
-    const createResponse = await app.request("/chargingPoints", {
+    const createResponse = await app.request("/charging-points", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -73,7 +83,7 @@ describe("chargingPoint management API", () => {
       connectors: [],
     });
 
-    const detailResponse = await app.request(`/chargingPoints/${created.id}`);
+    const detailResponse = await app.request(`/charging-points/${created.id}`);
 
     expect(detailResponse.status).toBe(200);
     expect(chargingPointDetailResponseSchema.parse(await detailResponse.json())).toEqual(created);
@@ -84,7 +94,7 @@ describe("chargingPoint management API", () => {
     const app = createApp({ database });
 
     for (const identity of ["CP001", "CP002"]) {
-      await app.request("/chargingPoints", {
+      await app.request("/charging-points", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -97,7 +107,7 @@ describe("chargingPoint management API", () => {
       });
     }
 
-    const listResponse = await app.request("/chargingPoints?page=1&pageSize=1&keyword=CP");
+    const listResponse = await app.request("/charging-points?page=1&pageSize=1&keyword=CP");
 
     expect(listResponse.status).toBe(200);
     const list = listChargingPointsResponseSchema.parse(await listResponse.json());
@@ -121,7 +131,7 @@ describe("chargingPoint management API", () => {
       model: "DebugBox",
     });
 
-    const response = await app.request(`/chargingPoints/${created.id}`, {
+    const response = await app.request(`/charging-points/${created.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -156,15 +166,15 @@ describe("chargingPoint management API", () => {
       model: "DebugBox",
     });
 
-    const deleteResponse = await app.request(`/chargingPoints/${created.id}`, {
+    const deleteResponse = await app.request(`/charging-points/${created.id}`, {
       method: "DELETE",
     });
 
     expect(deleteResponse.status).toBe(204);
-    const detailResponse = await app.request(`/chargingPoints/${created.id}`);
+    const detailResponse = await app.request(`/charging-points/${created.id}`);
     expect(detailResponse.status).toBe(404);
 
-    const listResponse = await app.request("/chargingPoints");
+    const listResponse = await app.request("/charging-points");
     const list = listChargingPointsResponseSchema.parse(await listResponse.json());
     expect(list.total).toBe(0);
   });
@@ -202,7 +212,7 @@ describe("chargingPoint management API", () => {
     expect(secondConnector).toMatchObject({ sortOrder: 2 });
 
     const listResponse = await app.request(
-      `/chargingPoints/${chargingPoint.id}/connectors`,
+      `/charging-points/${chargingPoint.id}/connectors`,
     );
 
     expect(listResponse.status).toBe(200);
@@ -212,7 +222,7 @@ describe("chargingPoint management API", () => {
       secondConnector.id,
     ]);
 
-    const detailResponse = await app.request(`/chargingPoints/${chargingPoint.id}`);
+    const detailResponse = await app.request(`/charging-points/${chargingPoint.id}`);
     const detail = chargingPointDetailResponseSchema.parse(await detailResponse.json());
     expect(detail.connectors.map((connector) => connector.id)).toEqual([
       firstConnector.id,
@@ -239,7 +249,7 @@ describe("chargingPoint management API", () => {
     });
 
     const updateResponse = await app.request(
-      `/chargingPoints/${chargingPoint.id}/connectors/${connector.id}`,
+      `/charging-points/${chargingPoint.id}/connectors/${connector.id}`,
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -268,13 +278,13 @@ describe("chargingPoint management API", () => {
     });
 
     const deleteResponse = await app.request(
-      `/chargingPoints/${chargingPoint.id}/connectors/${connector.id}`,
+      `/charging-points/${chargingPoint.id}/connectors/${connector.id}`,
       { method: "DELETE" },
     );
     expect(deleteResponse.status).toBe(204);
 
     const listResponse = await app.request(
-      `/chargingPoints/${chargingPoint.id}/connectors`,
+      `/charging-points/${chargingPoint.id}/connectors`,
     );
     expect(connectorResponseSchema.array().parse(await listResponse.json())).toEqual([]);
   });
@@ -297,7 +307,7 @@ describe("chargingPoint management API", () => {
       powerType: "ac",
     });
 
-    const response = await app.request(`/chargingPoints/${chargingPoint.id}/connectors`, {
+    const response = await app.request(`/charging-points/${chargingPoint.id}/connectors`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -322,7 +332,7 @@ describe("chargingPoint management API", () => {
     const database = await createTestDatabase();
     const app = createApp({ database });
 
-    const response = await app.request("/chargingPoints", {
+    const response = await app.request("/charging-points", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -367,7 +377,7 @@ describe("chargingPoint management API", () => {
     });
 
     const response = await app.request(
-      `/chargingPoints/${secondChargingPoint.id}/connectors/${connector.id}`,
+      `/charging-points/${secondChargingPoint.id}/connectors/${connector.id}`,
     );
 
     expect(response.status).toBe(404);
@@ -384,7 +394,7 @@ async function createChargingPoint(
   app: ReturnType<typeof createApp>,
   input: Record<string, unknown>,
 ) {
-  const response = await app.request("/chargingPoints", {
+  const response = await app.request("/charging-points", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
@@ -399,7 +409,7 @@ async function createConnector(
   chargingPointId: string,
   input: Record<string, unknown>,
 ) {
-  const response = await app.request(`/chargingPoints/${chargingPointId}/connectors`, {
+  const response = await app.request(`/charging-points/${chargingPointId}/connectors`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),

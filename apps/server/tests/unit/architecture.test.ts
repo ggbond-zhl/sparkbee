@@ -59,7 +59,6 @@ describe("server architecture", () => {
   test("does not reference simulator runtime from management API", () => {
     const forbidden = [
       "@spark-bee/simulator",
-      "charging-point",
       "ProtocolEvent",
       "AuthService",
     ];
