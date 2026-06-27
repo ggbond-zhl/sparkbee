@@ -48,7 +48,7 @@ import { Ocpp16EventEnvelope } from "./Ocpp16EventEnvelope";
 import { Ocpp16StartupLifecycle } from "./Ocpp16StartupLifecycle";
 
 export class Ocpp16ChargingPointActor implements ChargingPointActor {
-  private status: ChargingPointActorStatus = "stopped";
+  private currentStatus: ChargingPointActorStatus = "stopped";
   private readonly clock: ProtocolClock;
   private readonly idGenerator: () => string;
   private readonly session: ISession;
@@ -98,7 +98,7 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
       chargingPointId: this.id,
       session: this.session,
       runtime: this.ocpp16Runtime,
-      getStatus: () => this.status,
+      getStatus: () => this.currentStatus,
       isDisposed: () => this.disposed,
       transitionStatus: (currentStatus, error) =>
         this.transitionChargingPointActorStatus(currentStatus, error),
@@ -106,20 +106,25 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     this.events = this.eventEnvelope.events;
   }
 
+  get status(): ChargingPointActorStatus {
+    return this.currentStatus;
+  }
+
   async start(): Promise<ChargingPointActorStartResult> {
     this.requireNotDisposed();
-    if (this.status !== "stopped") {
+    if (this.currentStatus !== "stopped") {
       throw new ChargingPointActorError(
         "CHARGING_POINT_ACTOR_ALREADY_RUNNING",
         `充电桩 ${this.id} 已在运行`,
       );
     }
 
+    this.transitionChargingPointActorStatus("starting");
     return this.startupLifecycle.start();
   }
 
   async stop(): Promise<ChargingPointActorStopResult> {
-    if (this.status === "stopped") {
+    if (this.currentStatus === "stopped") {
       return {
         chargingPointId: this.id,
         chargingPointActorStatus: "stopped",
@@ -251,7 +256,7 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
 
   private requireStarted(): void {
     this.requireNotDisposed();
-    if (this.status !== "running" && this.status !== "starting") {
+    if (this.currentStatus !== "running" && this.currentStatus !== "starting") {
       throw new ChargingPointActorError("CHARGING_POINT_ACTOR_NOT_RUNNING", "actor 未运行");
     }
   }
@@ -264,8 +269,8 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     currentStatus: ChargingPointActorStatus,
     error?: { code: string; message: string },
   ): void {
-    const previousStatus = this.status;
-    this.status = currentStatus;
+    const previousStatus = this.currentStatus;
+    this.currentStatus = currentStatus;
     this.eventEnvelope.publishChargingPointLifecycle(previousStatus, currentStatus, error);
   }
 

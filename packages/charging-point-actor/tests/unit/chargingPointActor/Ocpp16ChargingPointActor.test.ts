@@ -110,6 +110,23 @@ class FakeSession implements ISession {
   }
 }
 
+class DeferredConnectSession extends FakeSession {
+  private resolveConnect: (() => void) | null = null;
+
+  override async connect(): Promise<void> {
+    this.connectCalls += 1;
+    await new Promise<void>((resolve) => {
+      this.resolveConnect = resolve;
+    });
+    this.connected = true;
+    this.state = "online";
+  }
+
+  completeConnect(): void {
+    this.resolveConnect?.();
+  }
+}
+
 class FakeProtocolRuntime {
   readonly calls: string[] = [];
   disposed = false;
@@ -640,6 +657,36 @@ describe("Ocpp16ChargingPointActor", () => {
     vi.useRealTimers();
   });
 
+  test("moves to starting before the initial connection completes", async () => {
+    const session = new DeferredConnectSession();
+    const protocolRuntime = new FakeProtocolRuntime();
+    const actor = new Ocpp16ChargingPointActor(
+      {
+        id: "cp-1",
+        protocol: "OCPP16J",
+        centralSystemUrl: "ws://localhost/cp-1",
+        chargingPoint: createChargingPoint(),
+      },
+      {
+        session,
+        ocpp16Runtime: protocolRuntime as unknown as Ocpp16Runtime,
+        clock: () => new Date("2026-01-01T00:00:00.000Z"),
+        idGenerator: () => "event-1",
+      },
+    );
+
+    const startPromise = actor.start();
+    await Promise.resolve();
+
+    expect(actor.status).toBe("starting");
+
+    session.completeConnect();
+    await expect(startPromise).resolves.toMatchObject({
+      chargingPointActorStatus: "running",
+    });
+    expect(actor.status).toBe("running");
+  });
+
   test("uses direct connector id for StartTransaction", async () => {
     const { actor, protocolRuntime } = createHarness();
     protocolRuntime.setConnectorStatus(1, 7, "available");
@@ -786,7 +833,7 @@ describe("Ocpp16ChargingPointActor", () => {
       chargingPointId: "cp-1",
       protocol: "OCPP16J",
       resource: { scope: "chargingPoint" },
-      previousStatus: "stopped",
+      previousStatus: "starting",
       currentStatus: "running",
       occurredAt: "2026-01-01T00:00:00.000Z",
     }));
@@ -1151,7 +1198,7 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(events).toContainEqual(expect.objectContaining({
       type: "chargingPoint.lifecycle",
       resource: { scope: "chargingPoint" },
-      previousStatus: "stopped",
+      previousStatus: "starting",
       currentStatus: "stopped",
       error: {
         code: "CHARGING_POINT_ACTOR_START_FAILED",

@@ -8,10 +8,10 @@ import {
   ProtocolRuntimeError,
 } from "../../../src/protocol/runtime/index.ts";
 
-const simulatorRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+const actorPackageRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 function readRuntimeSource(relativePath: string): string {
-  return readFileSync(join(simulatorRoot, relativePath), "utf8");
+  return readFileSync(join(actorPackageRoot, relativePath), "utf8");
 }
 
 describe("protocol runtime public API", () => {
@@ -30,7 +30,7 @@ describe("protocol runtime public API", () => {
     expect(readRuntimeSource("src/protocol/runtime/index.ts")).not.toContain(
       "./ocpp201",
     );
-    expect(existsSync(join(simulatorRoot, "src/protocol/runtime/ocpp201")))
+    expect(existsSync(join(actorPackageRoot, "src/protocol/runtime/ocpp201")))
       .toBe(false);
   });
 });

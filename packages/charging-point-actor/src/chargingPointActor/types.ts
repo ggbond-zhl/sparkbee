@@ -282,6 +282,7 @@ export interface ChargingPointActorStopTransactionInput {
 export interface ChargingPointActor {
   readonly id: string;
   readonly protocol: ProtocolVersion;
+  readonly status: ChargingPointActorStatus;
   readonly events: ChargingPointActorEventBus;
   start(): Promise<ChargingPointActorStartResult>;
   stop(): Promise<ChargingPointActorStopResult>;

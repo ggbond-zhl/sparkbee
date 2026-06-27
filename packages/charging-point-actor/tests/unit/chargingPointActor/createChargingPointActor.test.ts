@@ -25,6 +25,7 @@ describe("createChargingPointActor", () => {
 
     expect(actor.id).toBe("cp-1");
     expect(actor.protocol).toBe("OCPP16J");
+    expect(actor.status).toBe("stopped");
     expect(typeof actor.start).toBe("function");
     expect(typeof actor.stop).toBe("function");
     expect(typeof actor.plug).toBe("function");

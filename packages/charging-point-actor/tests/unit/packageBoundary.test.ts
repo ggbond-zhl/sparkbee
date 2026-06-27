@@ -54,27 +54,29 @@ function listMatches(tokens: string[], files = filesToScan()): string[] {
   });
 }
 
-describe("simulator package seam", () => {
+const actorPackageRoot = "packages/charging-point-actor";
+
+describe("charging point actor package seam", () => {
   test("package exposes only the charging point actor seam", () => {
     const packageJson = JSON.parse(
-      readSource("packages/simulator/package.json"),
+      readSource(`${actorPackageRoot}/package.json`),
     ) as {
       name: string;
       exports: Record<string, { import?: string; types?: string }>;
     };
-    const rootIndexSource = readSource("packages/simulator/src/index.ts");
+    const rootIndexSource = readSource(`${actorPackageRoot}/src/index.ts`);
     const actorIndexSource = readSource(
-      "packages/simulator/src/chargingPointActor/index.ts",
+      `${actorPackageRoot}/src/chargingPointActor/index.ts`,
     );
 
-    expect(packageJson.name).toBe("@spark-bee/simulator");
+    expect(existsSync(join(repoRoot, "packages/simulator"))).toBe(false);
+    expect(packageJson.name).toBe("@spark-bee/charging-point-actor");
     expect(Object.keys(packageJson.exports).sort()).toEqual([
       ".",
-      "./chargingPointActor",
     ]);
-    expect(packageJson.exports["./chargingPointActor"]).toEqual({
-      types: "./src/chargingPointActor/index.ts",
-      import: "./src/chargingPointActor/index.ts",
+    expect(packageJson.exports["."]).toEqual({
+      types: "./src/index.ts",
+      import: "./src/index.ts",
     });
     expect(rootIndexSource.trim()).toBe('export * from "./chargingPointActor";');
     expect(actorIndexSource).toContain("createChargingPointActor");
@@ -92,7 +94,7 @@ describe("simulator package seam", () => {
     ];
     const files = filesToScan().filter((filePath) =>
       !relative(repoRoot, filePath).replaceAll("\\", "/")
-        .endsWith("packages/simulator/tests/unit/packageBoundary.test.ts")
+        .endsWith(`${actorPackageRoot}/tests/unit/packageBoundary.test.ts`)
     );
 
     for (const removedPackageDir of removedPackageDirs) {
@@ -103,9 +105,9 @@ describe("simulator package seam", () => {
 
   test("public actor interface hides protocol internals", () => {
     const publicSources = [
-      "packages/simulator/src/chargingPointActor/types.ts",
-      "packages/simulator/src/chargingPointActor/index.ts",
-      "packages/simulator/src/chargingPointActor/createChargingPointActor.ts",
+      `${actorPackageRoot}/src/chargingPointActor/types.ts`,
+      `${actorPackageRoot}/src/chargingPointActor/index.ts`,
+      `${actorPackageRoot}/src/chargingPointActor/createChargingPointActor.ts`,
     ].map(readSource).join("\n");
     const forbiddenPublicTokens = [
       "Ocpp16TransactionStartResult",
@@ -123,9 +125,9 @@ describe("simulator package seam", () => {
     ];
 
     expect(listMatches(forbiddenPublicTokens, [
-      join(repoRoot, "packages/simulator/src/chargingPointActor/types.ts"),
-      join(repoRoot, "packages/simulator/src/chargingPointActor/index.ts"),
-      join(repoRoot, "packages/simulator/src/chargingPointActor/createChargingPointActor.ts"),
+      join(repoRoot, `${actorPackageRoot}/src/chargingPointActor/types.ts`),
+      join(repoRoot, `${actorPackageRoot}/src/chargingPointActor/index.ts`),
+      join(repoRoot, `${actorPackageRoot}/src/chargingPointActor/createChargingPointActor.ts`),
     ])).toEqual([]);
     expect(publicSources).toContain('protocol: "OCPP16J"');
     expect(publicSources).toContain("transactionId: string");
@@ -133,19 +135,19 @@ describe("simulator package seam", () => {
 
   test("internal source keeps the simplified V1 file shape", () => {
     const removedInternalFiles = [
-      "packages/simulator/src/chargingPointActor/types/shared.ts",
-      "packages/simulator/src/chargingPointActor/types/events.ts",
-      "packages/simulator/src/chargingPointActor/types/operations.ts",
-      "packages/simulator/src/chargingPointActor/types/options.ts",
-      "packages/simulator/src/protocol/runtime/ocpp16/types/shared.ts",
-      "packages/simulator/src/protocol/runtime/ocpp16/types/events.ts",
-      "packages/simulator/src/protocol/runtime/ocpp16/types/operations.ts",
-      "packages/simulator/src/protocol/runtime/ocpp16/types/options.ts",
-      "packages/simulator/src/protocol/runtime/ocpp16/TransactionDeliveryInternals.ts",
-      "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16RuntimeObservation.ts",
-      "packages/simulator/src/protocol/runtime/ocpp201/index.ts",
-      "packages/simulator/src/protocol/transport/websocket/socketEventDetails.ts",
-      "packages/simulator/src/chargingPointActor/support.ts",
+      `${actorPackageRoot}/src/chargingPointActor/types/shared.ts`,
+      `${actorPackageRoot}/src/chargingPointActor/types/events.ts`,
+      `${actorPackageRoot}/src/chargingPointActor/types/operations.ts`,
+      `${actorPackageRoot}/src/chargingPointActor/types/options.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/types/shared.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/types/events.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/types/operations.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/types/options.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/TransactionDeliveryInternals.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/Ocpp16RuntimeObservation.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp201/index.ts`,
+      `${actorPackageRoot}/src/protocol/transport/websocket/socketEventDetails.ts`,
+      `${actorPackageRoot}/src/chargingPointActor/support.ts`,
     ];
 
     for (const relativePath of removedInternalFiles) {
@@ -153,31 +155,31 @@ describe("simulator package seam", () => {
     }
     expect(existsSync(join(
       repoRoot,
-      "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16TransactionDelivery.ts",
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/Ocpp16TransactionDelivery.ts`,
     ))).toBe(true);
     expect(existsSync(join(
       repoRoot,
-      "packages/simulator/src/protocol/runtime/ocpp16/types.ts",
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/types.ts`,
     ))).toBe(true);
     expect(existsSync(join(
       repoRoot,
-      "packages/simulator/src/chargingPointActor/types.ts",
+      `${actorPackageRoot}/src/chargingPointActor/types.ts`,
     ))).toBe(true);
   });
 
   test("old naming and binding directories stay removed", () => {
     const removedPaths = [
-      "packages/simulator/src/simulator",
-      "packages/simulator/src/flow",
-      "packages/simulator/src/model/bindings",
-      "packages/simulator/src/protocol/runtime/bindings",
-      "packages/simulator/src/protocol/runtime/ocpp16/bindings",
-      "packages/simulator/src/protocol/runtime/ocpp201/bindings",
+      `${actorPackageRoot}/src/simulator`,
+      `${actorPackageRoot}/src/flow`,
+      `${actorPackageRoot}/src/model/bindings`,
+      `${actorPackageRoot}/src/protocol/runtime/bindings`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/bindings`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp201/bindings`,
     ];
     const sourceFiles = filesToScan().filter((filePath) =>
       relative(repoRoot, filePath)
         .replaceAll("\\", "/")
-        .startsWith("packages/simulator/src/")
+        .startsWith(`${actorPackageRoot}/src/`)
     );
     const forbiddenNames = [
       "createChargingPointSimulator",

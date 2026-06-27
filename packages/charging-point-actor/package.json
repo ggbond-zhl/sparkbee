@@ -1,5 +1,5 @@
 {
-  "name": "@spark-bee/simulator",
+  "name": "@spark-bee/charging-point-actor",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -7,10 +7,6 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    },
-    "./chargingPointActor": {
-      "types": "./src/chargingPointActor/index.ts",
-      "import": "./src/chargingPointActor/index.ts"
     }
   },
   "scripts": {

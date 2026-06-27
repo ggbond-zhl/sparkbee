@@ -32,6 +32,7 @@ describe("server architecture", () => {
       "config",
       "db",
       "index.ts",
+      "lib",
       "middlewares",
       "modules",
       "routes",
@@ -44,31 +45,36 @@ describe("server architecture", () => {
     expect(unexpectedEntries).toEqual([]);
   });
 
-  test("does not introduce runtime orchestration before start/stop use cases", () => {
-    const futureEntries = [
-      join(srcRoot, "runtime"),
-    ];
+  test("keeps internal library code narrow", () => {
+    const libRoot = join(srcRoot, "lib");
+    const libFiles = walk(libRoot)
+      .filter((filePath) => extname(filePath) === ".ts")
+      .map((filePath) => relative(libRoot, filePath).replaceAll("\\", "/"))
+      .sort();
 
-    const existingEntries = futureEntries
-      .filter((entry) => existsSync(entry))
-      .map((entry) => relative(serverRoot, entry));
-
-    expect(existingEntries).toEqual([]);
+    expect(libFiles).toEqual([
+      "chargingPointActorRegistry.ts",
+    ]);
   });
 
-  test("does not reference simulator runtime from management API", () => {
+  test("keeps charging point actor package behind the actor registry", () => {
     const forbidden = [
-      "@spark-bee/simulator",
+      "@spark-bee/charging-point-actor",
       "ProtocolEvent",
       "AuthService",
     ];
 
-    const matches = sourceFiles().flatMap((filePath) => {
-      const source = readFileSync(filePath, "utf8");
-      return forbidden
-        .filter((token) => source.includes(token))
-        .map((token) => `${relative(serverRoot, filePath)} -> ${token}`);
-    });
+    const allowedActorPackageFiles = new Set([
+      join(srcRoot, "lib/chargingPointActorRegistry.ts"),
+    ]);
+    const matches = sourceFiles()
+      .filter((filePath) => !allowedActorPackageFiles.has(filePath))
+      .flatMap((filePath) => {
+        const source = readFileSync(filePath, "utf8");
+        return forbidden
+          .filter((token) => source.includes(token))
+          .map((token) => `${relative(serverRoot, filePath)} -> ${token}`);
+      });
 
     expect(matches).toEqual([]);
   });

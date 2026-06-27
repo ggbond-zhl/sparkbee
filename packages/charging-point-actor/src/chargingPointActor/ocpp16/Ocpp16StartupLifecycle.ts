@@ -42,7 +42,9 @@ export class Ocpp16StartupLifecycle {
 
       if (bootResult.status === "Pending") {
         this.scheduleBootRetry(bootResult.interval);
-        this.options.transitionStatus("starting");
+        if (this.options.getStatus() !== "starting") {
+          this.options.transitionStatus("starting");
+        }
 
         return {
           chargingPointId: this.options.chargingPointId,
@@ -59,10 +61,12 @@ export class Ocpp16StartupLifecycle {
       );
     } catch (cause) {
       if (this.options.session.state === "reconnecting") {
-        this.options.transitionStatus("starting", {
-          code: cause instanceof Error ? cause.name : "CHARGING_POINT_ACTOR_START_FAILED",
-          message: toErrorMessage(cause),
-        });
+        if (this.options.getStatus() !== "starting") {
+          this.options.transitionStatus("starting", {
+            code: cause instanceof Error ? cause.name : "CHARGING_POINT_ACTOR_START_FAILED",
+            message: toErrorMessage(cause),
+          });
+        }
         return {
           chargingPointId: this.options.chargingPointId,
           chargingPointActorStatus: "starting",

@@ -25,7 +25,7 @@ _Avoid_: connector、EVSE、插座
 _Avoid_: 期望状态、目标状态
 
 **运行状态**:
-当前进程中桩实例实际所处的生命周期状态，例如 starting、running 或 stopped。
+当前进程中桩实例实际所处的生命周期状态，例如 starting、running 或 stopped。starting 覆盖用户已发起启动但尚未进入 running 的全过程，包括连接中和首次 BootNotification 处理中。
 _Avoid_: 连接状态、实时状态
 
 **协议事件**:
