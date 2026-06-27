@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  chargingPointOperationResponseSchema,
   createChargingPointRequestSchema,
   createConnectorRequestSchema,
   listChargingPointsQuerySchema,
@@ -72,5 +73,24 @@ describe("chargingPoint contract schemas", () => {
       powerType: "ac",
       maxVoltage: null,
     });
+  });
+
+  test("describes chargingPoint operation response in Chinese", () => {
+    expect(
+      chargingPointOperationResponseSchema.parse({
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        status: "starting",
+        bootStatus: "Pending",
+        retryAfterSec: 30,
+      }),
+    ).toEqual({
+      chargingPointId: "00000000-0000-4000-8000-000000000001",
+      status: "starting",
+      bootStatus: "Pending",
+      retryAfterSec: 30,
+    });
+    expect(chargingPointOperationResponseSchema.shape.status.description).toBe(
+      "当前服务进程中的运行状态。",
+    );
   });
 });

@@ -20,10 +20,6 @@ _Avoid_: 设备编号、桩编号、连接路径
 用户在 V1 前端直接管理的充电连接点。V1 不要求用户理解 EVSE，内部可以映射到协议核心的 EVSE/connector 模型。
 _Avoid_: connector、EVSE、插座
 
-**运行意图**:
-用户希望桩实例保持的目标状态，只有 running 或 stopped。服务重启后根据运行意图决定是否自动恢复连接。
-_Avoid_: 期望状态、目标状态
-
 **运行状态**:
 当前进程中桩实例实际所处的生命周期状态，例如 starting、running 或 stopped。starting 覆盖用户已发起启动但尚未进入 running 的全过程，包括连接中和首次 BootNotification 处理中。
 _Avoid_: 连接状态、实时状态

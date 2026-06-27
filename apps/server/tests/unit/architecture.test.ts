@@ -25,6 +25,13 @@ function sourceFiles(): string[] {
   return walk(srcRoot).filter((filePath) => extname(filePath) === ".ts");
 }
 
+function moduleDirectories(): string[] {
+  const modulesRoot = join(srcRoot, "modules");
+  return readdirSync(modulesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(modulesRoot, entry.name));
+}
+
 describe("server architecture", () => {
   test("keeps backend source areas explicit", () => {
     const allowedTopLevelEntries = new Set([
@@ -53,11 +60,12 @@ describe("server architecture", () => {
       .sort();
 
     expect(libFiles).toEqual([
+      "chargingPointActor.ts",
       "chargingPointActorRegistry.ts",
     ]);
   });
 
-  test("keeps charging point actor package behind the actor registry", () => {
+  test("keeps charging point actor package behind server actor library code", () => {
     const forbidden = [
       "@spark-bee/charging-point-actor",
       "ProtocolEvent",
@@ -65,6 +73,7 @@ describe("server architecture", () => {
     ];
 
     const allowedActorPackageFiles = new Set([
+      join(srcRoot, "lib/chargingPointActor.ts"),
       join(srcRoot, "lib/chargingPointActorRegistry.ts"),
     ]);
     const matches = sourceFiles()
@@ -77,6 +86,53 @@ describe("server architecture", () => {
       });
 
     expect(matches).toEqual([]);
+  });
+
+  test("keeps business modules behind route and service boundaries", () => {
+    const modules = moduleDirectories();
+
+    const missingBoundaryFiles = modules.flatMap((modulePath) => {
+      const moduleName = modulePath.split(/[\\/]/).at(-1);
+      if (moduleName === undefined) {
+        return [];
+      }
+
+      return [`${moduleName}.route.ts`, `${moduleName}.service.ts`]
+        .map((fileName) => join(modulePath, fileName))
+        .filter((filePath) => !existsSync(filePath))
+        .map((filePath) => relative(serverRoot, filePath));
+    });
+
+    const misnamedRepoFiles = modules.flatMap((modulePath) => {
+      const moduleName = modulePath.split(/[\\/]/).at(-1);
+      if (moduleName === undefined) {
+        return [];
+      }
+
+      return walk(modulePath)
+        .filter((filePath) => filePath.endsWith(".repo.ts"))
+        .filter((filePath) => filePath !== join(modulePath, `${moduleName}.repo.ts`))
+        .map((filePath) => relative(serverRoot, filePath));
+    });
+
+    const routeRepoImports = modules.flatMap((modulePath) =>
+      walk(modulePath)
+        .filter((filePath) => filePath.endsWith(".route.ts"))
+        .filter((filePath) => readFileSync(filePath, "utf8").includes(".repo"))
+        .map((filePath) => relative(serverRoot, filePath)),
+    );
+
+    const crossModuleServiceRepoImports = modules.flatMap((modulePath) =>
+      walk(modulePath)
+        .filter((filePath) => filePath.endsWith(".service.ts"))
+        .filter((filePath) => /\.\.\/.+\.repo/.test(readFileSync(filePath, "utf8")))
+        .map((filePath) => relative(serverRoot, filePath)),
+    );
+
+    expect(missingBoundaryFiles).toEqual([]);
+    expect(misnamedRepoFiles).toEqual([]);
+    expect(routeRepoImports).toEqual([]);
+    expect(crossModuleServiceRepoImports).toEqual([]);
   });
 
   test("keeps connector management in its own module", () => {
@@ -96,6 +152,28 @@ describe("server architecture", () => {
     expect(chargingPointRepoSource).not.toContain("CreateConnectorRequest");
     expect(chargingPointRepoSource).not.toContain("UpdateConnectorRequest");
     expect(chargingPointRepoSource).not.toContain("CONNECTOR_CONFLICT");
+  });
+
+  test("keeps charging point operation in its own module", () => {
+    const chargingPointModule = join(srcRoot, "modules/chargingPoint");
+    const operationModule = join(srcRoot, "modules/chargingPointOperation");
+    const operationFiles = walk(operationModule)
+      .filter((filePath) => extname(filePath) === ".ts")
+      .map((filePath) => relative(operationModule, filePath).replaceAll("\\", "/"))
+      .sort();
+
+    expect(operationFiles).toEqual([
+      "chargingPointActorOptions.ts",
+      "chargingPointOperation.repo.ts",
+      "chargingPointOperation.route.ts",
+      "chargingPointOperation.service.ts",
+    ]);
+    expect(existsSync(join(chargingPointModule, "chargingPointOperation.route.ts"))).toBe(
+      false,
+    );
+    expect(existsSync(join(chargingPointModule, "chargingPointActorOptions.ts"))).toBe(
+      false,
+    );
   });
 
   test("keeps Drizzle migrations under apps/server", () => {

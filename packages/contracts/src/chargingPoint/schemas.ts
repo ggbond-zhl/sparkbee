@@ -101,6 +101,23 @@ export const chargingPointDetailResponseSchema = chargingPointSummaryResponseSch
     connectors: z.array(connectorResponseSchema),
   });
 
+export const chargingPointOperationResponseSchema = z.object({
+  chargingPointId: z.string().uuid().describe("桩实例的 UUID 主键。"),
+  status: z
+    .enum(["stopped", "starting", "running"])
+    .describe("当前服务进程中的运行状态。"),
+  bootStatus: z
+    .enum(["Accepted", "Pending"])
+    .optional()
+    .describe("最近一次 BootNotification 的结果。"),
+  retryAfterSec: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe("Boot Pending 后建议等待的重试秒数。"),
+});
+
 export const listChargingPointsQuerySchema = paginationQuerySchema.extend({
   keyword: z
     .string()

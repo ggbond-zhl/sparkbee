@@ -10,7 +10,7 @@ import {
 
 import type { ServerDatabase } from "../../db";
 import { ValidationError } from "../../utils/errors";
-import { ChargingPointRepository } from "./chargingPoint.repo";
+import { createChargingPointService } from "./chargingPoint.service";
 
 const jsonContent = <TSchema extends z.ZodType>(schema: TSchema) => ({
   "application/json": { schema },
@@ -142,33 +142,33 @@ export function createChargingPointRoute(database: ServerDatabase) {
       }
     },
   });
-  const repository = new ChargingPointRepository(database);
+  const service = createChargingPointService(database);
 
   route.openapi(createChargingPointRouteDefinition, async (context) => {
     const input = context.req.valid("json");
-    const chargingPoint = await repository.create(input);
+    const chargingPoint = await service.create(input);
     return context.json(chargingPoint, 201);
   });
 
   route.openapi(listChargingPointsRoute, async (context) => {
     const query = context.req.valid("query");
-    return context.json(await repository.list(query), 200);
+    return context.json(await service.list(query), 200);
   });
 
   route.openapi(getChargingPointRoute, async (context) => {
     const { id } = context.req.valid("param");
-    return context.json(await repository.getById(id), 200);
+    return context.json(await service.getById(id), 200);
   });
 
   route.openapi(updateChargingPointRouteDefinition, async (context) => {
     const { id } = context.req.valid("param");
     const input = context.req.valid("json");
-    return context.json(await repository.update(id, input), 200);
+    return context.json(await service.update(id, input), 200);
   });
 
   route.openapi(deleteChargingPointRoute, async (context) => {
     const { id } = context.req.valid("param");
-    await repository.softDelete(id);
+    await service.softDelete(id);
     return context.body(null, 204);
   });
 

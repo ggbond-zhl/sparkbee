@@ -8,13 +8,17 @@ import { secureHeaders } from "hono/secure-headers";
 import { timeout } from "hono/timeout";
 
 import type { ServerDatabase } from "./db";
+import { ChargingPointActorRegistry } from "./lib/chargingPointActorRegistry";
 import { errorMiddleware } from "./middlewares/error.middleware";
+import type { ChargingPointActorFactory } from "./modules/chargingPointOperation/chargingPointOperation.service";
 import { createRoutes } from "./routes";
 
 export interface AppDependencies {
   database?: ServerDatabase;
   environment?: string;
   timeoutMs?: number;
+  chargingPointActorRegistry?: ChargingPointActorRegistry;
+  createChargingPointActor?: ChargingPointActorFactory;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -32,7 +36,14 @@ export function createApp(dependencies: AppDependencies = {}) {
     app.use("*", logger());
   }
   app.onError(errorMiddleware);
-  app.route("/api", createRoutes(dependencies));
+  app.route(
+    "/api",
+    createRoutes({
+      ...dependencies,
+      chargingPointActorRegistry:
+        dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry(),
+    }),
+  );
   app.doc31("/api/openapi.json", {
     openapi: "3.1.0",
     info: {

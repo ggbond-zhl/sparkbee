@@ -3,11 +3,19 @@ import { describe, expect, test } from "vitest";
 import {
   apiErrorResponseSchema,
   chargingPointDetailResponseSchema,
+  chargingPointOperationResponseSchema,
   connectorResponseSchema,
   listChargingPointsResponseSchema,
 } from "@spark-bee/contracts";
+import type {
+  ChargingPointActor,
+  ChargingPointActorStartResult,
+  ChargingPointActorStatus,
+  ChargingPointActorStopResult,
+} from "@spark-bee/charging-point-actor";
 
 import { createApp } from "../../src/app";
+import { ChargingPointActorRegistry } from "../../src/lib/chargingPointActorRegistry";
 import { createTestDatabase } from "../support/testDatabase";
 
 describe("chargingPoint management API", () => {
@@ -25,6 +33,24 @@ describe("chargingPoint management API", () => {
     expect(document.paths["/api/charging-points/{id}"].get.summary).toBe("查看桩实例详情");
     expect(document.paths["/api/charging-points/{id}"].patch.summary).toBe("更新桩实例");
     expect(document.paths["/api/charging-points/{id}"].delete.summary).toBe("删除桩实例");
+    expect(document.paths["/api/charging-points/{id}/start"].post.summary).toBe(
+      "启动桩实例",
+    );
+    expect(document.paths["/api/charging-points/{id}/start"].post.tags).toEqual([
+      "ChargingPointOperation",
+    ]);
+    expect(document.paths["/api/charging-points/{id}/stop"].post.summary).toBe(
+      "停止桩实例",
+    );
+    expect(document.paths["/api/charging-points/{id}/stop"].post.tags).toEqual([
+      "ChargingPointOperation",
+    ]);
+    expect(document.paths["/api/charging-points/{id}/status"].get.summary).toBe(
+      "查询桩实例运行状态",
+    );
+    expect(document.paths["/api/charging-points/{id}/status"].get.tags).toEqual([
+      "ChargingPointOperation",
+    ]);
     expect(document.paths["/api/charging-points/{id}/connectors"].get.summary).toBe(
       "查询枪口列表",
     );
@@ -41,6 +67,7 @@ describe("chargingPoint management API", () => {
     );
     expect(serializedDocument).toContain("CSMS 基础 WebSocket 地址");
     expect(serializedDocument).toContain("枪口在所属桩实例内的 connectorId");
+    expect(serializedDocument).toContain("当前服务进程中的运行状态");
   });
 
   test("does not expose the old camelCase chargingPoint path", async () => {
@@ -397,6 +424,265 @@ describe("chargingPoint management API", () => {
       },
     });
   });
+
+  test("returns stopped status when the chargingPoint is not running", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/status`);
+
+    expect(response.status).toBe(200);
+    expect(chargingPointOperationResponseSchema.parse(await response.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      status: "stopped",
+    });
+  });
+
+  test("rejects starting a chargingPoint without connectors", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(409);
+    expect(apiErrorResponseSchema.parse(await response.json())).toEqual({
+      error: {
+        code: "CHARGING_POINT_NOT_RUNNABLE",
+        message: "Charging point requires at least one connector",
+      },
+    });
+  });
+
+  test("starts a chargingPoint and keeps repeated starts idempotent", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble({
+      startResult: {
+        chargingPointId: "",
+        chargingPointActorStatus: "running",
+        bootStatus: "Accepted",
+      },
+    });
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+
+    const firstResponse = await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+    const secondResponse = await app.request(
+      `/api/charging-points/${chargingPoint.id}/start`,
+      { method: "POST" },
+    );
+
+    expect(firstResponse.status).toBe(200);
+    expect(chargingPointOperationResponseSchema.parse(await firstResponse.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      status: "running",
+      bootStatus: "Accepted",
+    });
+    expect(secondResponse.status).toBe(200);
+    expect(chargingPointOperationResponseSchema.parse(await secondResponse.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      status: "running",
+    });
+    expect(actor.startCalls).toBe(1);
+  });
+
+  test("maps Boot Pending to starting status", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) =>
+        createActorDouble({
+          id: options.id,
+          startResult: {
+            chargingPointId: options.id,
+            chargingPointActorStatus: "starting",
+            bootStatus: "Pending",
+            retryAfterSec: 30,
+          },
+        }),
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(chargingPointOperationResponseSchema.parse(await response.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      status: "starting",
+      bootStatus: "Pending",
+      retryAfterSec: 30,
+    });
+  });
+
+  test("returns stopped when stopping a chargingPoint that is not running", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/stop`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(chargingPointOperationResponseSchema.parse(await response.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      status: "stopped",
+    });
+  });
+
+  test("removes and disposes the actor when start fails", async () => {
+    const database = await createTestDatabase();
+    const registry = new ChargingPointActorRegistry();
+    const actor = createActorDouble({ startError: new Error("boom") });
+    const app = createApp({
+      database,
+      chargingPointActorRegistry: registry,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(502);
+    expect(apiErrorResponseSchema.parse(await response.json())).toMatchObject({
+      error: {
+        code: "CHARGING_POINT_START_FAILED",
+      },
+    });
+    expect(registry.get(chargingPoint.id)).toBeUndefined();
+    expect(actor.disposeCalls).toBe(1);
+  });
+
+  test("stops a running chargingPoint and removes its actor", async () => {
+    const database = await createTestDatabase();
+    const registry = new ChargingPointActorRegistry();
+    const actor = createActorDouble();
+    const app = createApp({
+      database,
+      chargingPointActorRegistry: registry,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        actor.stopResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "stopped",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/stop`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(chargingPointOperationResponseSchema.parse(await response.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      status: "stopped",
+    });
+    expect(registry.get(chargingPoint.id)).toBeUndefined();
+    expect(actor.stopCalls).toBe(1);
+    expect(actor.disposeCalls).toBe(1);
+  });
 });
 
 async function createChargingPoint(
@@ -426,4 +712,85 @@ async function createConnector(
 
   expect(response.status).toBe(201);
   return connectorResponseSchema.parse(await response.json());
+}
+
+function createActorDouble(
+  overrides: Partial<{
+    id: string;
+    status: ChargingPointActorStatus;
+    startResult: ChargingPointActorStartResult;
+    stopResult: ChargingPointActorStopResult;
+    startError: Error;
+    stopError: Error;
+  }> = {},
+) {
+  return {
+    id: overrides.id ?? "00000000-0000-4000-8000-000000000001",
+    protocol: "OCPP16J",
+    status: overrides.status ?? "stopped",
+    startResult:
+      overrides.startResult ??
+      ({
+        chargingPointId: overrides.id ?? "00000000-0000-4000-8000-000000000001",
+        chargingPointActorStatus: "running",
+        bootStatus: "Accepted",
+      } satisfies ChargingPointActorStartResult),
+    stopResult:
+      overrides.stopResult ??
+      ({
+        chargingPointId: overrides.id ?? "00000000-0000-4000-8000-000000000001",
+        chargingPointActorStatus: "stopped",
+      } satisfies ChargingPointActorStopResult),
+    startCalls: 0,
+    stopCalls: 0,
+    disposeCalls: 0,
+    events: {
+      subscribe: () => () => undefined,
+    },
+    async start() {
+      this.startCalls += 1;
+      if (overrides.startError !== undefined) {
+        throw overrides.startError;
+      }
+      this.status = this.startResult.chargingPointActorStatus;
+      return this.startResult;
+    },
+    async stop() {
+      this.stopCalls += 1;
+      if (overrides.stopError !== undefined) {
+        throw overrides.stopError;
+      }
+      this.status = "stopped";
+      return this.stopResult;
+    },
+    async dispose() {
+      this.disposeCalls += 1;
+    },
+    async plug() {
+      throw new Error("not implemented");
+    },
+    async unplug() {
+      throw new Error("not implemented");
+    },
+    async authorize() {
+      throw new Error("not implemented");
+    },
+    async startTransaction() {
+      throw new Error("not implemented");
+    },
+    async reportMeterValue() {
+      throw new Error("not implemented");
+    },
+    async stopTransaction() {
+      throw new Error("not implemented");
+    },
+  } satisfies ChargingPointActor & {
+    id: string;
+    status: ChargingPointActorStatus;
+    startResult: ChargingPointActorStartResult;
+    stopResult: ChargingPointActorStopResult;
+    startCalls: number;
+    stopCalls: number;
+    disposeCalls: number;
+  };
 }
