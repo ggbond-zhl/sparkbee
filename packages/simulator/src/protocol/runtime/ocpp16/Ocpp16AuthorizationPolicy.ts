@@ -25,7 +25,132 @@ export type OfflineAuthorizationDecision =
       authorizationStatus?: Ocpp16AuthorizationStatus;
     };
 
-export function normalizeAuthorizationStatus(
+const authorizationPolicies = new WeakMap<
+  Ocpp16RuntimeContext,
+  Ocpp16AuthorizationPolicy
+>();
+
+export function getOcpp16AuthorizationPolicy(
+  context: Ocpp16RuntimeContext,
+): Ocpp16AuthorizationPolicy {
+  let policy = authorizationPolicies.get(context);
+  if (policy === undefined) {
+    policy = new Ocpp16AuthorizationPolicy(context);
+    authorizationPolicies.set(context, policy);
+  }
+
+  return policy;
+}
+
+export class Ocpp16AuthorizationPolicy {
+  constructor(private readonly context: Ocpp16RuntimeContext) {}
+
+  normalizeAuthorizeResponseStatus(
+    status: Ocpp16AuthorizationStatus,
+    expiryDate: Date | null,
+    at: Date,
+  ): Ocpp16AuthorizationStatus {
+    return normalizeAuthorizationStatus(status, expiryDate, at);
+  }
+
+  absorbAuthorizeResult(input: {
+    evseId: number;
+    result: Ocpp16AuthorizeResult;
+  }): void {
+    recordAuthorizationGrantFromAuthorizeResult(this.context, input);
+  }
+
+  absorbStartTransactionResult(input: {
+    evseId: number;
+    result: Ocpp16StartTransactionCallResult;
+  }): void {
+    recordAuthorizationGrantFromStartTransactionResult(this.context, input);
+  }
+
+  authorizeAcceptedTransactionStart(input: {
+    evseId: number;
+    idTag: string;
+    at: Date;
+  }): { status: "accepted" } | {
+    status: "rejected";
+    reason: string;
+    authorizationStatus?: Ocpp16AuthorizationStatus;
+  } {
+    return validateAcceptedAuthorization(this.context, input);
+  }
+
+  authorizeOffline(input: {
+    evseId: number;
+    idTag: string;
+    at: Date;
+  }): OfflineAuthorizationDecision {
+    const decision = validateOfflineAuthorization(this.context, input);
+    if (decision.status === "accepted") {
+      recordAuthorizationGrantFromOfflineDecision(this.context, {
+        ...input,
+        decision,
+        evaluatedAt: input.at,
+      });
+    }
+
+    return decision;
+  }
+
+  preAuthorizeFromLocalStore(input: {
+    evseId: number;
+    idTag: string;
+    at: Date;
+  }): OfflineAuthorizationDecision | null {
+    const decision = validateStoredAuthorization(this.context, input);
+    if (decision?.status === "accepted") {
+      recordAuthorizationGrantFromOfflineDecision(this.context, {
+        ...input,
+        decision,
+        evaluatedAt: input.at,
+      });
+    }
+
+    return decision;
+  }
+
+  authorizeOfflineTransactionStart(input: {
+    evseId: number;
+    idTag: string;
+    at: Date;
+  }): OfflineAuthorizationDecision {
+    return this.authorizeOffline(input);
+  }
+
+  beginAuthorizeAttempt(input: { evseId: number; idTag: string }): number {
+    return nextAuthorizationAttemptSequence(this.context, input);
+  }
+
+  absorbCurrentAuthorizeResult(input: {
+    evseId: number;
+    idTag: string;
+    attemptSequence: number;
+    result: Ocpp16AuthorizeResult;
+  }): boolean {
+    if (
+      input.result.outcome === "Failed" ||
+      !isCurrentAuthorizationAttempt(this.context, input)
+    ) {
+      return false;
+    }
+
+    recordAuthorizationGrantFromAuthorizeResult(this.context, {
+      evseId: input.evseId,
+      result: input.result,
+    });
+    return true;
+  }
+
+  clearCache(): void {
+    clearAuthorizationCache(this.context);
+  }
+}
+
+function normalizeAuthorizationStatus(
   status: Ocpp16AuthorizationStatus,
   expiryDate: Date | null,
   at: Date,
@@ -37,7 +162,7 @@ export function normalizeAuthorizationStatus(
   return status;
 }
 
-export function recordAuthorizationGrantFromAuthorizeResult(
+function recordAuthorizationGrantFromAuthorizeResult(
   context: Ocpp16RuntimeContext,
   input: {
     evseId: number;
@@ -59,7 +184,7 @@ export function recordAuthorizationGrantFromAuthorizeResult(
   });
 }
 
-export function recordAuthorizationGrantFromStartTransactionResult(
+function recordAuthorizationGrantFromStartTransactionResult(
   context: Ocpp16RuntimeContext,
   input: {
     evseId: number;
@@ -81,7 +206,7 @@ export function recordAuthorizationGrantFromStartTransactionResult(
   });
 }
 
-export function validateAcceptedAuthorization(
+function validateAcceptedAuthorization(
   context: Ocpp16RuntimeContext,
   input: {
     evseId: number;
@@ -130,7 +255,7 @@ export function validateAcceptedAuthorization(
   return { status: "accepted" };
 }
 
-export function validateOfflineAuthorization(
+function validateOfflineAuthorization(
   context: Ocpp16RuntimeContext,
   input: {
     evseId: number;
@@ -138,7 +263,7 @@ export function validateOfflineAuthorization(
     at: Date;
   },
 ): OfflineAuthorizationDecision {
-  if (context.configurationStore.getValue("LocalAuthorizeOffline") !== "true") {
+  if (!context.configurationFacts.isLocalAuthorizeOfflineEnabled()) {
     return {
       status: "rejected",
       reason: "离线授权未启用",
@@ -150,7 +275,7 @@ export function validateOfflineAuthorization(
     return storedAuthorization;
   }
 
-  if (context.configurationStore.getValue("AllowOfflineTxForUnknownId") === "true") {
+  if (context.configurationFacts.isOfflineTxForUnknownIdAllowed()) {
     return {
       status: "accepted",
       authorizationStatus: "Accepted",
@@ -166,7 +291,7 @@ export function validateOfflineAuthorization(
   };
 }
 
-export function recordAuthorizationGrantFromOfflineDecision(
+function recordAuthorizationGrantFromOfflineDecision(
   context: Ocpp16RuntimeContext,
   input: {
     evseId: number;
@@ -186,7 +311,7 @@ export function recordAuthorizationGrantFromOfflineDecision(
   });
 }
 
-export function nextAuthorizationAttemptSequence(
+function nextAuthorizationAttemptSequence(
   context: Ocpp16RuntimeContext,
   input: { evseId: number; idTag: string },
 ): number {
@@ -196,7 +321,7 @@ export function nextAuthorizationAttemptSequence(
   return nextSequence;
 }
 
-export function isCurrentAuthorizationAttempt(
+function isCurrentAuthorizationAttempt(
   context: Ocpp16RuntimeContext,
   input: { evseId: number; idTag: string; attemptSequence: number },
 ): boolean {
@@ -205,7 +330,7 @@ export function isCurrentAuthorizationAttempt(
   ) === input.attemptSequence;
 }
 
-export function clearAuthorizationCache(context: Ocpp16RuntimeContext): void {
+function clearAuthorizationCache(context: Ocpp16RuntimeContext): void {
   context.authorizationCache.clear();
   for (const [key, grant] of context.authorizationGrants) {
     if (grant.source === "cache" || grant.isCacheEntry) {
@@ -214,7 +339,7 @@ export function clearAuthorizationCache(context: Ocpp16RuntimeContext): void {
   }
 }
 
-export function validateStoredAuthorization(
+function validateStoredAuthorization(
   context: Ocpp16RuntimeContext,
   input: {
     evseId: number;
@@ -222,7 +347,7 @@ export function validateStoredAuthorization(
     at: Date;
   },
 ): OfflineAuthorizationDecision | null {
-  if (context.configurationStore.getValue("LocalAuthListEnabled") === "true") {
+  if (context.configurationFacts.isLocalAuthListEnabled()) {
     const localEntry = context.localAuthorizationList.getEntry(input.idTag);
     if (localEntry !== undefined) {
       return evaluateStoredAuthorization({
@@ -235,7 +360,7 @@ export function validateStoredAuthorization(
     }
   }
 
-  if (context.configurationStore.getValue("AuthorizationCacheEnabled") === "true") {
+  if (context.configurationFacts.isAuthorizationCacheEnabled()) {
     const cachedGrant = findCachedAuthorizationGrant(context, input);
     if (cachedGrant !== undefined) {
       return evaluateStoredAuthorization({
@@ -307,7 +432,7 @@ function shouldWriteAuthorizationCache(
   },
 ): boolean {
   return input.source === "online" &&
-    context.configurationStore.getValue("AuthorizationCacheEnabled") === "true" &&
+    context.configurationFacts.isAuthorizationCacheEnabled() &&
     !context.localAuthorizationList.hasCredential(input.idTag);
 }
 

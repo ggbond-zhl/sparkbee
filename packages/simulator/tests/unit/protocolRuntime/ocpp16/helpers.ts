@@ -6,16 +6,18 @@ import {
   EVSE,
   type AuthorizationGrant,
   type ConfigurationEntry,
-  type InboundRequest,
-  type ISession,
-  type ProtocolMessageEvent,
   type ConnectorOptions,
-  type OutboundRequestResult,
-  type SessionConnectionState,
-  type SessionEvents,
-  type SessionOfflineReason,
   type Transaction,
-} from "../../../../src/index.ts";
+} from "../../../../src/model/index.ts";
+import type {
+  InboundRequest,
+  ISession,
+  ProtocolMessageEvent,
+  OutboundRequestResult,
+  SessionConnectionState,
+  SessionEvents,
+  SessionOfflineReason,
+} from "../../../../src/protocol/session/types.ts";
 import {
   Ocpp16Runtime,
   type Ocpp16RuntimeOptions,
@@ -239,63 +241,52 @@ export function runtimeContext(
 }
 
 export function runtimeState(protocolRuntime: Ocpp16Runtime) {
-  const context = runtimeContext(protocolRuntime);
-  return {
-    chargingPoint: {
-      status: context.chargingPoint.status,
-      availability: context.chargingPoint.availability,
-      evses: context.chargingPoint.listEvses(),
-    },
-    configurationStore: context.configurationStore,
-    authorizationGrants: [...context.authorizationGrants.values()],
-    transactions: [...context.transactions.values()],
-  };
+  return protocolRuntime.getRuntimeSnapshot();
 }
 
 export function getChargingPointAvailability(
   protocolRuntime: Ocpp16Runtime,
 ): ChargingPoint["availability"] {
-  return runtimeContext(protocolRuntime).chargingPoint.availability;
+  return protocolRuntime.getRuntimeSnapshot().chargingPoint.availability;
 }
 
 export function getChargingPointStatus(
   protocolRuntime: Ocpp16Runtime,
 ): ChargingPoint["status"] {
-  return runtimeContext(protocolRuntime).chargingPoint.status;
+  return protocolRuntime.getChargingPointStatus();
 }
 
 export function listRuntimeEvses(protocolRuntime: Ocpp16Runtime): EVSE[] {
-  return runtimeContext(protocolRuntime).chargingPoint.listEvses();
+  return protocolRuntime.getRuntimeSnapshot().chargingPoint.evses;
 }
 
 export function getConnectorFact(
   protocolRuntime: Ocpp16Runtime,
   input: { evseId?: number; connectorId?: number } = {},
 ): Connector | undefined {
-  return runtimeContext(protocolRuntime).chargingPoint.getConnector(
-    input.evseId ?? 1,
-    input.connectorId ?? 1,
-  );
+  const evse = protocolRuntime.getRuntimeSnapshot().chargingPoint.evses
+    .find((candidate) => candidate.id === (input.evseId ?? 1));
+  return evse?.getConnector(input.connectorId ?? 1);
 }
 
 export function getConfigurationEntry(
   protocolRuntime: Ocpp16Runtime,
   key: string,
 ): ConfigurationEntry | undefined {
-  return runtimeContext(protocolRuntime).configurationStore.getEntry(key);
+  return protocolRuntime.getRuntimeSnapshot().configurationStore.getEntry(key);
 }
 
 export function getConfigurationValue(
   protocolRuntime: Ocpp16Runtime,
   key: string,
 ): string | undefined {
-  return runtimeContext(protocolRuntime).configurationStore.getValue(key);
+  return protocolRuntime.getRuntimeSnapshot().configurationStore.getValue(key);
 }
 
 export function listAuthorizationGrants(
   protocolRuntime: Ocpp16Runtime,
 ): AuthorizationGrant[] {
-  return [...runtimeContext(protocolRuntime).authorizationGrants.values()];
+  return protocolRuntime.getRuntimeSnapshot().authorizationGrants;
 }
 
 export function getAuthorizationGrant(
@@ -308,7 +299,7 @@ export function getAuthorizationGrant(
 export function listRuntimeTransactions(
   protocolRuntime: Ocpp16Runtime,
 ): Transaction[] {
-  return [...runtimeContext(protocolRuntime).transactions.values()];
+  return protocolRuntime.getRuntimeSnapshot().transactions;
 }
 
 export function getRuntimeTransaction(

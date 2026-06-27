@@ -4,14 +4,16 @@ import { afterEach, describe, expect, vi, test } from "vitest";
 import { Ocpp16ChargingPointActor } from "../../../src/chargingPointActor/ocpp16/Ocpp16ChargingPointActor";
 import { ChargingPointActorError } from "../../../src/chargingPointActor/errors";
 import type {
-  ISession,
-  OutboundRequestResult,
-  SessionConnectionState,
-  SessionEvents,
-  ProtocolMessageEvent,
   ChargingPointActorEvent,
   ChargingPointActorEventType,
-} from "../../../src";
+} from "../../../src/chargingPointActor/index.ts";
+import type {
+  ISession,
+  OutboundRequestResult,
+  ProtocolMessageEvent,
+  SessionConnectionState,
+  SessionEvents,
+} from "../../../src/protocol/session/types.ts";
 import type {
   Ocpp16Runtime,
   Ocpp16RuntimeEvent,
@@ -28,7 +30,7 @@ import {
 } from "../protocolRuntime/ocpp16/helpers";
 
 const ALL_CHARGING_POINT_ACTOR_EVENT_TYPES = [
-  "chargingPointActor.status",
+  "chargingPoint.lifecycle",
   "session.status",
   "chargingPoint.status",
   "evse.status",
@@ -624,9 +626,11 @@ function collectChargingPointActorEvents(
   types: ChargingPointActorEventType[],
 ): ChargingPointActorEvent[] {
   const events: ChargingPointActorEvent[] = [];
-  for (const type of types) {
-    actor.events.subscribe(type, (event) => events.push(event));
-  }
+  actor.events.subscribe((event) => {
+    if (types.includes(event.type)) {
+      events.push(event);
+    }
+  });
 
   return events;
 }
@@ -731,7 +735,7 @@ describe("Ocpp16ChargingPointActor", () => {
     const { actor, session, protocolRuntime } = createHarness();
     protocolRuntime.setConnectorStatus(2, 2, "available");
     const events = collectChargingPointActorEvents(actor, [
-      "chargingPointActor.status",
+      "chargingPoint.lifecycle",
       "chargingPoint.status",
       "connector.status",
     ]);
@@ -752,7 +756,7 @@ describe("Ocpp16ChargingPointActor", () => {
     ]);
     expect(events).toContainEqual(expect.objectContaining({
       type: "chargingPoint.status",
-      chargingPointActorId: "cp-1",
+      chargingPointId: "cp-1",
       protocol: "OCPP16J",
       resource: { scope: "chargingPoint" },
       previousStatus: null,
@@ -761,7 +765,7 @@ describe("Ocpp16ChargingPointActor", () => {
     }));
     expect(events).toContainEqual(expect.objectContaining({
       type: "connector.status",
-      chargingPointActorId: "cp-1",
+      chargingPointId: "cp-1",
       protocol: "OCPP16J",
       resource: { scope: "connector", evseId: 1, connectorId: 1 },
       previousStatus: null,
@@ -770,7 +774,7 @@ describe("Ocpp16ChargingPointActor", () => {
     }));
     expect(events).toContainEqual(expect.objectContaining({
       type: "connector.status",
-      chargingPointActorId: "cp-1",
+      chargingPointId: "cp-1",
       protocol: "OCPP16J",
       resource: { scope: "connector", evseId: 2, connectorId: 2 },
       previousStatus: null,
@@ -778,10 +782,10 @@ describe("Ocpp16ChargingPointActor", () => {
       occurredAt: "2026-01-01T00:00:00.000Z",
     }));
     expect(events).toContainEqual(expect.objectContaining({
-      type: "chargingPointActor.status",
-      chargingPointActorId: "cp-1",
+      type: "chargingPoint.lifecycle",
+      chargingPointId: "cp-1",
       protocol: "OCPP16J",
-      resource: { scope: "chargingPointActor" },
+      resource: { scope: "chargingPoint" },
       previousStatus: "stopped",
       currentStatus: "running",
       occurredAt: "2026-01-01T00:00:00.000Z",
@@ -812,7 +816,7 @@ describe("Ocpp16ChargingPointActor", () => {
       },
     );
     const events = collectChargingPointActorEvents(actor, [
-      "chargingPointActor.status",
+      "chargingPoint.lifecycle",
       "chargingPoint.status",
       "connector.status",
     ]);
@@ -824,7 +828,7 @@ describe("Ocpp16ChargingPointActor", () => {
       occurredAt: "2026-01-01T00:00:02.000Z",
     }));
     expect(events).toContainEqual(expect.objectContaining({
-      type: "chargingPointActor.status",
+      type: "chargingPoint.lifecycle",
       currentStatus: "running",
       occurredAt: "2026-01-01T00:00:02.000Z",
     }));
@@ -833,7 +837,7 @@ describe("Ocpp16ChargingPointActor", () => {
   test("start returns immediately when boot is pending and keeps retrying in the background", async () => {
     vi.useFakeTimers();
     const { actor, session, protocolRuntime } = createHarness();
-    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
+    const events = collectChargingPointActorEvents(actor, ["chargingPoint.lifecycle"]);
     protocolRuntime.bootResults = [
       {
         status: "Pending",
@@ -859,8 +863,8 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(protocolRuntime.calls).toEqual(["boot"]);
     expect(events).toEqual([
       expect.objectContaining({
-        type: "chargingPointActor.status",
-        resource: { scope: "chargingPointActor" },
+        type: "chargingPoint.lifecycle",
+        resource: { scope: "chargingPoint" },
         previousStatus: "stopped",
         currentStatus: "starting",
       }),
@@ -920,7 +924,7 @@ describe("Ocpp16ChargingPointActor", () => {
 
   test("keeps the actor starting when the initial connection enters reconnecting", async () => {
     const { actor, session, protocolRuntime } = createHarness();
-    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
+    const events = collectChargingPointActorEvents(actor, ["chargingPoint.lifecycle"]);
     session.connectError = new Error("network down");
     session.stateAfterConnectError = "reconnecting";
 
@@ -963,7 +967,7 @@ describe("Ocpp16ChargingPointActor", () => {
     vi.useFakeTimers();
     const { actor, protocolRuntime } = createHarness();
     const events = collectChargingPointActorEvents(actor, [
-      "chargingPointActor.status",
+      "chargingPoint.lifecycle",
       "chargingPoint.status",
       "connector.status",
     ]);
@@ -984,7 +988,7 @@ describe("Ocpp16ChargingPointActor", () => {
     await vi.advanceTimersByTimeAsync(2_000);
     await flushMicrotasks();
 
-    expect(events.filter((event) => event.type === "chargingPointActor.status"))
+    expect(events.filter((event) => event.type === "chargingPoint.lifecycle"))
       .toEqual([
         expect.objectContaining({
           previousStatus: "stopped",
@@ -1008,7 +1012,7 @@ describe("Ocpp16ChargingPointActor", () => {
   test("background boot retry stops and disconnects after rejected boot", async () => {
     vi.useFakeTimers();
     const { actor, session, protocolRuntime } = createHarness();
-    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
+    const events = collectChargingPointActorEvents(actor, ["chargingPoint.lifecycle"]);
     protocolRuntime.bootResults = [
       {
         status: "Pending",
@@ -1034,12 +1038,12 @@ describe("Ocpp16ChargingPointActor", () => {
     ]);
     expect(events).toEqual([
       expect.objectContaining({
-        type: "chargingPointActor.status",
+        type: "chargingPoint.lifecycle",
         previousStatus: "stopped",
         currentStatus: "starting",
       }),
       expect.objectContaining({
-        type: "chargingPointActor.status",
+        type: "chargingPoint.lifecycle",
         previousStatus: "starting",
         currentStatus: "stopped",
         error: {
@@ -1053,7 +1057,7 @@ describe("Ocpp16ChargingPointActor", () => {
   test("stop cancels pending boot retry and moves actor back to stopped", async () => {
     vi.useFakeTimers();
     const { actor, session, protocolRuntime } = createHarness();
-    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
+    const events = collectChargingPointActorEvents(actor, ["chargingPoint.lifecycle"]);
     protocolRuntime.bootResults = [
       {
         status: "Pending",
@@ -1079,12 +1083,12 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(protocolRuntime.calls).toEqual(["boot", "stopRuntime"]);
     expect(events).toEqual([
       expect.objectContaining({
-        type: "chargingPointActor.status",
+        type: "chargingPoint.lifecycle",
         previousStatus: "stopped",
         currentStatus: "starting",
       }),
       expect.objectContaining({
-        type: "chargingPointActor.status",
+        type: "chargingPoint.lifecycle",
         previousStatus: "starting",
         currentStatus: "stopped",
       }),
@@ -1135,7 +1139,7 @@ describe("Ocpp16ChargingPointActor", () => {
   test("start failure stops runtime without permanently disposing protocolRuntime", async () => {
     const { actor, session, protocolRuntime } = createHarness();
     protocolRuntime.bootStatus = "Rejected";
-    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
+    const events = collectChargingPointActorEvents(actor, ["chargingPoint.lifecycle"]);
 
     await expect(actor.start()).rejects.toMatchObject({
       code: "CHARGING_POINT_ACTOR_START_FAILED",
@@ -1145,8 +1149,8 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(protocolRuntime.disposed).toBe(false);
     expect(session.disconnectCalls).toBe(1);
     expect(events).toContainEqual(expect.objectContaining({
-      type: "chargingPointActor.status",
-      resource: { scope: "chargingPointActor" },
+      type: "chargingPoint.lifecycle",
+      resource: { scope: "chargingPoint" },
       previousStatus: "stopped",
       currentStatus: "stopped",
       error: {
@@ -1797,7 +1801,7 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(events).toEqual([
       expect.objectContaining({
         type: "protocol.message",
-        chargingPointActorId: "cp-1",
+        chargingPointId: "cp-1",
         protocol: "OCPP16J",
         resource: { scope: "protocol" },
         direction: "sent",
@@ -1811,7 +1815,7 @@ describe("Ocpp16ChargingPointActor", () => {
   test("event subscriptions can be unsubscribed", async () => {
     const { actor } = createHarness();
     const events: ChargingPointActorEvent[] = [];
-    const unsubscribe = actor.events.subscribe("chargingPointActor.status", (event) => {
+    const unsubscribe = actor.events.subscribe((event) => {
       events.push(event);
     });
 
@@ -1820,6 +1824,69 @@ describe("Ocpp16ChargingPointActor", () => {
     await actor.dispose();
 
     expect(events).toHaveLength(0);
+  });
+
+  test("isolates event listener failures from actor operations", async () => {
+    const { actor } = createHarness();
+    await actor.start();
+    const events: ChargingPointActorEvent[] = [];
+    actor.events.subscribe(() => {
+      throw new Error("subscriber failed");
+    });
+    actor.events.subscribe((event) => {
+      events.push(event);
+    });
+
+    await expect(actor.plug({ evseId: 1, connectorId: 1 })).resolves.toMatchObject({
+      chargingPointId: "cp-1",
+      evseId: 1,
+      connectorId: 1,
+      plugState: "plugged",
+    });
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "connector.status",
+      resource: { scope: "connector", evseId: 1, connectorId: 1 },
+      previousStatus: "available",
+      currentStatus: "occupied",
+    }));
+  });
+
+  test("isolates async event listener failures from process unhandled rejections", async () => {
+    const { actor } = createHarness();
+    await actor.start();
+    const events: ChargingPointActorEvent[] = [];
+    const unhandledRejections: unknown[] = [];
+    const handleUnhandledRejection = (reason: unknown): void => {
+      unhandledRejections.push(reason);
+    };
+    process.on("unhandledRejection", handleUnhandledRejection);
+
+    try {
+      actor.events.subscribe(async () => {
+        throw new Error("async subscriber failed");
+      });
+      actor.events.subscribe((event) => {
+        events.push(event);
+      });
+
+      await expect(actor.plug({ evseId: 1, connectorId: 1 })).resolves.toMatchObject({
+        chargingPointId: "cp-1",
+        evseId: 1,
+        connectorId: 1,
+        plugState: "plugged",
+      });
+      await flushMacrotasks();
+
+      expect(unhandledRejections).toEqual([]);
+      expect(events).toContainEqual(expect.objectContaining({
+        type: "connector.status",
+        resource: { scope: "connector", evseId: 1, connectorId: 1 },
+        previousStatus: "available",
+        currentStatus: "occupied",
+      }));
+    } finally {
+      process.off("unhandledRejection", handleUnhandledRejection);
+    }
   });
 
   test("does not expose protocol connector ids in actor operation results", async () => {
@@ -1897,7 +1964,7 @@ describe("Ocpp16ChargingPointActor", () => {
 
   test("dispose releases embedded runtime resources and session listeners", async () => {
     const { actor, session, protocolRuntime } = createHarness();
-    const events = collectChargingPointActorEvents(actor, ["chargingPointActor.status"]);
+    const events = collectChargingPointActorEvents(actor, ["chargingPoint.lifecycle"]);
     await actor.start();
 
     await actor.dispose();
@@ -1975,6 +2042,12 @@ describe("Ocpp16ChargingPointActor", () => {
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function flushMacrotasks(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
 }
 
 async function flushRemoteCommand(): Promise<void> {

@@ -1,7 +1,6 @@
 import type { InboundRequest } from "../../../session/types";
 import type { Ocpp16ResponseOf } from "../../../validator/Ocpp16";
 import type { Ocpp16RuntimeContext } from "../state";
-import { supportsLocalAuthorizationList } from "./localAuthorizationListSupport";
 
 export async function handleGetLocalListVersion(
   context: Ocpp16RuntimeContext,
@@ -13,7 +12,7 @@ export async function handleGetLocalListVersion(
 }
 
 function resolveListVersion(context: Ocpp16RuntimeContext): number {
-  if (!supportsLocalAuthorizationList(context)) {
+  if (!context.configurationFacts.supportsLocalAuthorizationList()) {
     return -1;
   }
 

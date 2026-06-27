@@ -1,10 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  CHARGING_POINT_ACTOR_RUNTIME_SUPPORT,
   ChargingPointActorError,
   createChargingPointActor,
-  isChargingPointActorRuntimeSupported,
   type ChargingPointActorOptions,
 } from "../../../src";
 import { createChargingPoint } from "../protocolRuntime/ocpp16/helpers";
@@ -37,13 +35,13 @@ describe("createChargingPointActor", () => {
     expect(typeof actor.stopTransaction).toBe("function");
   });
 
-  test("rejects unsupported OCPP 2.0.1 at runtime with a stable error", () => {
+  test("rejects unsupported OCPP 2.0.1 when callers bypass types", () => {
     expect(() =>
       createChargingPointActor({
         protocol: "OCPP201",
         id: "cp-201",
         centralSystemUrl: "ws://localhost/cp-201",
-      })
+      } as never)
     ).toThrow(ChargingPointActorError);
 
     expect(() =>
@@ -51,7 +49,7 @@ describe("createChargingPointActor", () => {
         protocol: "OCPP201",
         id: "cp-201",
         centralSystemUrl: "ws://localhost/cp-201",
-      })
+      } as never)
     ).toThrow("OCPP201 暂不支持运行");
 
     try {
@@ -59,31 +57,15 @@ describe("createChargingPointActor", () => {
         protocol: "OCPP201",
         id: "cp-201",
         centralSystemUrl: "ws://localhost/cp-201",
-      });
+      } as never);
     } catch (error) {
       expect(error).toMatchObject({
         code: "CHARGING_POINT_ACTOR_PROTOCOL_UNSUPPORTED",
         cause: {
           protocol: "OCPP201",
-          support: CHARGING_POINT_ACTOR_RUNTIME_SUPPORT.OCPP201,
         },
       });
     }
-  });
-
-  test("documents protocol toolkit support separately from actor runtime support", () => {
-    expect(CHARGING_POINT_ACTOR_RUNTIME_SUPPORT.OCPP16J).toEqual({
-      protocolToolkit: true,
-      chargingPointActorRuntime: true,
-      status: "supported",
-    });
-    expect(CHARGING_POINT_ACTOR_RUNTIME_SUPPORT.OCPP201).toEqual({
-      protocolToolkit: true,
-      chargingPointActorRuntime: false,
-      status: "protocol-only",
-    });
-    expect(isChargingPointActorRuntimeSupported("OCPP16J")).toBe(true);
-    expect(isChargingPointActorRuntimeSupported("OCPP201")).toBe(false);
   });
 
   test("requires charging point topology for normal OCPP16J creation", () => {

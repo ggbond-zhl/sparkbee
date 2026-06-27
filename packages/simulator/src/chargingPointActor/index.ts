@@ -1,6 +1,5 @@
 export { createChargingPointActor } from "./createChargingPointActor";
 export { ChargingPointActorError, type ChargingPointActorErrorCode } from "./errors";
-export * from "./support";
 export type {
   AuthorizationStatusEvent,
   ChargingPointStatusEvent,
@@ -30,7 +29,7 @@ export type {
   ChargingPointActorResourceRef,
   ChargingPointActorSessionStatus,
   ChargingPointActorStatus,
-  ChargingPointActorStatusEvent,
+  ChargingPointLifecycleEvent,
   ChargingPointActorStartResult,
   ChargingPointActorStartTransactionInput,
   ChargingPointActorStopTransactionResult,

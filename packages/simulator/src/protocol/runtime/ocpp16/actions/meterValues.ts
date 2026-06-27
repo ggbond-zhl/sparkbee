@@ -2,7 +2,6 @@ import type { Ocpp16RequestOf } from "../../../validator/Ocpp16";
 import type { Transaction } from "../../../../model";
 import { cloneDate } from "../../../../shared/utils";
 import { createMeterValue } from "../payloadBuilders";
-import { ProtocolRuntimeError } from "../errors";
 import { emitTransactionMeterValue } from "../events";
 import { requireOcppConnectorId } from "../resourceAccess";
 import { requireConnectorSelection } from "../connectorSelection";
@@ -13,19 +12,16 @@ import type {
   Ocpp16MeterValuesResult,
 } from "../types";
 import {
+  calculateNextMeterWh,
   isOfflineDeliveryError,
   recordMeterValueForOfflineDelivery,
-  resolveTransactionDeliveryBinding,
-  shouldQueueTransactionDelivery,
-} from "./offlineTransactionDelivery";
-import {
-  calculateNextMeterWh,
   recordTransactionMeterValue,
   resolveConnectorMeasurements,
+  resolveTransactionDeliveryBinding,
   resolveTransactionMeasurements,
+  shouldQueueTransactionDelivery,
 } from "../Ocpp16TransactionDelivery";
 
-const METER_VALUE_SAMPLE_INTERVAL_KEY = "MeterValueSampleInterval";
 type MeterValueReadingContext = "Sample.Periodic" | "Trigger";
 
 export async function reportMeterValue(
@@ -226,7 +222,7 @@ export function startMeterValueLoop(
     return;
   }
 
-  const intervalSec = readMeterValueSampleIntervalSec(context);
+  const intervalSec = context.configurationFacts.getMeterValueSampleIntervalSec();
   if (intervalSec === 0) {
     return;
   }
@@ -306,30 +302,6 @@ async function reportPeriodicMeterValue(
       currentLoop.isReporting = false;
     }
   }
-}
-
-function readMeterValueSampleIntervalSec(
-  context: Ocpp16RuntimeContext,
-): number {
-  const value = context.configurationStore.getValue(
-    METER_VALUE_SAMPLE_INTERVAL_KEY,
-  );
-  if (value === undefined) {
-    throw new ProtocolRuntimeError(
-      "PROTOCOL_RUNTIME_INVALID_OPERATION",
-      `${METER_VALUE_SAMPLE_INTERVAL_KEY} 配置不存在`,
-    );
-  }
-
-  const intervalSec = Number(value);
-  if (!Number.isSafeInteger(intervalSec) || intervalSec < 0) {
-    throw new ProtocolRuntimeError(
-      "PROTOCOL_RUNTIME_INVALID_OPERATION",
-      `${METER_VALUE_SAMPLE_INTERVAL_KEY} 配置非法`,
-    );
-  }
-
-  return intervalSec;
 }
 
 function unrefTimer(timerId: ReturnType<typeof setInterval>): void {

@@ -1,6 +1,4 @@
-import {
-  recordAuthorizationGrantFromStartTransactionResult,
-} from "../AuthorizationDecision";
+import { getOcpp16AuthorizationPolicy } from "../Ocpp16AuthorizationPolicy";
 import { startMeterValueLoop } from "./meterValues";
 import { sendStatusNotification } from "./statusNotification";
 import { sendStartTransaction } from "./transactionStart";
@@ -9,11 +7,6 @@ import {
   emitTransactionStatus,
 } from "../events";
 import { mapConnectorFlowStatus, mapStopReason } from "../mappings";
-import { recordOfflineTransactionStopDelivery } from "../Ocpp16TransactionDelivery";
-import { createMeterValue, createStopTransactionPayload } from "../payloadBuilders";
-import type { Ocpp16RuntimeContext } from "../state";
-import type { Ocpp16StartTransactionCallResult } from "../types";
-import type { OfflineTransactionRecord } from "../OfflineTransactionOutbox";
 import {
   bindOfflineTransactionStart,
   getOfflineTransactionRecord,
@@ -21,7 +14,12 @@ import {
   markOfflineMeterValueReplayed,
   markOfflineStopReplayed,
   recordOcppTransactionBinding,
-} from "./offlineTransactionDelivery";
+  recordOfflineTransactionStopDelivery,
+} from "../Ocpp16TransactionDelivery";
+import { createMeterValue, createStopTransactionPayload } from "../payloadBuilders";
+import type { Ocpp16RuntimeContext } from "../state";
+import type { Ocpp16StartTransactionCallResult } from "../types";
+import type { OfflineTransactionRecord } from "../OfflineTransactionOutbox";
 import {
   captureConnectorStatusTransition,
   emitConnectorStatusTransition,
@@ -52,7 +50,7 @@ export async function replayOfflineTransactions(
 
       const { ocppTransactionId, startTransactionResult } = replayStartResult;
       if (startTransactionResult !== null) {
-        recordAuthorizationGrantFromStartTransactionResult(context, {
+        getOcpp16AuthorizationPolicy(context).absorbStartTransactionResult({
           evseId: record.evseId,
           result: startTransactionResult,
         });
@@ -70,7 +68,7 @@ export async function replayOfflineTransactions(
         startTransactionResult !== null &&
         startTransactionResult.outcome !== "Accepted"
       ) {
-        if (context.configurationStore.getValue("StopTransactionOnInvalidId") === "true") {
+        if (context.configurationFacts.shouldStopTransactionOnInvalidId()) {
           recordDeauthorizedStop(context, record);
           const latestRecord = getOfflineTransactionRecord(context, record.localTransactionId) ?? record;
           const replayed = await replayOfflineStopTransaction(

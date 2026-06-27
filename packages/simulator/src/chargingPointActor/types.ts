@@ -4,16 +4,16 @@ import type {
   ChargingPoint,
   ChargingPointOptions,
   ChargingPointStatus,
-  TransactionState,
-  TransactionStopReason,
   ConnectorStatus,
   EVSEStatus,
+  TransactionState,
+  TransactionStopReason,
 } from "../model";
-import type { ProtocolVersion } from "../shared/types";
 import type { Ocpp16ConfigurationCatalogInput } from "../protocol/runtime/ocpp16/ConfigurationStore";
 import type { SessionOfflineReason } from "../protocol/session/types";
+import type { ProtocolVersion } from "../shared/types";
 
-export type ChargingPointActorProtocol = "OCPP16J" | "OCPP201";
+export type ChargingPointActorProtocol = "OCPP16J";
 export type ChargingPointActorOperationStatus = "accepted" | "rejected" | "failed";
 
 export type ChargingPointActorStatus = "starting" | "running" | "stopped";
@@ -31,9 +31,8 @@ export interface ChargingPointActorEventError {
 }
 
 export type ChargingPointActorResourceRef =
-  | { scope: "chargingPointActor" }
-  | { scope: "session" }
   | { scope: "chargingPoint" }
+  | { scope: "session" }
   | { scope: "evse"; evseId: number }
   | { scope: "connector"; evseId: number; connectorId: number }
   | { scope: "authorization"; idTag: string; evseId?: number; connectorId?: number }
@@ -52,16 +51,16 @@ export interface ChargingPointActorEventBase<
   id: string;
   sequence: number;
   type: TType;
-  chargingPointActorId: string;
+  chargingPointId: string;
   protocol: ProtocolVersion;
   resource: TResource;
   occurredAt: string;
 }
 
-export interface ChargingPointActorStatusEvent
+export interface ChargingPointLifecycleEvent
   extends ChargingPointActorEventBase<
-    "chargingPointActor.status",
-    Extract<ChargingPointActorResourceRef, { scope: "chargingPointActor" }>
+    "chargingPoint.lifecycle",
+    Extract<ChargingPointActorResourceRef, { scope: "chargingPoint" }>
   > {
   previousStatus: ChargingPointActorStatus | null;
   currentStatus: ChargingPointActorStatus;
@@ -151,7 +150,7 @@ export interface SessionStatusEvent
 }
 
 export type ChargingPointActorEventMap = {
-  "chargingPointActor.status": ChargingPointActorStatusEvent;
+  "chargingPoint.lifecycle": ChargingPointLifecycleEvent;
   "session.status": SessionStatusEvent;
   "chargingPoint.status": ChargingPointStatusEvent;
   "evse.status": EVSEStatusEvent;
@@ -166,9 +165,8 @@ export type ChargingPointActorEventType = keyof ChargingPointActorEventMap;
 export type ChargingPointActorEvent = ChargingPointActorEventMap[ChargingPointActorEventType];
 
 export interface ChargingPointActorEventBus {
-  subscribe<TType extends ChargingPointActorEventType>(
-    type: TType,
-    listener: (event: ChargingPointActorEventMap[TType]) => void,
+  subscribe(
+    listener: (event: ChargingPointActorEvent) => void | Promise<void>,
   ): () => void;
 }
 
@@ -304,10 +302,4 @@ export type Ocpp16ChargingPointActorOptions = {
   configurationCatalog?: Ocpp16ConfigurationCatalogInput;
 };
 
-export type UnsupportedChargingPointActorOptions = {
-  protocol: "OCPP201";
-  id: string;
-  centralSystemUrl: string;
-};
-
-export type ChargingPointActorOptions = Ocpp16ChargingPointActorOptions | UnsupportedChargingPointActorOptions;
+export type ChargingPointActorOptions = Ocpp16ChargingPointActorOptions;

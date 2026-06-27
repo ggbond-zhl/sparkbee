@@ -1,13 +1,13 @@
 import type { InboundRequest } from "../../../session/types";
 import type { Ocpp16ResponseOf } from "../../../validator/Ocpp16";
 import type { Ocpp16RuntimeContext } from "../state";
-import { clearAuthorizationCache } from "../AuthorizationDecision";
+import { getOcpp16AuthorizationPolicy } from "../Ocpp16AuthorizationPolicy";
 
 export async function handleClearCache(
   context: Ocpp16RuntimeContext,
   request: InboundRequest,
 ): Promise<void> {
-  clearAuthorizationCache(context);
+  getOcpp16AuthorizationPolicy(context).clearCache();
 
   await request.respond({
     status: "Accepted",

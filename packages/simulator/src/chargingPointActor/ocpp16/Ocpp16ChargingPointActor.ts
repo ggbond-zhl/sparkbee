@@ -86,7 +86,7 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
           dependencies.configurationCatalog ?? options.configurationCatalog,
       });
     this.eventEnvelope = new Ocpp16EventEnvelope({
-      chargingPointActorId: this.id,
+      chargingPointId: this.id,
       protocol: this.protocol,
       clock: this.clock,
       idGenerator: this.idGenerator,
@@ -266,7 +266,7 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
   ): void {
     const previousStatus = this.status;
     this.status = currentStatus;
-    this.eventEnvelope.publishChargingPointActorStatus(previousStatus, currentStatus, error);
+    this.eventEnvelope.publishChargingPointLifecycle(previousStatus, currentStatus, error);
   }
 
   private requireTransactionResource(

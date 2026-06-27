@@ -1,16 +1,20 @@
 import type {
   AuthorizationSource,
   AuthorizationStatus,
+  AuthorizationGrant,
   ChargingPoint,
   ChargingPointOptions,
   ChargingPointStatus,
   ConnectorStatus,
+  EVSE,
   EVSEStatus,
+  Transaction,
   TransactionState,
   TransactionStopReason,
 } from "../../../model";
 import type { ISession } from "../../session/types";
 import type { Ocpp16ConfigurationCatalogInput } from "./ConfigurationStore/index";
+import type { ConfigurationStore } from "./ConfigurationStore";
 import type { OfflineTransactionOutbox } from "./OfflineTransactionOutbox";
 
 export type Ocpp16RegistrationStatus = "Accepted" | "Pending" | "Rejected";
@@ -63,6 +67,18 @@ export interface Ocpp16RuntimeOptions {
   heartbeatUnstableThreshold?: number;
   heartbeatReconnectThreshold?: number;
   heartbeatTimeDriftThresholdMs?: number | null;
+}
+
+export interface Ocpp16RuntimeSnapshot {
+  chargingPoint: {
+    status: ChargingPointStatus;
+    availability: ChargingPoint["availability"];
+    evses: EVSE[];
+  };
+  configurationStore: ConfigurationStore;
+  authorizationGrants: AuthorizationGrant[];
+  transactions: Transaction[];
+  heartbeatTimerActive: boolean;
 }
 
 export interface Ocpp16BootResult {

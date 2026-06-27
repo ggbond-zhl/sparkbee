@@ -1,13 +1,13 @@
 import { describe, expect, test } from "vitest";
 
-import * as transport from "../../../src/index.ts";
+import * as transport from "../../../src/protocol/transport/index.ts";
 import type {
   ITransport,
   ITransportEvents,
   TransportErrorCode,
   TransportEvents,
   WebSocketTransportOptions,
-} from "../../../src/index.ts";
+} from "../../../src/protocol/transport/index.ts";
 
 function assertTransportTypes(
   instance: ITransport,
@@ -23,7 +23,7 @@ function assertTransportTypes(
 }
 
 describe("transport public API", () => {
-  test("re-exports the stable transport surface from the root barrel", () => {
+  test("re-exports the stable transport surface from the transport barrel", () => {
     expect(transport.WebSocketTransport).toBeDefined();
     expect(transport.TransportError).toBeDefined();
   });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { Transaction } from "../../../../src/index.ts";
+import { Transaction } from "../../../../src/model/index.ts";
 import {
   bootAccepted,
   createChargingPoint,

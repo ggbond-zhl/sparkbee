@@ -7,10 +7,6 @@ import type {
 import type { Ocpp16RuntimeContext } from "../state";
 import type { Ocpp16AuthorizationStatus } from "../types";
 import { parseOptionalDate } from "../responseParsers";
-import {
-  readPositiveIntegerConfig,
-  supportsLocalAuthorizationList,
-} from "./localAuthorizationListSupport";
 
 type SendLocalListStatus = Ocpp16ResponseOf<"SendLocalList">["status"];
 
@@ -19,7 +15,7 @@ export async function handleSendLocalList(
   request: InboundRequest,
 ): Promise<void> {
   const payload = request.payload as Ocpp16RequestOf<"SendLocalList">;
-  if (!supportsLocalAuthorizationList(context)) {
+  if (!context.configurationFacts.supportsLocalAuthorizationList()) {
     await respond(request, "NotSupported");
     return;
   }
@@ -30,8 +26,7 @@ export async function handleSendLocalList(
   }
 
   const entries = payload.localAuthorizationList ?? [];
-  const sendMaxLength = readPositiveIntegerConfig(
-    context,
+  const sendMaxLength = context.configurationFacts.readPositiveIntegerConfig(
     "SendLocalListMaxLength",
   );
   if (sendMaxLength === null || entries.length > sendMaxLength) {
@@ -53,8 +48,7 @@ export async function handleSendLocalList(
       removeEntry(nextEntries, entry.idTag);
       nextEntries.push(toLocalAuthorizationEntry(entry));
     }
-    const localMaxLength = readPositiveIntegerConfig(
-      context,
+    const localMaxLength = context.configurationFacts.readPositiveIntegerConfig(
       "LocalAuthListMaxLength",
     );
     if (localMaxLength === null || nextEntries.length > localMaxLength) {
@@ -90,8 +84,7 @@ export async function handleSendLocalList(
     nextEntries.push(toLocalAuthorizationEntry(entry));
   }
 
-  const localMaxLength = readPositiveIntegerConfig(
-    context,
+  const localMaxLength = context.configurationFacts.readPositiveIntegerConfig(
     "LocalAuthListMaxLength",
   );
   if (localMaxLength === null || nextEntries.length > localMaxLength) {

@@ -103,7 +103,7 @@ function selectRemoteStartConnector(
 }
 
 function shouldAuthorizeRemoteStart(context: Ocpp16RuntimeContext): boolean {
-  return context.configurationStore.getValue("AuthorizeRemoteTxRequests") === "true";
+  return context.configurationFacts.isAuthorizeRemoteTxRequestsEnabled();
 }
 
 function mapRemoteAuthorizeRejectionReason(result: Ocpp16AuthorizeResult): string {

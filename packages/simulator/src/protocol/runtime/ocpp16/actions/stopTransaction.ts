@@ -17,9 +17,6 @@ import type {
 } from "../types";
 import { applyRequestedAvailabilityWhenNoActiveTransaction } from "./connectorActions";
 import {
-  resolveTransactionDeliveryBinding,
-} from "./offlineTransactionDelivery";
-import {
   captureConnectorStatusTransition,
   emitConnectorStatusTransition,
   resolveConnectorOcppStatus,
@@ -28,6 +25,7 @@ import {
   endTransactionDelivery,
   recordOfflineTransactionStopDelivery,
   requireTransactionConnectorRef,
+  resolveTransactionDeliveryBinding,
 } from "../Ocpp16TransactionDelivery";
 
 type StopTransactionRequestState = {

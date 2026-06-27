@@ -43,6 +43,7 @@ import type {
   Ocpp16MeterValueInput,
   Ocpp16MeterValuesResult,
   Ocpp16ReportConnectorStatusInput,
+  Ocpp16RuntimeSnapshot,
   Ocpp16RuntimeEvents,
   Ocpp16RuntimeEventListener,
   Ocpp16StartTransactionInput,
@@ -219,6 +220,20 @@ export class Ocpp16Runtime {
     ocppTransactionId: number | null;
   } | undefined {
     return this.connectorTopology.getTransactionResource(transactionId);
+  }
+
+  getRuntimeSnapshot(): Ocpp16RuntimeSnapshot {
+    return {
+      chargingPoint: {
+        status: this.context.chargingPoint.status,
+        availability: this.context.chargingPoint.availability,
+        evses: this.context.chargingPoint.listEvses(),
+      },
+      configurationStore: this.context.configurationStore,
+      authorizationGrants: [...this.context.authorizationGrants.values()],
+      transactions: [...this.context.transactions.values()],
+      heartbeatTimerActive: this.context.heartbeatTimerId !== null,
+    };
   }
 
   stopRuntime(): void {

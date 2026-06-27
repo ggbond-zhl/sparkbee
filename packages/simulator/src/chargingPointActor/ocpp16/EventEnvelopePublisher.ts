@@ -1,5 +1,3 @@
-import { EventEmitter } from "node:events";
-
 import type { ProtocolVersion } from "../../shared/types";
 import type { ProtocolClock } from "../../protocol/runtime/ocpp16/protocolClock";
 import type {
@@ -10,22 +8,23 @@ import type {
 } from "../types";
 
 export class EventEnvelopePublisher {
-  private readonly emitter = new EventEmitter();
+  private readonly listeners = new Set<
+    (event: ChargingPointActorEvent) => void | Promise<void>
+  >();
   private sequence = 0;
 
   readonly events: ChargingPointActorEventBus = {
-    subscribe: (type, listener) => {
-      const wrapped = listener as (event: ChargingPointActorEvent) => void;
-      this.emitter.on(type, wrapped);
+    subscribe: (listener) => {
+      this.listeners.add(listener);
       return () => {
-        this.emitter.off(type, wrapped);
+        this.listeners.delete(listener);
       };
     },
   };
 
   constructor(
     private readonly options: {
-      chargingPointActorId: string;
+      chargingPointId: string;
       protocol: ProtocolVersion;
       clock: ProtocolClock;
       idGenerator: () => string;
@@ -36,24 +35,35 @@ export class EventEnvelopePublisher {
     type: TType,
     event: Omit<
       ChargingPointActorEventMap[TType],
-      "id" | "sequence" | "type" | "chargingPointActorId" | "protocol" | "occurredAt"
+      "id" | "sequence" | "type" | "chargingPointId" | "protocol" | "occurredAt"
     >,
     occurredAt?: Date,
   ): void {
     const eventOccurredAt = occurredAt ?? this.options.clock.now();
     this.sequence += 1;
-    this.emitter.emit(type, {
+    const publishedEvent = {
       id: this.options.idGenerator(),
       sequence: this.sequence,
       type,
-      chargingPointActorId: this.options.chargingPointActorId,
+      chargingPointId: this.options.chargingPointId,
       protocol: this.options.protocol,
       occurredAt: eventOccurredAt.toISOString(),
       ...event,
-    } as ChargingPointActorEventMap[TType]);
+    } as ChargingPointActorEventMap[TType];
+
+    for (const listener of [...this.listeners]) {
+      try {
+        const result = listener(publishedEvent);
+        if (result !== undefined) {
+          void result.catch(() => undefined);
+        }
+      } catch {
+        // Actor event subscribers are observers and must not affect charging point execution.
+      }
+    }
   }
 
   dispose(): void {
-    this.emitter.removeAllListeners();
+    this.listeners.clear();
   }
 }

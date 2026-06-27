@@ -2,11 +2,8 @@ import type { AuthorizationSource } from "../../../../model";
 import { cloneDate, cloneNullableDate } from "../../../../shared/utils";
 import type { Ocpp16RequestOf, Ocpp16ResponseOf } from "../../../validator/Ocpp16";
 import {
-  recordAuthorizationGrantFromOfflineDecision,
-  recordAuthorizationGrantFromStartTransactionResult,
-  validateOfflineAuthorization,
-  validateAcceptedAuthorization,
-} from "../AuthorizationDecision";
+  getOcpp16AuthorizationPolicy,
+} from "../Ocpp16AuthorizationPolicy";
 import { toOcppDate } from "../payloadBuilders";
 import { releaseTransactionOnConnector } from "../resourceAccess";
 import {
@@ -53,17 +50,18 @@ export async function startTransaction(
   const shouldUseOfflineAuthorization =
     !isOnlineRegistered &&
     options.requireAuthorization &&
-    context.configurationStore.getValue("LocalAuthorizeOffline") === "true";
+    context.configurationFacts.isLocalAuthorizeOfflineEnabled();
   const selection = isOnlineRegistered
     ? requireStartableConnector(context, input.connectorId)
     : shouldUseOfflineAuthorization
       ? requireLocallyStartableConnector(context, input.connectorId)
-      : requireStartableConnector(context, input.connectorId);
+    : requireStartableConnector(context, input.connectorId);
   let offlineAuthorizationSource: AuthorizationSource | undefined;
+  const authorizationPolicy = getOcpp16AuthorizationPolicy(context);
 
   if (options.requireAuthorization) {
     if (shouldUseOfflineAuthorization) {
-      const authorization = validateOfflineAuthorization(context, {
+      const authorization = authorizationPolicy.authorizeOfflineTransactionStart({
         evseId: selection.evseId,
         idTag: input.idTag,
         at,
@@ -85,12 +83,6 @@ export async function startTransaction(
         };
       }
 
-      recordAuthorizationGrantFromOfflineDecision(context, {
-        evseId: selection.evseId,
-        idTag: input.idTag,
-        decision: authorization,
-        evaluatedAt: at,
-      });
       offlineAuthorizationSource = authorization.source;
       emitAuthorizationStatus(context, {
         evseId: selection.evseId,
@@ -101,7 +93,7 @@ export async function startTransaction(
         occurredAt: at,
       });
     } else {
-      const authorization = validateAcceptedAuthorization(context, {
+      const authorization = authorizationPolicy.authorizeAcceptedTransactionStart({
         evseId: selection.evseId,
         idTag: input.idTag,
         at,
@@ -141,7 +133,7 @@ export async function startTransaction(
     reservationId: input.reservationId,
     at,
   });
-  recordAuthorizationGrantFromStartTransactionResult(context, {
+  authorizationPolicy.absorbStartTransactionResult({
     evseId: selection.evseId,
     result: startTransactionResult,
   });

@@ -23,7 +23,7 @@ type WebSocketConstructorLike = {
   ): WebSocket;
 };
 
-interface CloseDetails {
+interface WebSocketCloseDetails {
   code?: number;
   reason?: string;
 }
@@ -31,6 +31,13 @@ interface CloseDetails {
 const NORMAL_CLOSE_CODE = 1000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
 const INBOUND_BINARY_TYPE: WebSocket["binaryType"] = "arraybuffer";
+
+function normalizeCloseDetails(event: CloseEvent): WebSocketCloseDetails {
+  return {
+    code: event.code,
+    reason: normalizeCloseReason(event.reason),
+  };
+}
 
 function normalizeCloseReason(reason: string): string | undefined {
   return reason === "" ? undefined : reason;
@@ -178,7 +185,7 @@ export class WebSocketTransport implements ITransport {
 
   private finishConnectFailure(
     error: TransportError,
-    details: CloseDetails = {},
+    details: WebSocketCloseDetails = {},
   ): void {
     this.clearConnectTimeout();
     this.lifecycle.failConnect(error);
@@ -189,7 +196,7 @@ export class WebSocketTransport implements ITransport {
     });
   }
 
-  private finishDisconnectSuccess(details: CloseDetails = {}): void {
+  private finishDisconnectSuccess(details: WebSocketCloseDetails = {}): void {
     this.clearConnectTimeout();
     this.lifecycle.completeDisconnect();
     this.emitDisconnected({
@@ -200,7 +207,7 @@ export class WebSocketTransport implements ITransport {
 
   private finishDisconnectFailure(
     error: TransportError,
-    details: CloseDetails = {},
+    details: WebSocketCloseDetails = {},
   ): void {
     this.clearConnectTimeout();
     this.lifecycle.failDisconnect(error);
@@ -213,7 +220,7 @@ export class WebSocketTransport implements ITransport {
 
   private emitUnexpectedDisconnect(
     cause: unknown,
-    details: CloseDetails = {},
+    details: WebSocketCloseDetails = {},
   ): void {
     this.clearConnectTimeout();
     this.lifecycle.moveToDisconnected();
@@ -392,10 +399,7 @@ export class WebSocketTransport implements ITransport {
       return;
     }
 
-    const details: CloseDetails = {
-      code: event.code,
-      reason: normalizeCloseReason(event.reason),
-    };
+    const details = normalizeCloseDetails(event);
 
     this.releaseSocket(socket);
 

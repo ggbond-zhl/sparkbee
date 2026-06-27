@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   TransportError,
   WebSocketTransport,
-} from "../../../src/index.ts";
+} from "../../../src/protocol/transport/index.ts";
 
 class FakeWebSocket {
   static readonly CONNECTING = 0;

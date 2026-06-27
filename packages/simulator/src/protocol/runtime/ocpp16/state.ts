@@ -21,6 +21,7 @@ import type {
   Ocpp16RegistrationStatus,
 } from "./types";
 import { ConfigurationStore } from "./ConfigurationStore/index";
+import { Ocpp16ConfigurationFacts } from "./Ocpp16ConfigurationFacts";
 import { ProtocolRuntimeError } from "./errors";
 import { createProtocolClock } from "./protocolClock";
 import { MemoryOfflineTransactionOutbox } from "./OfflineTransactionOutbox";
@@ -43,6 +44,7 @@ export interface Ocpp16RuntimeContext {
   registrationStatus: Ocpp16RegistrationStatus | "Unregistered";
   chargingPoint: ChargingPoint;
   configurationStore: ConfigurationStore;
+  configurationFacts: Ocpp16ConfigurationFacts;
   localAuthorizationList: LocalAuthorizationList;
   authorizationGrants: Map<string, AuthorizationGrant>;
   authorizationCache: Map<string, AuthorizationGrant>;
@@ -75,6 +77,7 @@ export function createOcpp16RuntimeContext(
     chargingPoint.id,
     options.configurationCatalog,
   );
+  const configurationFacts = new Ocpp16ConfigurationFacts(configurationStore);
   configurationStore.sync(
     "NumberOfConnectors",
     String(chargingPoint.listEvses().length),
@@ -108,6 +111,7 @@ export function createOcpp16RuntimeContext(
     registrationStatus: "Unregistered",
     chargingPoint,
     configurationStore,
+    configurationFacts,
     localAuthorizationList,
     authorizationGrants,
     authorizationCache,

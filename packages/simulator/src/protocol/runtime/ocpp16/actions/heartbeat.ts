@@ -1,6 +1,5 @@
 import type { Ocpp16ResponseOf } from "../../../validator/Ocpp16";
 import { cloneDate, cloneNullableDate } from "../../../../shared/utils";
-import { ProtocolRuntimeError } from "../errors";
 import { toRequestErrorInfo } from "../requestErrors";
 import { parseHeartbeatCurrentTime } from "../responseParsers";
 import { requireRegisteredChargingPoint } from "../connectorSelection";
@@ -61,7 +60,7 @@ export function startHeartbeatLoop(
     "BootNotification 未 Accepted，不能启动 Heartbeat",
   );
 
-  const intervalSec = readHeartbeatIntervalSec(context);
+  const intervalSec = context.configurationFacts.getHeartbeatIntervalSec();
   let consecutiveFailures = 0;
   context.heartbeatTimerId = setInterval(() => {
     void sendHeartbeat(context)
@@ -179,28 +178,6 @@ function getLoopFailureCommunicationStatus(
   }
 
   return "unknown";
-}
-
-function readHeartbeatIntervalSec(context: Ocpp16RuntimeContext): number {
-  const value = context.configurationStore.getValue(
-    "HeartbeatInterval",
-  );
-  if (value === undefined) {
-    throw new ProtocolRuntimeError(
-      "PROTOCOL_RUNTIME_INVALID_OPERATION",
-      "HeartbeatInterval 配置不存在",
-    );
-  }
-
-  const intervalSec = Number(value);
-  if (!Number.isSafeInteger(intervalSec) || intervalSec <= 0) {
-    throw new ProtocolRuntimeError(
-      "PROTOCOL_RUNTIME_INVALID_OPERATION",
-      "HeartbeatInterval 尚未初始化",
-    );
-  }
-
-  return intervalSec;
 }
 
 function callSafely(callback: () => void): void {

@@ -15,14 +15,9 @@ import type {
   Ocpp16AuthorizeResult,
 } from "../types";
 import {
-  isCurrentAuthorizationAttempt,
-  nextAuthorizationAttemptSequence,
-  normalizeAuthorizationStatus,
-  recordAuthorizationGrantFromAuthorizeResult,
+  getOcpp16AuthorizationPolicy,
   type OfflineAuthorizationDecision,
-  validateOfflineAuthorization,
-  validateStoredAuthorization,
-} from "../AuthorizationDecision";
+} from "../Ocpp16AuthorizationPolicy";
 
 export async function authorize(
   context: Ocpp16RuntimeContext,
@@ -32,7 +27,8 @@ export async function authorize(
   const selection = isOnlineRegistered
     ? requireAuthorizableConnector(context, input.connectorId)
     : requireLocallyAuthorizableConnector(context, input.connectorId);
-  const attemptSequence = nextAuthorizationAttemptSequence(context, {
+  const authorizationPolicy = getOcpp16AuthorizationPolicy(context);
+  const attemptSequence = authorizationPolicy.beginAuthorizeAttempt({
     evseId: selection.evseId,
     idTag: input.idTag,
   });
@@ -43,10 +39,6 @@ export async function authorize(
       connectorId: selection.connectorId,
       idTag: input.idTag,
       at: context.clock(),
-    });
-    recordAuthorizationGrantFromAuthorizeResult(context, {
-      evseId: selection.evseId,
-      result,
     });
     emitAuthorizationStatus(context, {
       evseId: selection.evseId,
@@ -60,9 +52,9 @@ export async function authorize(
     return result;
   }
 
-  if (context.configurationStore.getValue("LocalPreAuthorize") === "true") {
+  if (context.configurationFacts.isLocalPreAuthorizeEnabled()) {
     const at = context.clock();
-    const decision = validateStoredAuthorization(context, {
+    const decision = authorizationPolicy.preAuthorizeFromLocalStore({
       evseId: selection.evseId,
       idTag: input.idTag,
       at,
@@ -71,10 +63,6 @@ export async function authorize(
       const result = createLocalAuthorizeResult(input.idTag, decision, {
         at,
         platformCommunicationStatus: "online",
-      });
-      recordAuthorizationGrantFromAuthorizeResult(context, {
-        evseId: selection.evseId,
-        result,
       });
       emitAuthorizationStatus(context, {
         evseId: selection.evseId,
@@ -96,7 +84,7 @@ export async function authorize(
   }
 
   const result = await sendAuthorize(context, input.idTag);
-  recordAuthorizationGrantFromAuthorizeResult(context, {
+  authorizationPolicy.absorbAuthorizeResult({
     evseId: selection.evseId,
     result,
   });
@@ -127,7 +115,7 @@ function authorizeFromOfflineDecision(
     at: Date;
   },
 ): Extract<Ocpp16AuthorizeResult, { outcome: "Accepted" | "Rejected" }> {
-  const decision = validateOfflineAuthorization(context, input);
+  const decision = getOcpp16AuthorizationPolicy(context).authorizeOffline(input);
   if (decision.status === "accepted") {
     return createLocalAuthorizeResult(input.idTag, decision, {
       at: input.at,
@@ -188,17 +176,18 @@ async function reconcileAuthorizeInBackground(
   },
 ): Promise<void> {
   const result = await sendAuthorize(context, input.idTag);
-  if (
-    result.outcome === "Failed" ||
-    !isCurrentAuthorizationAttempt(context, input)
-  ) {
+  if (result.outcome === "Failed") {
     return;
   }
 
-  recordAuthorizationGrantFromAuthorizeResult(context, {
+  if (!getOcpp16AuthorizationPolicy(context).absorbCurrentAuthorizeResult({
     evseId: input.evseId,
+    idTag: input.idTag,
+    attemptSequence: input.attemptSequence,
     result,
-  });
+  })) {
+    return;
+  }
   emitAuthorizationStatus(context, {
     evseId: input.evseId,
     connectorId: input.connectorId,
@@ -305,7 +294,7 @@ function recordAuthorizeResponse(
     shouldReconnect: false as const,
   };
 
-  const authorizationStatus = normalizeAuthorizationStatus(
+  const authorizationStatus = getOcpp16AuthorizationPolicy(context).normalizeAuthorizeResponseStatus(
     idTagInfo.status,
     expiryDate,
     receivedAt,

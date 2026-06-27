@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { TransportLifecycleMachine } from "../../../src/protocol/transport/websocket/TransportLifecycleMachine.ts";
-import { TransportError } from "../../../src/index.ts";
+import { TransportError } from "../../../src/protocol/transport/index.ts";
 
 describe("TransportLifecycleMachine", () => {
   test("reuses the in-flight connect promise while the lifecycle is connecting", async () => {

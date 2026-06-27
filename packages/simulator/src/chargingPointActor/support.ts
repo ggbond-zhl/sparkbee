@@ -14,11 +14,6 @@ export const CHARGING_POINT_ACTOR_RUNTIME_SUPPORT = {
     chargingPointActorRuntime: true,
     status: "supported",
   },
-  OCPP201: {
-    protocolToolkit: true,
-    chargingPointActorRuntime: false,
-    status: "protocol-only",
-  },
 } satisfies Record<ChargingPointActorProtocol, ChargingPointActorRuntimeSupportEntry>;
 
 export function isChargingPointActorRuntimeSupported(

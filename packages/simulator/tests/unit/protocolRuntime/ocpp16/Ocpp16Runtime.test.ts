@@ -7,9 +7,11 @@ import {
   Transaction,
   Connector,
   EVSE,
+} from "../../../../src/model/index.ts";
+import {
   SessionError,
   type OutboundRequestResult,
-} from "../../../../src/index.ts";
+} from "../../../../src/protocol/session/types.ts";
 import { createDeferred } from "../../../../src/shared/deferred.ts";
 import {
   Ocpp16Runtime,
@@ -169,6 +171,7 @@ describe("Ocpp16Runtime", () => {
     vi.restoreAllMocks();
   });
 
+  describe("boot and status reporting", () => {
   test("records accepted boot fields and reports connector status", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
@@ -662,6 +665,9 @@ describe("Ocpp16Runtime", () => {
     ]);
   });
 
+  });
+
+  describe("local transaction delivery", () => {
   test("runs the basic local charging happy path in protocol order", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
@@ -1002,6 +1008,9 @@ describe("Ocpp16Runtime", () => {
     expect(getConnectorFact(protocolRuntime)?.status).toBe("occupied");
   });
 
+  });
+
+  describe("authorization policy flows", () => {
   test("records independent Authorize result as an EVSE-scoped grant", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
@@ -1882,6 +1891,9 @@ describe("Ocpp16Runtime", () => {
     ]);
   });
 
+  });
+
+  describe("heartbeat", () => {
   test("records successful heartbeat health", async () => {
     const { protocolRuntime } = createProtocolRuntime([
       bootAccepted(),
@@ -2037,7 +2049,7 @@ describe("Ocpp16Runtime", () => {
       consecutiveFailures: 3,
       shouldReconnect: true,
     });
-    expect(runtimeContext(protocolRuntime).heartbeatTimerId).toBeNull();
+    expect(protocolRuntime.getRuntimeSnapshot().heartbeatTimerActive).toBe(false);
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "Heartbeat",
@@ -2164,12 +2176,15 @@ describe("Ocpp16Runtime", () => {
     session.emitOffline("unexpected_disconnect");
 
     const state = runtimeState(protocolRuntime);
-    expect(runtimeContext(protocolRuntime).heartbeatTimerId).toBeNull();
+    expect(protocolRuntime.getRuntimeSnapshot().heartbeatTimerActive).toBe(false);
     expect(state.transactions[0]?.id).toBe("1001");
     expect(state.transactions[0]?.state).toBe("active");
     expect(state.transactions[0]?.chargingState).toBe("charging");
   });
 
+  });
+
+  describe("registration gates", () => {
   test("rejects starting before BootNotification is accepted", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       response("BootNotification", {
@@ -2414,6 +2429,9 @@ describe("Ocpp16Runtime", () => {
     expect(connector?.status).toBe("available");
   });
 
+  });
+
+  describe("offline transaction delivery", () => {
   test("starts an offline local transaction from an accepted local authorization list entry", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
@@ -3207,6 +3225,9 @@ describe("Ocpp16Runtime", () => {
     });
   });
 
+  });
+
+  describe("online transaction delivery", () => {
   test("removes the local transaction when StartTransaction is rejected", async () => {
     const rejectedStatuses = [
       ["Blocked", "卡被禁用"],
@@ -4222,6 +4243,9 @@ describe("Ocpp16Runtime", () => {
     ]);
   });
 
+  });
+
+  describe("remote commands", () => {
   test("handles RemoteStartTransaction without sending Authorize", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
@@ -4668,6 +4692,9 @@ describe("Ocpp16Runtime", () => {
     expect(connector?.lockState).toBe("locked");
   });
 
+  });
+
+  describe("configuration and local authorization list", () => {
   test("handles GetConfiguration before protocol registration", async () => {
     const { protocolRuntime } = createProtocolRuntime([]);
     const request = new FakeInboundRequest("GetConfiguration", {
@@ -5295,6 +5322,9 @@ describe("Ocpp16Runtime", () => {
     expect(session.requests).toEqual([]);
   });
 
+  });
+
+  describe("runtime configuration effects", () => {
   test("rejects zero HeartbeatInterval and keeps the running heartbeat loop unchanged", async () => {
     vi.useFakeTimers();
     const { protocolRuntime, session } = createProtocolRuntime([
@@ -5759,6 +5789,9 @@ describe("Ocpp16Runtime", () => {
     expect(unknownConnector.rejections).toEqual([]);
   });
 
+  });
+
+  describe("trigger messages", () => {
   test("handles TriggerMessage Heartbeat after registration", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
@@ -6030,6 +6063,9 @@ describe("Ocpp16Runtime", () => {
     ]);
   });
 
+  });
+
+  describe("lifecycle cleanup", () => {
   test("removes the session inbound listener on dispose", () => {
     const session = new FakeSession([]);
     const protocolRuntime = new Ocpp16Runtime({
@@ -6042,6 +6078,7 @@ describe("Ocpp16Runtime", () => {
     session.emitInboundRequest(request);
 
     expect(request.rejections).toEqual([]);
+  });
   });
 });
 

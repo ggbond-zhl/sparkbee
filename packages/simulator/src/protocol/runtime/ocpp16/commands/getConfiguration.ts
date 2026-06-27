@@ -76,7 +76,5 @@ function toConfigurationKeyResponse(
 }
 
 function getMaxRequestedKeys(context: Ocpp16RuntimeContext): number {
-  const value = context.configurationStore.getValue("GetConfigurationMaxKeys");
-  const maxKeys = Number(value);
-  return Number.isSafeInteger(maxKeys) && maxKeys >= 1 ? maxKeys : 0;
+  return context.configurationFacts.getConfigurationMaxKeys();
 }

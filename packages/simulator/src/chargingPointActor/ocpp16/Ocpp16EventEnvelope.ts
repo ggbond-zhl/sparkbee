@@ -14,7 +14,7 @@ import type {
 import { EventEnvelopePublisher } from "./EventEnvelopePublisher";
 
 export interface Ocpp16EventEnvelopeOptions {
-  chargingPointActorId: string;
+  chargingPointId: string;
   protocol: ProtocolVersion;
   clock: ProtocolClock;
   idGenerator: () => string;
@@ -31,7 +31,7 @@ export class Ocpp16EventEnvelope {
 
   constructor(private readonly options: Ocpp16EventEnvelopeOptions) {
     this.publisher = new EventEnvelopePublisher({
-      chargingPointActorId: options.chargingPointActorId,
+      chargingPointId: options.chargingPointId,
       protocol: options.protocol,
       clock: options.clock,
       idGenerator: options.idGenerator,
@@ -40,13 +40,13 @@ export class Ocpp16EventEnvelope {
     this.bind();
   }
 
-  publishChargingPointActorStatus(
+  publishChargingPointLifecycle(
     previousStatus: ChargingPointActorStatus,
     currentStatus: ChargingPointActorStatus,
     error?: { code: string; message: string },
   ): void {
-    this.publisher.publish("chargingPointActor.status", {
-      resource: { scope: "chargingPointActor" },
+    this.publisher.publish("chargingPoint.lifecycle", {
+      resource: { scope: "chargingPoint" },
       previousStatus,
       currentStatus,
       ...(error === undefined ? {} : { error }),

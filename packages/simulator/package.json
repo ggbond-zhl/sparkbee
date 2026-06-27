@@ -8,41 +8,9 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
-    "./protocolRuntime": {
-      "types": "./src/protocol/runtime/index.ts",
-      "import": "./src/protocol/runtime/index.ts"
-    },
-    "./model": {
-      "types": "./src/model/index.ts",
-      "import": "./src/model/index.ts"
-    },
-    "./protocol": {
-      "types": "./src/protocol/index.ts",
-      "import": "./src/protocol/index.ts"
-    },
-    "./session": {
-      "types": "./src/protocol/session/index.ts",
-      "import": "./src/protocol/session/index.ts"
-    },
-    "./session/types": {
-      "types": "./src/protocol/session/types.ts",
-      "import": "./src/protocol/session/types.ts"
-    },
-    "./shared/deferred": {
-      "types": "./src/shared/deferred.ts",
-      "import": "./src/shared/deferred.ts"
-    },
     "./chargingPointActor": {
       "types": "./src/chargingPointActor/index.ts",
       "import": "./src/chargingPointActor/index.ts"
-    },
-    "./transport": {
-      "types": "./src/protocol/transport/index.ts",
-      "import": "./src/protocol/transport/index.ts"
-    },
-    "./transport/websocket": {
-      "types": "./src/protocol/transport/websocket/index.ts",
-      "import": "./src/protocol/transport/websocket/index.ts"
     }
   },
   "scripts": {
