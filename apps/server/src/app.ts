@@ -32,8 +32,8 @@ export function createApp(dependencies: AppDependencies = {}) {
     app.use("*", logger());
   }
   app.onError(errorMiddleware);
-  app.route("/", createRoutes(dependencies));
-  app.doc31("/openapi.json", {
+  app.route("/api", createRoutes(dependencies));
+  app.doc31("/api/openapi.json", {
     openapi: "3.1.0",
     info: {
       title: "SparkBee API",
@@ -41,11 +41,11 @@ export function createApp(dependencies: AppDependencies = {}) {
     },
   });
   app.get(
-    "/docs",
+    "/api/docs",
     Scalar({
       pageTitle: "SparkBee API Reference",
       spec: {
-        url: "/openapi.json",
+        url: "/api/openapi.json",
       },
     }),
   );

@@ -7,8 +7,7 @@ export default defineConfig({
     port: 3001,
     strictPort: true,
     proxy: {
-      "/api": "http://localhost:3000",
-      "/health": "http://localhost:3000"
+      "/api": "http://localhost:3000"
     }
   }
 });

@@ -10,16 +10,24 @@ describe("createApp", () => {
   test("serves the health check from the backend skeleton", async () => {
     const app = createApp();
 
-    const response = await app.request("/health");
+    const response = await app.request("/api/health");
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ status: "ok" });
   });
 
-  test("adds a request id response header", async () => {
+  test("does not expose the health check without the API prefix", async () => {
     const app = createApp();
 
     const response = await app.request("/health");
+
+    expect(response.status).toBe(404);
+  });
+
+  test("adds a request id response header", async () => {
+    const app = createApp();
+
+    const response = await app.request("/api/health");
 
     expect(response.headers.get("X-Request-Id")).toMatch(/^[\w=-]+$/);
   });
@@ -28,12 +36,12 @@ describe("createApp", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const app = createApp({ environment: "development" });
 
-    await app.request("/health");
+    await app.request("/api/health");
 
-    expect(logSpy.mock.calls.some(([message]) => String(message).includes("<-- GET /health"))).toBe(
+    expect(logSpy.mock.calls.some(([message]) => String(message).includes("<-- GET /api/health"))).toBe(
       true,
     );
-    expect(logSpy.mock.calls.some(([message]) => String(message).includes("--> GET /health"))).toBe(
+    expect(logSpy.mock.calls.some(([message]) => String(message).includes("--> GET /api/health"))).toBe(
       true,
     );
   });
@@ -42,7 +50,7 @@ describe("createApp", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const app = createApp({ environment: "test" });
 
-    await app.request("/health");
+    await app.request("/api/health");
 
     expect(logSpy).not.toHaveBeenCalled();
   });
@@ -50,7 +58,7 @@ describe("createApp", () => {
   test("adds secure response headers", async () => {
     const app = createApp();
 
-    const response = await app.request("/health");
+    const response = await app.request("/api/health");
 
     expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(response.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
@@ -60,7 +68,7 @@ describe("createApp", () => {
   test("handles CORS preflight requests", async () => {
     const app = createApp();
 
-    const response = await app.request("/health", {
+    const response = await app.request("/api/health", {
       method: "OPTIONS",
       headers: {
         "Access-Control-Request-Method": "GET",
@@ -118,7 +126,7 @@ describe("createApp", () => {
   test("reuses a valid request id from the request header", async () => {
     const app = createApp();
 
-    const response = await app.request("/health", {
+    const response = await app.request("/api/health", {
       headers: { "X-Request-Id": "manual-request-1" },
     });
 
@@ -128,7 +136,7 @@ describe("createApp", () => {
   test("serves the OpenAPI document", async () => {
     const app = createApp();
 
-    const response = await app.request("/openapi.json");
+    const response = await app.request("/api/openapi.json");
 
     expect(response.status).toBe(200);
     const document = await response.json();
@@ -139,17 +147,17 @@ describe("createApp", () => {
         version: "0.0.1",
       },
     });
-    expect(document.paths).toHaveProperty("/health");
+    expect(document.paths).toHaveProperty("/api/health");
   });
 
   test("documents the health check in Chinese", async () => {
     const app = createApp();
 
-    const response = await app.request("/openapi.json");
+    const response = await app.request("/api/openapi.json");
 
     expect(response.status).toBe(200);
     const document = await response.json();
-    const healthOperation = document.paths["/health"].get;
+    const healthOperation = document.paths["/api/health"].get;
     expect(healthOperation.summary).toBe("健康检查");
     expect(healthOperation.description).toBe("检查后端服务是否正常响应。");
     expect(healthOperation.responses["200"].description).toBe("后端服务正常。");
@@ -162,12 +170,12 @@ describe("createApp", () => {
   test("serves the Scalar API reference", async () => {
     const app = createApp();
 
-    const response = await app.request("/docs");
+    const response = await app.request("/api/docs");
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     const html = await response.text();
-    expect(html).toContain("/openapi.json");
+    expect(html).toContain("/api/openapi.json");
   });
 
   test("does not expose business API routes", async () => {
