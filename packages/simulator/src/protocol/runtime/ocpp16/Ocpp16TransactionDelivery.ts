@@ -94,17 +94,17 @@ export class Ocpp16TransactionDelivery {
   }
 }
 
-export type TransactionConnectorRef = {
+type TransactionConnectorRef = {
   evseId: number;
   connectorId: number;
 };
 
-export type StartedTransactionDelivery = {
+type StartedTransactionDelivery = {
   transactionId: string;
   transaction: Transaction;
 };
 
-export type EndedTransactionDelivery = {
+type EndedTransactionDelivery = {
   endedTransaction: Transaction;
   previousTransactionStatus: Transaction["state"];
   meterStop: number;
@@ -112,7 +112,7 @@ export type EndedTransactionDelivery = {
   idTag: string | null;
 };
 
-export type TransactionDeliveryBinding =
+type TransactionDeliveryBinding =
   | { status: "bound"; ocppTransactionId: number }
   | { status: "offline"; ocppTransactionId: null };
 
@@ -394,7 +394,7 @@ function recordOfflineTransactionStop(
   context.offlineTransactionOutbox.recordStopped(localTransactionId, record);
 }
 
-export function toOcppMeterReadingWh(meterWh: number): number {
+function toOcppMeterReadingWh(meterWh: number): number {
   if (!Number.isFinite(meterWh) || meterWh < 0) {
     return meterWh;
   }

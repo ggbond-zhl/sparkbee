@@ -143,7 +143,9 @@ describe("simulator package seam", () => {
       "packages/simulator/src/protocol/runtime/ocpp16/types/options.ts",
       "packages/simulator/src/protocol/runtime/ocpp16/TransactionDeliveryInternals.ts",
       "packages/simulator/src/protocol/runtime/ocpp16/Ocpp16RuntimeObservation.ts",
+      "packages/simulator/src/protocol/runtime/ocpp201/index.ts",
       "packages/simulator/src/protocol/transport/websocket/socketEventDetails.ts",
+      "packages/simulator/src/chargingPointActor/support.ts",
     ];
 
     for (const relativePath of removedInternalFiles) {
