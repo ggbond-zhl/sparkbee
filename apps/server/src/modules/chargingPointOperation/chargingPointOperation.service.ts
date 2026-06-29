@@ -9,6 +9,7 @@ import {
   type ChargingPointActorStartResult,
 } from "../../lib/chargingPointActor";
 import { ChargingPointActorRegistry } from "../../lib/chargingPointActorRegistry";
+import { ChargingPointEventStreamHub } from "../../lib/chargingPointEventStreamHub";
 import { AppError } from "../../utils/errors";
 import { toChargingPointActorOptions } from "./chargingPointActorOptions";
 import { ChargingPointOperationRepository } from "./chargingPointOperation.repo";
@@ -19,6 +20,7 @@ export type ChargingPointActorFactory = (
 
 export interface ChargingPointOperationServiceDependencies {
   chargingPointActorRegistry?: ChargingPointActorRegistry;
+  chargingPointEventStreamHub?: ChargingPointEventStreamHub;
   createChargingPointActor?: ChargingPointActorFactory;
 }
 
@@ -34,6 +36,7 @@ export function createChargingPointOperationService(
 
 export class ChargingPointOperationService {
   private readonly registry: ChargingPointActorRegistry;
+  private readonly eventStreamHub?: ChargingPointEventStreamHub;
   private readonly actorFactory: ChargingPointActorFactory;
 
   constructor(
@@ -42,6 +45,7 @@ export class ChargingPointOperationService {
   ) {
     this.registry =
       dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry();
+    this.eventStreamHub = dependencies.chargingPointEventStreamHub;
     this.actorFactory = dependencies.createChargingPointActor ?? createChargingPointActor;
   }
 
@@ -67,12 +71,14 @@ export class ChargingPointOperationService {
     if (!entry.created) {
       return this.toStatusResponse(id, entry.actor);
     }
+    this.eventStreamHub?.attachActor(entry.actor);
 
     try {
       const result = await entry.actor.start();
       return this.toStartResponse(result);
     } catch (error) {
       this.registry.remove(id);
+      this.eventStreamHub?.detachActor(id);
       await this.disposeQuietly(entry.actor);
       throw this.mapStartError(error);
     }
@@ -91,6 +97,7 @@ export class ChargingPointOperationService {
     } catch (error) {
       throw this.mapStopError(error);
     } finally {
+      this.eventStreamHub?.detachActor(id);
       await this.disposeQuietly(actor);
     }
   }

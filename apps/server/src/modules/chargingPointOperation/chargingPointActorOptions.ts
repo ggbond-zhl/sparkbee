@@ -20,7 +20,10 @@ export function toChargingPointActorOptions(
   return {
     protocol: chargingPoint.protocol as ChargingPointActorProtocol,
     id: chargingPoint.id,
-    centralSystemUrl: chargingPoint.centralSystemUrl,
+    centralSystemUrl: toChargingPointConnectionUrl(
+      chargingPoint.centralSystemUrl,
+      chargingPoint.identity,
+    ),
     chargingPoint: {
       id: chargingPoint.identity,
       vendor: chargingPoint.vendor,
@@ -30,6 +33,13 @@ export function toChargingPointActorOptions(
       evses: toEvses(chargingPoint.connectors),
     },
   };
+}
+
+function toChargingPointConnectionUrl(
+  centralSystemUrl: string,
+  identity: string,
+): string {
+  return `${centralSystemUrl}/${identity}`;
 }
 
 function toEvses(connectors: ConnectorResponse[]) {

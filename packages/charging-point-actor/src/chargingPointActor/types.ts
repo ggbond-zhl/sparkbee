@@ -28,6 +28,14 @@ export type ChargingPointActorTransactionStatus =
 export interface ChargingPointActorEventError {
   code: string;
   message: string;
+  cause?: ChargingPointActorEventErrorCause;
+}
+
+export interface ChargingPointActorEventErrorCause {
+  name?: string;
+  code?: string;
+  message?: string;
+  cause?: ChargingPointActorEventErrorCause;
 }
 
 export type ChargingPointActorResourceRef =
@@ -145,8 +153,10 @@ export interface SessionStatusEvent
   > {
   previousStatus: ChargingPointActorSessionStatus | null;
   currentStatus: ChargingPointActorSessionStatus;
+  connectionUrl: string;
   attempt?: number;
   reason?: SessionOfflineReason;
+  error?: ChargingPointActorEventError;
 }
 
 export type ChargingPointActorEventMap = {

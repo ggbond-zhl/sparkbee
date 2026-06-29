@@ -7,12 +7,13 @@ import type {
   ChargingPointActorEvent,
   ChargingPointActorEventType,
 } from "../../../src/chargingPointActor/index.ts";
-import type {
-  ISession,
-  OutboundRequestResult,
-  ProtocolMessageEvent,
-  SessionConnectionState,
-  SessionEvents,
+import {
+  SessionError,
+  type ISession,
+  type OutboundRequestResult,
+  type ProtocolMessageEvent,
+  type SessionConnectionState,
+  type SessionEvents,
 } from "../../../src/protocol/session/types.ts";
 import type {
   Ocpp16Runtime,
@@ -88,9 +89,9 @@ class FakeSession implements ISession {
     return this;
   }
 
-  emitReconnecting(attempt = 1): void {
+  emitReconnecting(attempt = 1, error?: SessionError): void {
     this.state = "reconnecting";
-    this.emitter.emit("reconnecting", attempt);
+    this.emitter.emit("reconnecting", attempt, error);
   }
 
   emitOnline(): void {
@@ -1791,7 +1792,14 @@ describe("Ocpp16ChargingPointActor", () => {
     await actor.start();
 
     session.emitOnline();
-    session.emitReconnecting(2);
+    session.emitReconnecting(
+      2,
+      new SessionError(
+        "CONNECT_FAILED",
+        "建立底层链路失败",
+        new Error("ECONNREFUSED"),
+      ),
+    );
     session.emitOffline();
 
     expect(events).toEqual([
@@ -1800,6 +1808,7 @@ describe("Ocpp16ChargingPointActor", () => {
         resource: { scope: "session" },
         previousStatus: "offline",
         currentStatus: "online",
+        connectionUrl: "ws://localhost/cp-1",
       }),
       expect.objectContaining({
         type: "session.status",
@@ -1807,6 +1816,15 @@ describe("Ocpp16ChargingPointActor", () => {
         previousStatus: "online",
         currentStatus: "reconnecting",
         attempt: 2,
+        connectionUrl: "ws://localhost/cp-1",
+        error: {
+          code: "CONNECT_FAILED",
+          message: "建立底层链路失败",
+          cause: {
+            name: "Error",
+            message: "ECONNREFUSED",
+          },
+        },
       }),
       expect.objectContaining({
         type: "session.status",
@@ -1814,6 +1832,7 @@ describe("Ocpp16ChargingPointActor", () => {
         previousStatus: "reconnecting",
         currentStatus: "offline",
         reason: "unexpected_disconnect",
+        connectionUrl: "ws://localhost/cp-1",
       }),
     ]);
   });

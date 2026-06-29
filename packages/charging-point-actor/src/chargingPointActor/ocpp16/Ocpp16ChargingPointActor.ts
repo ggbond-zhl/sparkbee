@@ -87,6 +87,7 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
       });
     this.eventEnvelope = new Ocpp16EventEnvelope({
       chargingPointId: this.id,
+      connectionUrl: options.centralSystemUrl,
       protocol: this.protocol,
       clock: this.clock,
       idGenerator: this.idGenerator,

@@ -3,11 +3,14 @@ import type { Ocpp16Runtime, Ocpp16RuntimeEvent } from "../../protocol/runtime";
 import type {
   ISession,
   ProtocolMessageEvent as SessionProtocolMessageEvent,
+  SessionError,
   SessionOfflineReason,
 } from "../../protocol/session/types";
 import type { ProtocolClock } from "../../protocol/runtime/ocpp16/protocolClock";
 import type {
   ChargingPointActorEventBus,
+  ChargingPointActorEventError,
+  ChargingPointActorEventErrorCause,
   ChargingPointActorSessionStatus,
   ChargingPointActorStatus,
 } from "../types";
@@ -15,6 +18,7 @@ import { EventEnvelopePublisher } from "./EventEnvelopePublisher";
 
 export interface Ocpp16EventEnvelopeOptions {
   chargingPointId: string;
+  connectionUrl: string;
   protocol: ProtocolVersion;
   clock: ProtocolClock;
   idGenerator: () => string;
@@ -97,8 +101,14 @@ export class Ocpp16EventEnvelope {
     this.options.onOnline();
   };
 
-  private readonly handleReconnecting = (attempt: number): void => {
-    this.publishSessionStatus("reconnecting", { attempt });
+  private readonly handleReconnecting = (
+    attempt: number,
+    error?: SessionError,
+  ): void => {
+    this.publishSessionStatus("reconnecting", {
+      attempt,
+      ...(error === undefined ? {} : { error: toEventError(error) }),
+    });
   };
 
   private readonly handleOffline = (reason: SessionOfflineReason): void => {
@@ -162,7 +172,11 @@ export class Ocpp16EventEnvelope {
 
   private publishSessionStatus(
     currentStatus: ChargingPointActorSessionStatus,
-    extra: { attempt?: number; reason?: SessionOfflineReason } = {},
+    extra: {
+      attempt?: number;
+      reason?: SessionOfflineReason;
+      error?: ChargingPointActorEventError;
+    } = {},
   ): void {
     const previousStatus = this.sessionStatus;
     this.sessionStatus = currentStatus;
@@ -170,7 +184,54 @@ export class Ocpp16EventEnvelope {
       resource: { scope: "session" },
       previousStatus,
       currentStatus,
+      connectionUrl: this.options.connectionUrl,
       ...extra,
     });
   }
+}
+
+function toEventError(error: SessionError): ChargingPointActorEventError {
+  return {
+    code: error.code,
+    message: error.message,
+    ...(error.cause === undefined ? {} : { cause: toEventErrorCause(error.cause) }),
+  };
+}
+
+function toEventErrorCause(
+  cause: unknown,
+  depth = 0,
+): ChargingPointActorEventErrorCause {
+  if (depth >= 3) {
+    return { message: "Cause chain truncated" };
+  }
+
+  if (cause instanceof Error) {
+    return {
+      name: cause.name,
+      message: cause.message,
+      ...("code" in cause && typeof cause.code === "string"
+        ? { code: cause.code }
+        : {}),
+      ...(cause.cause === undefined
+        ? {}
+        : { cause: toEventErrorCause(cause.cause, depth + 1) }),
+    };
+  }
+
+  if (typeof cause === "object" && cause !== null) {
+    return {
+      ...("name" in cause && typeof cause.name === "string"
+        ? { name: cause.name }
+        : {}),
+      ...("code" in cause && typeof cause.code === "string"
+        ? { code: cause.code }
+        : {}),
+      ...("message" in cause && typeof cause.message === "string"
+        ? { message: cause.message }
+        : { message: String(cause) }),
+    };
+  }
+
+  return { message: String(cause) };
 }

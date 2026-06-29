@@ -10,7 +10,7 @@ type SessionReconnectControllerOptions = {
   transport: ITransport;
   reconnectPolicy: SessionReconnectPolicy;
   emitOnline(): void;
-  emitReconnecting(attempt: number): void;
+  emitReconnecting(attempt: number, error?: SessionError): void;
   emitOffline(reason: SessionOfflineReason): void;
 };
 
@@ -28,10 +28,14 @@ export class SessionReconnectController {
       return;
     }
 
-    this.scheduleAttempt(operation, 1);
+    this.scheduleAttempt(operation, 1, this.toSessionError(cause));
   }
 
-  private scheduleAttempt(operation: Deferred<void>, attempt: number): void {
+  private scheduleAttempt(
+    operation: Deferred<void>,
+    attempt: number,
+    error?: SessionError,
+  ): void {
     if (
       this.options.lifecycle.currentPhase !== "reconnecting" ||
       this.options.lifecycle.reconnectPromise !== operation.promise
@@ -39,7 +43,7 @@ export class SessionReconnectController {
       return;
     }
 
-    this.options.emitReconnecting(attempt);
+    this.options.emitReconnecting(attempt, error);
     const delayMs = this.options.reconnectPolicy.getDelayMs(attempt);
     this.options.lifecycle.scheduleReconnect(delayMs, () => {
       void this.runAttempt(operation, attempt);
@@ -78,7 +82,7 @@ export class SessionReconnectController {
         return;
       }
 
-      this.scheduleAttempt(operation, attempt + 1);
+      this.scheduleAttempt(operation, attempt + 1, this.toSessionError(cause));
     }
   }
 
@@ -93,5 +97,17 @@ export class SessionReconnectController {
     }
 
     this.options.emitOffline("reconnect_exhausted");
+  }
+
+  private toSessionError(cause: unknown): SessionError | undefined {
+    if (cause === undefined) {
+      return undefined;
+    }
+
+    if (cause instanceof SessionError) {
+      return cause;
+    }
+
+    return new SessionError("CONNECT_FAILED", "建立底层链路失败", cause);
   }
 }

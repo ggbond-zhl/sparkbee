@@ -9,6 +9,7 @@ import {
 } from "@spark-bee/contracts";
 
 import type { ServerDatabase } from "../../db";
+import type { ChargingPointEventStreamHub } from "../../lib/chargingPointEventStreamHub";
 import { ValidationError } from "../../utils/errors";
 import { createChargingPointService } from "./chargingPoint.service";
 
@@ -29,6 +30,10 @@ const notFoundResponse = {
 const chargingPointIdParamSchema = z.object({
   id: z.string().uuid().describe("桩实例的 UUID 主键。"),
 });
+
+export interface ChargingPointRouteDependencies {
+  chargingPointEventStreamHub?: ChargingPointEventStreamHub;
+}
 
 const listChargingPointsRoute = createRoute({
   method: "get",
@@ -129,7 +134,10 @@ const deleteChargingPointRoute = createRoute({
   },
 });
 
-export function createChargingPointRoute(database: ServerDatabase) {
+export function createChargingPointRoute(
+  database: ServerDatabase,
+  dependencies: ChargingPointRouteDependencies = {},
+) {
   const route = new OpenAPIHono({
     defaultHook: (result) => {
       if (!result.success) {
@@ -169,6 +177,7 @@ export function createChargingPointRoute(database: ServerDatabase) {
   route.openapi(deleteChargingPointRoute, async (context) => {
     const { id } = context.req.valid("param");
     await service.softDelete(id);
+    dependencies.chargingPointEventStreamHub?.delete(id);
     return context.body(null, 204);
   });
 

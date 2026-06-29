@@ -5,6 +5,8 @@ import {
 } from "@spark-bee/contracts";
 
 import type { ServerDatabase } from "../../db";
+import { ChargingPointActorRegistry } from "../../lib/chargingPointActorRegistry";
+import { ChargingPointEventStreamHub } from "../../lib/chargingPointEventStreamHub";
 import { ValidationError } from "../../utils/errors";
 import {
   createChargingPointOperationService,
@@ -36,6 +38,12 @@ const operationSuccessResponse = (description: string) => ({
   description,
   content: jsonContent(chargingPointOperationResponseSchema),
 });
+
+const eventStreamContent = {
+  "text/event-stream": {
+    schema: z.string().describe("SSE 事件流。"),
+  },
+};
 
 const startChargingPointRoute = createRoute({
   method: "post",
@@ -97,6 +105,26 @@ const getChargingPointStatusRoute = createRoute({
   },
 });
 
+const getChargingPointEventsRoute = createRoute({
+  method: "get",
+  path: "/{id}/events",
+  tags: ["ChargingPointEvent"],
+  summary: "订阅桩事件流",
+  description:
+    "订阅单个桩实例的 SSE 事件流；连接建立后先发送当前运行状态快照，再推送后续实时协议事件。",
+  request: {
+    params: chargingPointIdParamSchema,
+  },
+  responses: {
+    200: {
+      description: "桩事件流已建立。",
+      content: eventStreamContent,
+    },
+    400: validationErrorResponse,
+    404: notFoundResponse,
+  },
+});
+
 export function createChargingPointOperationRoute(
   database: ServerDatabase,
   dependencies: ChargingPointOperationRouteDependencies = {},
@@ -113,7 +141,15 @@ export function createChargingPointOperationRoute(
       }
     },
   });
-  const service = createChargingPointOperationService(database, dependencies);
+  const chargingPointActorRegistry =
+    dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry();
+  const chargingPointEventStreamHub =
+    dependencies.chargingPointEventStreamHub ?? new ChargingPointEventStreamHub();
+  const service = createChargingPointOperationService(database, {
+    ...dependencies,
+    chargingPointActorRegistry,
+    chargingPointEventStreamHub,
+  });
 
   route.openapi(startChargingPointRoute, async (context) => {
     const { id } = context.req.valid("param");
@@ -130,5 +166,38 @@ export function createChargingPointOperationRoute(
     return context.json(await service.getStatus(id), 200);
   });
 
+  route.openapi(getChargingPointEventsRoute, async (context) => {
+    const { id } = context.req.valid("param");
+    const snapshot = await service.getStatus(id);
+    let unsubscribe: () => void = () => undefined;
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encodeSseEvent("snapshot", snapshot));
+        unsubscribe = chargingPointEventStreamHub.subscribe(id, (event) => {
+          controller.enqueue(encodeSseEvent(event.event, event.data));
+          if (event.close === true) {
+            unsubscribe();
+            controller.close();
+          }
+        });
+      },
+      cancel() {
+        unsubscribe();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream; charset=utf-8",
+      },
+    });
+  });
+
   return route;
+}
+
+function encodeSseEvent(event: string, data: unknown): Uint8Array {
+  return new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }

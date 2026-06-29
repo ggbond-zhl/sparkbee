@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import NodeWebSocket, { type RawData } from "ws";
 
 import { normalizeRawMessage } from "./messageNormalization";
 import { TransportLifecycleMachine } from "./TransportLifecycleMachine";
@@ -14,13 +15,15 @@ export interface WebSocketTransportOptions {
   url: string;
   protocols?: string | string[];
   connectTimeoutMs?: number;
+  webSocketFactory?: WebSocketConstructorLike;
 }
 
 type WebSocketConstructorLike = {
   new(
     url: string | URL,
     protocols?: string | string[],
-  ): WebSocket;
+    options?: { handshakeTimeout?: number },
+  ): WebSocketLike;
 };
 
 interface WebSocketCloseDetails {
@@ -28,14 +31,33 @@ interface WebSocketCloseDetails {
   reason?: string;
 }
 
+type WebSocketLike = {
+  readonly readyState: number;
+  binaryType?: string;
+  on(event: "open", listener: () => void): WebSocketLike;
+  on(event: "message", listener: (data: RawData) => void): WebSocketLike;
+  on(event: "error", listener: (error: Error) => void): WebSocketLike;
+  on(
+    event: "close",
+    listener: (code: number, reason: Buffer) => void,
+  ): WebSocketLike;
+  removeAllListeners?(): WebSocketLike;
+  send(message: RawMessage): void;
+  close(code?: number, reason?: string): void;
+  terminate?(): void;
+};
+
 const NORMAL_CLOSE_CODE = 1000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
-const INBOUND_BINARY_TYPE: WebSocket["binaryType"] = "arraybuffer";
+const INBOUND_BINARY_TYPE = "arraybuffer";
 
-function normalizeCloseDetails(event: CloseEvent): WebSocketCloseDetails {
+function normalizeCloseDetails(
+  code?: number,
+  reason?: Buffer,
+): WebSocketCloseDetails {
   return {
-    code: event.code,
-    reason: normalizeCloseReason(event.reason),
+    code,
+    reason: normalizeCloseReason(reason?.toString() ?? ""),
   };
 }
 
@@ -43,11 +65,19 @@ function normalizeCloseReason(reason: string): string | undefined {
   return reason === "" ? undefined : reason;
 }
 
+function normalizeSocketErrorCause(error: Error): unknown {
+  if (error.message.length > 0 || error.cause !== undefined) {
+    return error;
+  }
+
+  return new Error("WebSocket error", { cause: error });
+}
+
 /** 将 Node WebSocket 生命周期收敛为 transport 约定的稳定语义。 */
 export class WebSocketTransport implements ITransport {
   private readonly emitter = new EventEmitter();
   private readonly lifecycle = new TransportLifecycleMachine();
-  private socket?: WebSocket;
+  private socket?: WebSocketLike;
   private connectTimeoutId?: ReturnType<typeof setTimeout>;
   private readonly options: WebSocketTransportOptions;
 
@@ -240,7 +270,7 @@ export class WebSocketTransport implements ITransport {
   }
 
   // 超时要同时结束 connect、释放 socket，并阻止迟到事件扰乱状态。
-  private handleConnectTimeout(socket: WebSocket, timeoutMs: number): void {
+  private handleConnectTimeout(socket: WebSocketLike, timeoutMs: number): void {
     if (
       socket !== this.socket ||
       this.lifecycle.currentState !== "connecting"
@@ -280,21 +310,21 @@ export class WebSocketTransport implements ITransport {
     }
   }
 
-  private startConnectTimeout(socket: WebSocket): void {
+  private startConnectTimeout(socket: WebSocketLike): void {
     const timeoutMs = this.options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
     this.connectTimeoutId = setTimeout(() => {
       this.handleConnectTimeout(socket, timeoutMs);
     }, timeoutMs);
   }
 
-  private bindSocketHandlers(socket: WebSocket): void {
-    socket.onopen = this.handleOpen;
-    socket.onmessage = this.handleMessage;
-    socket.onerror = this.handleError;
-    socket.onclose = this.handleClose;
+  private bindSocketHandlers(socket: WebSocketLike): void {
+    socket.on("open", this.handleOpen);
+    socket.on("message", this.handleMessage);
+    socket.on("error", this.handleError);
+    socket.on("close", this.handleClose);
   }
 
-  private releaseSocket(socket: WebSocket): void {
+  private releaseSocket(socket: WebSocketLike): void {
     this.cleanupSocket(socket);
 
     if (socket === this.socket) {
@@ -302,9 +332,9 @@ export class WebSocketTransport implements ITransport {
     }
   }
 
-  private terminateSocket(socket: WebSocket): void {
+  private terminateSocket(socket: WebSocketLike): void {
     try {
-      (socket as { terminate?: () => void }).terminate?.();
+      socket.terminate?.();
     } catch {
       // terminate() 只是兜底清理，失败时不覆盖主错误路径。
     }
@@ -318,7 +348,7 @@ export class WebSocketTransport implements ITransport {
 
     this.clearConnectTimeout();
     if (this.lifecycle.currentState === "disconnecting") {
-      if (socket.readyState === WebSocket.OPEN) {
+      if (socket.readyState === NodeWebSocket.OPEN) {
         this.requestSocketClose(NORMAL_CLOSE_CODE);
       }
 
@@ -332,7 +362,7 @@ export class WebSocketTransport implements ITransport {
     this.finishConnectSuccess();
   };
 
-  private readonly handleMessage = (event: MessageEvent): void => {
+  private readonly handleMessage = (data: RawData): void => {
     if (
       this.lifecycle.currentState !== "connected" ||
       this.socket === undefined
@@ -341,7 +371,7 @@ export class WebSocketTransport implements ITransport {
     }
 
     try {
-      const rawMessage = normalizeRawMessage(event.data);
+      const rawMessage = normalizeRawMessage(data);
       this.emit("message", rawMessage);
     } catch (cause) {
       const error =
@@ -352,7 +382,7 @@ export class WebSocketTransport implements ITransport {
     }
   };
 
-  private readonly handleError = (event: Event): void => {
+  private readonly handleError = (error: Error): void => {
     const socket = this.socket;
     if (socket === undefined) {
       return;
@@ -361,7 +391,11 @@ export class WebSocketTransport implements ITransport {
     if (this.lifecycle.currentState === "connecting") {
       this.releaseSocket(socket);
       this.finishConnectFailure(
-        new TransportError("CONNECT_FAILED", "WebSocket 连接失败", event),
+        new TransportError(
+          "CONNECT_FAILED",
+          "WebSocket 连接失败",
+          normalizeSocketErrorCause(error),
+        ),
       );
       this.terminateSocket(socket);
       return;
@@ -380,26 +414,30 @@ export class WebSocketTransport implements ITransport {
         return;
       }
 
-      if (socket.readyState === WebSocket.OPEN) {
+      if (socket.readyState === NodeWebSocket.OPEN) {
         this.emit(
           "error",
-          new TransportError("INTERNAL_ERROR", "WebSocket 运行时异常", event),
+          new TransportError(
+            "INTERNAL_ERROR",
+            "WebSocket 运行时异常",
+            normalizeSocketErrorCause(error),
+          ),
         );
         return;
       }
 
       this.releaseSocket(socket);
-      this.emitUnexpectedDisconnect(event);
+      this.emitUnexpectedDisconnect(normalizeSocketErrorCause(error));
     });
   };
 
-  private readonly handleClose = (event: CloseEvent): void => {
+  private readonly handleClose = (code?: number, reason?: Buffer): void => {
     const socket = this.socket;
     if (socket === undefined) {
       return;
     }
 
-    const details = normalizeCloseDetails(event);
+    const details = normalizeCloseDetails(code, reason);
 
     this.releaseSocket(socket);
 
@@ -410,7 +448,11 @@ export class WebSocketTransport implements ITransport {
 
     if (this.lifecycle.currentState === "connecting") {
       this.finishConnectFailure(
-        new TransportError("CONNECT_FAILED", "WebSocket 连接失败", event),
+        new TransportError(
+          "CONNECT_FAILED",
+          "WebSocket 连接失败",
+          new Error(details.reason ?? "WebSocket closed before opening"),
+        ),
         details,
       );
       return;
@@ -420,15 +462,15 @@ export class WebSocketTransport implements ITransport {
       return;
     }
 
-    this.emitUnexpectedDisconnect(event, details);
+    this.emitUnexpectedDisconnect(
+      new Error(details.reason ?? "WebSocket closed unexpectedly"),
+      details,
+    );
   };
 
-  private cleanupSocket(socket: WebSocket): void {
+  private cleanupSocket(socket: WebSocketLike): void {
     this.clearConnectTimeout();
-    socket.onopen = null;
-    socket.onmessage = null;
-    socket.onerror = null;
-    socket.onclose = null;
+    socket.removeAllListeners?.();
   }
 
   private clearConnectTimeout(): void {
@@ -440,12 +482,12 @@ export class WebSocketTransport implements ITransport {
     this.connectTimeoutId = undefined;
   }
 
-  private getOpenSocketForSend(): WebSocket {
+  private getOpenSocketForSend(): WebSocketLike {
     const socket = this.socket;
     if (
       this.lifecycle.currentState !== "connected" ||
       socket === undefined ||
-      socket.readyState !== WebSocket.OPEN
+      socket.readyState !== NodeWebSocket.OPEN
     ) {
       throw new TransportError(
         "SEND_FAILED",
@@ -456,15 +498,20 @@ export class WebSocketTransport implements ITransport {
     return socket;
   }
 
-  private createSocket(): WebSocket {
-    const WebSocketConstructor = WebSocket as unknown as WebSocketConstructorLike;
+  private createSocket(): WebSocketLike {
+    const WebSocketConstructor =
+      this.options.webSocketFactory ??
+      (NodeWebSocket as unknown as WebSocketConstructorLike);
     const protocols = this.options.protocols;
+    const constructorOptions = {
+      handshakeTimeout: this.options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
+    };
 
     if (protocols !== undefined) {
-      return new WebSocketConstructor(this.options.url, protocols);
+      return new WebSocketConstructor(this.options.url, protocols, constructorOptions);
     }
 
-    return new WebSocketConstructor(this.options.url);
+    return new WebSocketConstructor(this.options.url, undefined, constructorOptions);
   }
 
   private emit<K extends keyof TransportEvents>(

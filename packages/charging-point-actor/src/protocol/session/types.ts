@@ -64,7 +64,7 @@ export interface SessionDiagnostic {
 export interface SessionEvents {
   online: () => void;
   offline: (reason: SessionOfflineReason) => void;
-  reconnecting: (attempt: number) => void;
+  reconnecting: (attempt: number, error?: SessionError) => void;
   inboundRequest: (request: InboundRequest) => void;
   protocolMessage: (event: ProtocolMessageEvent) => void;
   sessionError: (diagnostic: SessionDiagnostic) => void;

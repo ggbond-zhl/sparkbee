@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   TransportError,
   WebSocketTransport,
+  type WebSocketTransportOptions,
 } from "../../../src/protocol/transport/index.ts";
 
 class FakeWebSocket {
@@ -32,6 +33,13 @@ class FakeWebSocket {
   sendCalls: Array<string | ArrayBufferLike | ArrayBufferView> = [];
   sendError?: unknown;
   terminated = false;
+  listenersCleared = false;
+  private readonly listeners = {
+    open: new Set<() => void>(),
+    message: new Set<(data: unknown) => void>(),
+    error: new Set<(error: Error) => void>(),
+    close: new Set<(code: number, reason: Buffer) => void>(),
+  };
 
   constructor(url: string | URL) {
     this.url = String(url);
@@ -61,28 +69,55 @@ class FakeWebSocket {
     this.readyState = FakeWebSocket.CLOSED;
   }
 
+  on(event: "open", listener: () => void): this;
+  on(event: "message", listener: (data: unknown) => void): this;
+  on(event: "error", listener: (error: Error) => void): this;
+  on(event: "close", listener: (code: number, reason: Buffer) => void): this;
+  on(
+    event: "open" | "message" | "error" | "close",
+    listener:
+      | (() => void)
+      | ((data: unknown) => void)
+      | ((error: Error) => void)
+      | ((code: number, reason: Buffer) => void),
+  ): this {
+    (this.listeners[event] as Set<typeof listener>).add(listener);
+    return this;
+  }
+
+  removeAllListeners(): this {
+    this.listeners.open.clear();
+    this.listeners.message.clear();
+    this.listeners.error.clear();
+    this.listeners.close.clear();
+    this.listenersCleared = true;
+    return this;
+  }
+
   open(): void {
     this.readyState = FakeWebSocket.OPEN;
-    this.onopen?.call(this as unknown as WebSocket, new Event("open"));
+    for (const listener of this.listeners.open) {
+      listener();
+    }
   }
 
   emitMessage(data: unknown): void {
-    this.onmessage?.call(
-      this as unknown as WebSocket,
-      new MessageEvent("message", { data }),
-    );
+    for (const listener of this.listeners.message) {
+      listener(data);
+    }
   }
 
   emitClose(code = 1000, reason = ""): void {
     this.readyState = FakeWebSocket.CLOSED;
-    this.onclose?.call(
-      this as unknown as WebSocket,
-      new CloseEvent("close", { code, reason }),
-    );
+    for (const listener of this.listeners.close) {
+      listener(code, Buffer.from(reason));
+    }
   }
 
-  emitError(): void {
-    this.onerror?.call(this as unknown as WebSocket, new Event("error"));
+  emitError(error = new Error("WebSocket error")): void {
+    for (const listener of this.listeners.error) {
+      listener(error);
+    }
   }
 }
 
@@ -97,6 +132,18 @@ function getSocket(): FakeWebSocket {
   return socket;
 }
 
+function createTransport(
+  options: Partial<WebSocketTransportOptions> = {},
+): WebSocketTransport {
+  return new WebSocketTransport({
+    url: "ws://localhost:3000",
+    connectTimeoutMs: 1_000,
+    webSocketFactory:
+      FakeWebSocket as unknown as WebSocketTransportOptions["webSocketFactory"],
+    ...options,
+  });
+}
+
 describe("WebSocketTransport", () => {
   beforeEach(() => {
     FakeWebSocket.reset();
@@ -109,10 +156,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("reuses the in-flight connect promise while the socket is connecting", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
 
     const firstConnect = transport.connect();
     const secondConnect = transport.connect();
@@ -128,10 +172,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("sets inbound binary frames to ArrayBuffer mode when connecting", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
 
     const connectPromise = transport.connect();
     const socket = getSocket();
@@ -144,10 +185,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("rejects connect and resolves disconnect when disconnect is requested during connect", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
 
     const connectPromise = transport.connect();
     const disconnectPromise = transport.disconnect();
@@ -167,10 +205,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("does not emit connected when open arrives after disconnect interrupts connect", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
     let connectedEvents = 0;
 
     transport.on("connected", () => {
@@ -198,10 +233,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("reuses the in-flight disconnect promise while the socket is disconnecting", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
 
     const connectPromise = transport.connect();
     const socket = getSocket();
@@ -221,10 +253,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("rejects connect on timeout, cleans up the socket, and terminates it", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1,
-    });
+    const transport = createTransport({ connectTimeoutMs: 1 });
 
     const connectPromise = transport.connect();
     const socket = getSocket();
@@ -235,18 +264,12 @@ describe("WebSocketTransport", () => {
     } satisfies Partial<TransportError>);
 
     expect(socket.terminated).toBe(true);
-    expect(socket.onopen).toBeNull();
-    expect(socket.onmessage).toBeNull();
-    expect(socket.onerror).toBeNull();
-    expect(socket.onclose).toBeNull();
+    expect(socket.listenersCleared).toBe(true);
     expect(transport.isConnected()).toBe(false);
   });
 
   test("rejects connect immediately when the socket errors before opening", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
 
     const connectPromise = transport.connect();
     const socket = getSocket();
@@ -266,11 +289,26 @@ describe("WebSocketTransport", () => {
     expect(transport.isConnected()).toBe(false);
   });
 
-  test("emits an unexpected disconnect event when the connected socket closes", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
+  test("preserves socket error details when connect fails", async () => {
+    const transport = createTransport();
+
+    const connectPromise = transport.connect();
+    const socket = getSocket();
+    const socketError = new Error("WebSocket connection failed", {
+      cause: new Error("ECONNREFUSED 127.0.0.1:3000"),
     });
+
+    socket.emitError(socketError);
+
+    await expect(connectPromise).rejects.toMatchObject({
+      name: "TransportError",
+      code: "CONNECT_FAILED",
+      cause: socketError,
+    } satisfies Partial<TransportError>);
+  });
+
+  test("emits an unexpected disconnect event when the connected socket closes", async () => {
+    const transport = createTransport();
     const disconnectedEvents: Array<{
       intentional: boolean;
       code?: number;
@@ -302,10 +340,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("does not throw when an invalid message arrives without an error listener", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
 
     const connectPromise = transport.connect();
     const socket = getSocket();
@@ -318,10 +353,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("emits transport errors to registered error listeners", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
     const errors: TransportError[] = [];
 
     transport.on("error", (error) => {
@@ -341,10 +373,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("emits runtime transport errors without changing connection state when the socket stays open", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
     const errors: TransportError[] = [];
 
     transport.on("error", (error) => {
@@ -366,10 +395,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("emits disconnected when the socket errors after it has already left OPEN without a close event", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
     const disconnectedEvents: Array<{
       intentional: boolean;
       code?: number;
@@ -402,10 +428,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("does not emit duplicate disconnects when error is followed by close", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
     const disconnectedEvents: Array<{
       intentional: boolean;
       code?: number;
@@ -441,10 +464,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("copies ArrayBuffer payloads before emitting them", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
     const messages: Uint8Array[] = [];
 
     transport.on("message", (message) => {
@@ -467,10 +487,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("throws SEND_FAILED when send is called before the socket is connected", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
 
     await expect(transport.send("ping")).rejects.toMatchObject({
       name: "TransportError",
@@ -479,10 +496,7 @@ describe("WebSocketTransport", () => {
   });
 
   test("wraps underlying socket send errors in SEND_FAILED transport errors", async () => {
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
-    });
+    const transport = createTransport();
 
     const connectPromise = transport.connect();
     const socket = getSocket();
@@ -506,11 +520,9 @@ describe("WebSocketTransport", () => {
       }
     }
 
-    globalThis.WebSocket = ThrowingWebSocket as unknown as typeof WebSocket;
-
-    const transport = new WebSocketTransport({
-      url: "ws://localhost:3000",
-      connectTimeoutMs: 1_000,
+    const transport = createTransport({
+      webSocketFactory:
+        ThrowingWebSocket as unknown as WebSocketTransportOptions["webSocketFactory"],
     });
 
     await expect(transport.connect()).rejects.toMatchObject({

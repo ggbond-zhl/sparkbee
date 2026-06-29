@@ -15,7 +15,7 @@ type SessionConnectionControllerOptions = {
   resetMessagingState(): void;
   emitOnline(): void;
   emitOffline(reason: SessionOfflineReason): void;
-  emitReconnecting(attempt: number): void;
+  emitReconnecting(attempt: number, error?: SessionError): void;
   random?(): number;
 };
 

@@ -15,10 +15,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "ws": "^8.21.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^24.0.8",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.9.2",
     "vitest": "^4.0.15"
   }

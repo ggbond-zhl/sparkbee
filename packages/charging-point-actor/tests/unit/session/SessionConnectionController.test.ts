@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, vi, test } from "vitest";
 
 import { SessionConnectionController } from "../../../src/protocol/session/internal/SessionConnectionController.ts";
-import { createDeferredPromise, flushMicrotasks, MemoryTransport } from "./testDoubles.ts";
+import {
+  createDeferredPromise,
+  createTransportError,
+  flushMicrotasks,
+  MemoryTransport,
+} from "./testDoubles.ts";
 
 describe("SessionConnectionController", () => {
   afterEach(() => {
@@ -57,12 +62,18 @@ describe("SessionConnectionController", () => {
   test("starts reconnecting after an unexpected disconnect and recovers", async () => {
     vi.useFakeTimers();
     const transport = new MemoryTransport();
+    const initialError = createTransportError(
+      "CONNECT_FAILED",
+      "socket failed",
+      new Error("ECONNREFUSED"),
+    );
     transport.connectImplementation = async () => {
       if (transport.connectCalls === 1) {
-        throw new Error("initial connect failed");
+        throw initialError;
       }
     };
     const reconnectAttempts: number[] = [];
+    const reconnectErrors: unknown[] = [];
     const onlineEvents: string[] = [];
     const controller = new SessionConnectionController({
       transport,
@@ -76,8 +87,9 @@ describe("SessionConnectionController", () => {
         onlineEvents.push("online");
       },
       emitOffline: () => {},
-      emitReconnecting: (attempt) => {
+      emitReconnecting: (attempt, error) => {
         reconnectAttempts.push(attempt);
+        reconnectErrors.push(error);
       },
       random: () => 0.5,
     });
@@ -87,6 +99,13 @@ describe("SessionConnectionController", () => {
     });
     expect(controller.state).toBe("reconnecting");
     expect(reconnectAttempts).toEqual([1]);
+    expect(reconnectErrors).toEqual([
+      expect.objectContaining({
+        code: "CONNECT_FAILED",
+        message: "建立底层链路失败",
+        cause: initialError,
+      }),
+    ]);
 
     vi.advanceTimersByTime(1_000);
     await flushMicrotasks();

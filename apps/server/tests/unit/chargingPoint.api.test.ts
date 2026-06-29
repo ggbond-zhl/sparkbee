@@ -9,6 +9,7 @@ import {
 } from "@spark-bee/contracts";
 import type {
   ChargingPointActor,
+  ChargingPointActorEvent,
   ChargingPointActorStartResult,
   ChargingPointActorStatus,
   ChargingPointActorStopResult,
@@ -51,6 +52,15 @@ describe("chargingPoint management API", () => {
     expect(document.paths["/api/charging-points/{id}/status"].get.tags).toEqual([
       "ChargingPointOperation",
     ]);
+    expect(document.paths["/api/charging-points/{id}/events"].get.summary).toBe(
+      "订阅桩事件流",
+    );
+    expect(document.paths["/api/charging-points/{id}/events"].get.tags).toEqual([
+      "ChargingPointEvent",
+    ]);
+    expect(
+      document.paths["/api/charging-points/{id}/events"].get.responses["200"].content,
+    ).toHaveProperty("text/event-stream");
     expect(document.paths["/api/charging-points/{id}/connectors"].get.summary).toBe(
       "查询枪口列表",
     );
@@ -445,6 +455,283 @@ describe("chargingPoint management API", () => {
     });
   });
 
+  test("streams a snapshot for an existing stopped chargingPoint", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/events`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    await expect(readNextSseEvent(response)).resolves.toEqual({
+      event: "snapshot",
+      data: {
+        chargingPointId: chargingPoint.id,
+        status: "stopped",
+      },
+    });
+  });
+
+  test("returns 404 when subscribing to a missing chargingPoint event stream", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+
+    const response = await app.request(
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/events",
+    );
+
+    expect(response.status).toBe(404);
+    expect(apiErrorResponseSchema.parse(await response.json())).toEqual({
+      error: {
+        code: "CHARGING_POINT_NOT_FOUND",
+        message: "Charging point not found",
+      },
+    });
+  });
+
+  test("forwards running actor events to the chargingPoint event stream", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble();
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/events`);
+    const reader = response.body!.getReader();
+
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "snapshot",
+      data: {
+        chargingPointId: chargingPoint.id,
+        status: "running",
+      },
+    });
+
+    const actorEvent = {
+      id: "event-1",
+      sequence: 1,
+      type: "protocol.message",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: { scope: "protocol" },
+      occurredAt: "2026-06-28T00:00:00.000Z",
+      direction: "sent",
+      action: "BootNotification",
+      messageId: "message-1",
+      body: { status: "Accepted" },
+    } satisfies ChargingPointActorEvent;
+    actor.publish(actorEvent);
+
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "protocol.message",
+      data: actorEvent,
+    });
+    await reader.cancel();
+  });
+
+  test("keeps a stopped chargingPoint event stream subscribed after start", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble();
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/events`);
+    const reader = response.body!.getReader();
+
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "snapshot",
+      data: {
+        chargingPointId: chargingPoint.id,
+        status: "stopped",
+      },
+    });
+
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+    const actorEvent = {
+      id: "event-1",
+      sequence: 1,
+      type: "session.status",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: { scope: "session" },
+      occurredAt: "2026-06-28T00:00:00.000Z",
+      previousStatus: "offline",
+      currentStatus: "online",
+      connectionUrl: "ws://localhost:9000/ocpp/CP001",
+    } satisfies ChargingPointActorEvent;
+    actor.publish(actorEvent);
+
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "session.status",
+      data: actorEvent,
+    });
+    await reader.cancel();
+  });
+
+  test("closes the chargingPoint event stream after deletion", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/events`);
+    const reader = response.body!.getReader();
+
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "snapshot",
+      data: {
+        chargingPointId: chargingPoint.id,
+        status: "stopped",
+      },
+    });
+
+    const deleteResponse = await app.request(`/api/charging-points/${chargingPoint.id}`, {
+      method: "DELETE",
+    });
+
+    expect(deleteResponse.status).toBe(204);
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "deleted",
+      data: {
+        chargingPointId: chargingPoint.id,
+      },
+    });
+    await expect(reader.read()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+  });
+
+  test("keeps the chargingPoint event stream open after stop and restart", async () => {
+    const database = await createTestDatabase();
+    const actors = [createActorDouble(), createActorDouble()];
+    const createdActors: ReturnType<typeof createActorDouble>[] = [];
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        const actor = actors.shift();
+        expect(actor).toBeDefined();
+        createdActors.push(actor!);
+        actor!.id = options.id;
+        actor!.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        actor!.stopResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "stopped",
+        };
+        return actor!;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/events`);
+    const reader = response.body!.getReader();
+
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "snapshot",
+      data: {
+        chargingPointId: chargingPoint.id,
+        status: "running",
+      },
+    });
+
+    await app.request(`/api/charging-points/${chargingPoint.id}/stop`, { method: "POST" });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+    const restartedEvent = {
+      id: "event-2",
+      sequence: 1,
+      type: "session.status",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: { scope: "session" },
+      occurredAt: "2026-06-28T00:00:01.000Z",
+      previousStatus: "offline",
+      currentStatus: "online",
+      connectionUrl: "ws://localhost:9000/ocpp/CP001",
+    } satisfies ChargingPointActorEvent;
+    createdActors[1]!.publish(restartedEvent);
+
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "session.status",
+      data: restartedEvent,
+    });
+    await reader.cancel();
+  });
+
   test("rejects starting a chargingPoint without connectors", async () => {
     const database = await createTestDatabase();
     const app = createApp({ database });
@@ -525,6 +812,46 @@ describe("chargingPoint management API", () => {
       status: "running",
     });
     expect(actor.startCalls).toBe(1);
+  });
+
+  test("starts a chargingPoint with identity appended to the centralSystemUrl", async () => {
+    const database = await createTestDatabase();
+    let actorCentralSystemUrl = "";
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actorCentralSystemUrl = options.centralSystemUrl;
+        return createActorDouble({
+          id: options.id,
+          startResult: {
+            chargingPointId: options.id,
+            chargingPointActorStatus: "running",
+            bootStatus: "Accepted",
+          },
+        });
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(actorCentralSystemUrl).toBe("ws://localhost:9000/ocpp/CP001");
   });
 
   test("maps Boot Pending to starting status", async () => {
@@ -724,6 +1051,8 @@ function createActorDouble(
     stopError: Error;
   }> = {},
 ) {
+  const listeners = new Set<(event: ChargingPointActorEvent) => void | Promise<void>>();
+
   return {
     id: overrides.id ?? "00000000-0000-4000-8000-000000000001",
     protocol: "OCPP16J",
@@ -745,7 +1074,17 @@ function createActorDouble(
     stopCalls: 0,
     disposeCalls: 0,
     events: {
-      subscribe: () => () => undefined,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    },
+    publish(event: ChargingPointActorEvent) {
+      for (const listener of listeners) {
+        void listener(event);
+      }
     },
     async start() {
       this.startCalls += 1;
@@ -792,5 +1131,31 @@ function createActorDouble(
     startCalls: number;
     stopCalls: number;
     disposeCalls: number;
+    publish(event: ChargingPointActorEvent): void;
+  };
+}
+
+async function readNextSseEvent(response: Response) {
+  const reader = response.body?.getReader();
+  expect(reader).toBeDefined();
+  const event = await readSseEvent(reader!);
+  await reader!.cancel();
+
+  return event;
+}
+
+async function readSseEvent(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  const result = await reader.read();
+  expect(result.done).toBe(false);
+  const chunk = new TextDecoder().decode(result.value);
+  const eventLine = chunk.split("\n").find((line) => line.startsWith("event: "));
+  const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
+
+  expect(eventLine).toBeDefined();
+  expect(dataLine).toBeDefined();
+
+  return {
+    event: eventLine!.slice("event: ".length),
+    data: JSON.parse(dataLine!.slice("data: ".length)) as unknown,
   };
 }

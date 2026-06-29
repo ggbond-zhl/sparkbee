@@ -9,6 +9,7 @@ import { timeout } from "hono/timeout";
 
 import type { ServerDatabase } from "./db";
 import { ChargingPointActorRegistry } from "./lib/chargingPointActorRegistry";
+import { ChargingPointEventStreamHub } from "./lib/chargingPointEventStreamHub";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type { ChargingPointActorFactory } from "./modules/chargingPointOperation/chargingPointOperation.service";
 import { createRoutes } from "./routes";
@@ -18,6 +19,7 @@ export interface AppDependencies {
   environment?: string;
   timeoutMs?: number;
   chargingPointActorRegistry?: ChargingPointActorRegistry;
+  chargingPointEventStreamHub?: ChargingPointEventStreamHub;
   createChargingPointActor?: ChargingPointActorFactory;
 }
 
@@ -42,6 +44,8 @@ export function createApp(dependencies: AppDependencies = {}) {
       ...dependencies,
       chargingPointActorRegistry:
         dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry(),
+      chargingPointEventStreamHub:
+        dependencies.chargingPointEventStreamHub ?? new ChargingPointEventStreamHub(),
     }),
   );
   app.doc31("/api/openapi.json", {
