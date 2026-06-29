@@ -17,6 +17,7 @@ import {
   Ocpp16Runtime,
   ProtocolRuntimeError,
   type Ocpp16HeartbeatResult,
+  type Ocpp16RuntimeDiagnostic,
   type Ocpp16RuntimeOptions,
   type Ocpp16RuntimeEvent,
 } from "../../../../src/protocol/runtime/index.ts";
@@ -669,6 +670,7 @@ describe("Ocpp16Runtime", () => {
 
   describe("local transaction delivery", () => {
   test("runs the basic local charging happy path in protocol order", async () => {
+    const diagnostics: Ocpp16RuntimeDiagnostic[] = [];
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("Heartbeat", { currentTime: "2026-01-01T00:00:01.000Z" }),
@@ -689,7 +691,7 @@ describe("Ocpp16Runtime", () => {
       response("StatusNotification", {}),
       response("StopTransaction", {}),
       response("StatusNotification", {}),
-    ]);
+    ], { diagnostics });
 
     await boot(protocolRuntime);
     await protocolRuntime.sendHeartbeat();
@@ -786,6 +788,44 @@ describe("Ocpp16Runtime", () => {
       connectorId: 1,
       status: "Preparing",
     });
+    const actionDiagnostics = diagnostics.filter((diagnostic) =>
+      diagnostic.context?.category === "action"
+    );
+    for (const name of [
+      "PlugConnector",
+      "StartTransaction",
+      "MeterValues",
+      "StopTransaction",
+    ]) {
+      expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+        code: "OCPP16_ACTION_STARTED",
+        context: expect.objectContaining({
+          category: "action",
+          phase: "started",
+          name,
+        }),
+      }));
+      expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+        code: "OCPP16_ACTION_COMPLETED",
+        context: expect.objectContaining({
+          category: "action",
+          phase: "completed",
+          name,
+          durationMs: 0,
+        }),
+      }));
+    }
+    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+      code: "OCPP16_ACTION_COMPLETED",
+      context: expect.objectContaining({
+        name: "MeterValues",
+        input: expect.objectContaining({ meterWh: 160 }),
+        result: expect.objectContaining({
+          outcome: "Accepted",
+          transactionId: "1001",
+        }),
+      }),
+    }));
     expect(getAuthorizationGrant(protocolRuntime)).toMatchObject({
       credentialId: "TAG-1",
       status: "accepted",
@@ -6063,6 +6103,244 @@ describe("Ocpp16Runtime", () => {
     ]);
   });
 
+  test("writes inbound command diagnostics for supported and unsupported commands", async () => {
+    const diagnostics: Ocpp16RuntimeDiagnostic[] = [];
+    const { protocolRuntime } = createProtocolRuntime([], { diagnostics });
+    const supported = new FakeInboundRequest("ClearCache", {}, "command-1");
+    const unsupported = new FakeInboundRequest("Reset", { type: "Soft" }, "command-2");
+
+    await protocolRuntime.handleInboundRequest(supported);
+    await protocolRuntime.handleInboundRequest(unsupported);
+
+    const commandDiagnostics = diagnostics.filter((diagnostic) =>
+      diagnostic.context?.category === "command"
+    );
+    const supportedStarted = commandDiagnostics.find((diagnostic) =>
+      diagnostic.context?.name === "ClearCache" &&
+      diagnostic.context.phase === "started"
+    );
+    const supportedCompleted = commandDiagnostics.find((diagnostic) =>
+      diagnostic.context?.name === "ClearCache" &&
+      diagnostic.context.phase === "completed"
+    );
+
+    expect(supportedStarted).toMatchObject({
+      level: "info",
+      code: "OCPP16_COMMAND_STARTED",
+      message: "OCPP 1.6 command started",
+      context: {
+        category: "command",
+        phase: "started",
+        name: "ClearCache",
+        messageId: "command-1",
+        input: {},
+      },
+    });
+    expect(supportedCompleted).toMatchObject({
+      level: "info",
+      code: "OCPP16_COMMAND_COMPLETED",
+      message: "OCPP 1.6 command completed",
+      context: {
+        category: "command",
+        phase: "completed",
+        name: "ClearCache",
+        messageId: "command-1",
+        input: {},
+        responsePayload: { status: "Accepted" },
+        durationMs: 0,
+      },
+    });
+    expect(supportedCompleted?.context?.operationId).toBe(
+      supportedStarted?.context?.operationId,
+    );
+    expect(commandDiagnostics).toContainEqual(expect.objectContaining({
+      level: "warn",
+      code: "OCPP16_COMMAND_REJECTED",
+      context: expect.objectContaining({
+        category: "command",
+        phase: "rejected",
+        name: "Reset",
+        messageId: "command-2",
+        input: { type: "Soft" },
+        responsePayload: {
+          errorCode: "NotSupported",
+          message: "Reset 暂不支持",
+        },
+      }),
+    }));
+  });
+
+  test("writes failed command diagnostics when the handler rejects the request", async () => {
+    const diagnostics: Ocpp16RuntimeDiagnostic[] = [];
+    const { protocolRuntime } = createProtocolRuntime([], {
+      diagnostics,
+      configurationCatalog: {
+        chargingPointId: "cp-1",
+        protocolVersion: "OCPP16J",
+        entries: [
+          {
+            key: "GetConfigurationMaxKeys",
+            value: "2",
+            valueType: "integer",
+            minValue: 1,
+            readonly: true,
+          },
+        ],
+      },
+    });
+    const payload = {
+      key: ["HeartbeatInterval", "NumberOfConnectors", "CustomConfig"],
+    };
+    const request = new FakeInboundRequest(
+      "GetConfiguration",
+      payload,
+      "command-failed-1",
+    );
+
+    await protocolRuntime.handleInboundRequest(request);
+
+    const started = diagnostics.find((diagnostic) =>
+      diagnostic.context?.category === "command" &&
+      diagnostic.context.name === "GetConfiguration" &&
+      diagnostic.context.phase === "started"
+    );
+    const failed = diagnostics.find((diagnostic) =>
+      diagnostic.context?.category === "command" &&
+      diagnostic.context.name === "GetConfiguration" &&
+      diagnostic.context.phase === "failed"
+    );
+
+    expect(failed).toMatchObject({
+      level: "error",
+      code: "OCPP16_COMMAND_FAILED",
+      message: "OCPP 1.6 command failed",
+      context: {
+        category: "command",
+        phase: "failed",
+        name: "GetConfiguration",
+        messageId: "command-failed-1",
+        input: payload,
+        responsePayload: {
+          errorCode: "OccurrenceConstraintViolation",
+          message: "GetConfiguration.req key 数量超过 GetConfigurationMaxKeys",
+          details: {
+            requestedKeys: 3,
+            maxKeys: 2,
+          },
+        },
+        durationMs: 0,
+      },
+    });
+    expect(failed?.context?.operationId).toBe(started?.context?.operationId);
+  });
+
+  test("separates accepted remote command diagnostics from follow-up action diagnostics", async () => {
+    const diagnostics: Ocpp16RuntimeDiagnostic[] = [];
+    const { protocolRuntime } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: { status: "Accepted" },
+      }),
+      response("StatusNotification", {}),
+    ], { diagnostics });
+    await boot(protocolRuntime);
+    await protocolRuntime.plugConnector({ evseId: 1, connectorId: 1 });
+    const request = new FakeInboundRequest("RemoteStartTransaction", {
+      idTag: "TAG-1",
+      connectorId: 1,
+    }, "remote-start-1");
+
+    await protocolRuntime.handleInboundRequest(request);
+
+    const commandCompletedIndex = diagnostics.findIndex((diagnostic) =>
+      diagnostic.context?.category === "command" &&
+      diagnostic.context.name === "RemoteStartTransaction" &&
+      diagnostic.context.phase === "completed"
+    );
+    const startActionStartedIndex = diagnostics.findIndex((diagnostic) =>
+      diagnostic.context?.category === "action" &&
+      diagnostic.context.name === "StartTransaction" &&
+      diagnostic.context.phase === "started"
+    );
+
+    expect(request.responses).toEqual([{ status: "Accepted" }]);
+    expect(commandCompletedIndex).toBeGreaterThan(-1);
+    expect(startActionStartedIndex).toBeGreaterThan(-1);
+    expect(commandCompletedIndex).toBeLessThan(startActionStartedIndex);
+    expect(diagnostics[commandCompletedIndex]).toMatchObject({
+      code: "OCPP16_COMMAND_COMPLETED",
+      context: {
+        category: "command",
+        phase: "completed",
+        name: "RemoteStartTransaction",
+        messageId: "remote-start-1",
+        input: {
+          idTag: "TAG-1",
+          connectorId: 1,
+        },
+        responsePayload: { status: "Accepted" },
+      },
+    });
+  });
+
+  test("writes heartbeat and rejected authorize action diagnostics", async () => {
+    const diagnostics: Ocpp16RuntimeDiagnostic[] = [];
+    const { protocolRuntime } = createProtocolRuntime([
+      bootAccepted(),
+      response("Heartbeat", { currentTime: "2026-01-01T00:00:00.000Z" }),
+      response("Authorize", {
+        idTagInfo: {
+          status: "Invalid",
+        },
+      }),
+    ], { diagnostics });
+    await boot(protocolRuntime);
+
+    await protocolRuntime.sendHeartbeat();
+    await protocolRuntime.authorize({ connectorId: 1, idTag: "CARD001" });
+
+    const actionDiagnostics = diagnostics.filter((diagnostic) =>
+      diagnostic.context?.category === "action"
+    );
+    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+      code: "OCPP16_ACTION_STARTED",
+      context: expect.objectContaining({
+        category: "action",
+        phase: "started",
+        name: "Heartbeat",
+      }),
+    }));
+    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+      level: "info",
+      code: "OCPP16_ACTION_COMPLETED",
+      context: expect.objectContaining({
+        category: "action",
+        phase: "completed",
+        name: "Heartbeat",
+        result: expect.objectContaining({ status: "Accepted" }),
+        durationMs: 0,
+      }),
+    }));
+    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+      level: "warn",
+      code: "OCPP16_ACTION_REJECTED",
+      message: "OCPP 1.6 action rejected",
+      context: expect.objectContaining({
+        category: "action",
+        phase: "rejected",
+        name: "Authorize",
+        input: { connectorId: 1, idTag: "CARD001" },
+        result: expect.objectContaining({
+          outcome: "Rejected",
+          idTag: "CARD001",
+        }),
+        durationMs: 0,
+      }),
+    }));
+  });
+
   });
 
   describe("lifecycle cleanup", () => {
@@ -6108,6 +6386,8 @@ function createMultiEvseChargingPoint(
 }
 
 async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 }

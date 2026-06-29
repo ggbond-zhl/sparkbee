@@ -6,6 +6,7 @@ import {
   requireAuthorizableConnector,
   requireLocallyAuthorizableConnector,
 } from "../connectorSelection";
+import { traceOcpp16RuntimeOperation } from "../diagnostics";
 import { emitAuthorizationStatus } from "../events";
 import type { Ocpp16RuntimeContext } from "../state";
 import { getOcpp16TransactionDelivery } from "../Ocpp16TransactionDelivery";
@@ -20,6 +21,21 @@ import {
 } from "../Ocpp16AuthorizationPolicy";
 
 export async function authorize(
+  context: Ocpp16RuntimeContext,
+  input: Ocpp16AuthorizeInput,
+): Promise<Ocpp16AuthorizeResult> {
+  return traceOcpp16RuntimeOperation(
+    context,
+    {
+      category: "action",
+      name: "Authorize",
+      input,
+    },
+    () => authorizeCore(context, input),
+  );
+}
+
+async function authorizeCore(
   context: Ocpp16RuntimeContext,
   input: Ocpp16AuthorizeInput,
 ): Promise<Ocpp16AuthorizeResult> {

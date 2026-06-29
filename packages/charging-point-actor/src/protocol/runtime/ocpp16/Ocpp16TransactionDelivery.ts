@@ -17,6 +17,7 @@ import {
   resolveOcppTransactionId,
 } from "./resourceAccess";
 import type { Ocpp16RuntimeContext } from "./state";
+import { traceOcpp16RuntimeOperation } from "./diagnostics";
 import type {
   Ocpp16MeterValueInput,
   Ocpp16MeterValuesResult,
@@ -60,7 +61,15 @@ export class Ocpp16TransactionDelivery {
     input: Ocpp16StartTransactionInput,
     options: { requireAuthorization: boolean } = { requireAuthorization: true },
   ): Promise<Ocpp16TransactionStartResult> {
-    return startTransaction(this.context, input, options);
+    return traceOcpp16RuntimeOperation(
+      this.context,
+      {
+        category: "action",
+        name: "StartTransaction",
+        input: { ...input, requireAuthorization: options.requireAuthorization },
+      },
+      () => startTransaction(this.context, input, options),
+    );
   }
 
   recordMeterValue(
@@ -78,11 +87,26 @@ export class Ocpp16TransactionDelivery {
   }
 
   stop(input: Ocpp16StopTransactionInput): Promise<Ocpp16StopTransactionResult> {
-    return stopTransaction(this.context, input);
+    return traceOcpp16RuntimeOperation(
+      this.context,
+      {
+        category: "action",
+        name: "StopTransaction",
+        input,
+      },
+      () => stopTransaction(this.context, input),
+    );
   }
 
   replayPending(): Promise<void> {
-    return replayOfflineTransactions(this.context);
+    return traceOcpp16RuntimeOperation(
+      this.context,
+      {
+        category: "action",
+        name: "OfflineTransactionReplay",
+      },
+      () => replayOfflineTransactions(this.context),
+    );
   }
 
   applyMeterValueSampleIntervalChange(): void {

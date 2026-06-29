@@ -30,6 +30,7 @@ export function createDefaultOcpp16Runtime(
     protocolClock: ProtocolClock;
     idGenerator: () => string;
     configurationCatalog?: Ocpp16RuntimeOptions["configurationCatalog"];
+    emitDiagnostic?: Ocpp16RuntimeOptions["emitDiagnostic"];
   },
 ): Ocpp16Runtime {
   return new Ocpp16Runtime({
@@ -38,6 +39,7 @@ export function createDefaultOcpp16Runtime(
     configurationCatalog: runtimeOptions.configurationCatalog,
     protocolClock: runtimeOptions.protocolClock,
     idGenerator: runtimeOptions.idGenerator,
+    emitDiagnostic: runtimeOptions.emitDiagnostic,
   });
 }
 

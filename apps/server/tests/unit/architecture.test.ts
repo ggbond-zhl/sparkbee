@@ -62,6 +62,7 @@ describe("server architecture", () => {
     expect(libFiles).toEqual([
       "chargingPointActor.ts",
       "chargingPointActorRegistry.ts",
+      "chargingPointDiagnosticFileWriter.ts",
       "chargingPointEventStreamHub.ts",
     ]);
   });

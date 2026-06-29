@@ -2,6 +2,7 @@ import {
   hasActiveTransactionOnConnector,
   requireDomainConnector,
 } from "../connectorSelection";
+import { traceOcpp16RuntimeOperation } from "../diagnostics";
 import { ProtocolRuntimeError } from "../errors";
 import type { Ocpp16RuntimeContext } from "../state";
 import type {
@@ -17,6 +18,21 @@ import {
 } from "./connectorStatusTransition";
 
 export async function plugConnector(
+  context: Ocpp16RuntimeContext,
+  input: Ocpp16ConnectorActionInput,
+): Promise<Ocpp16ConnectorActionResult> {
+  return traceOcpp16RuntimeOperation(
+    context,
+    {
+      category: "action",
+      name: "PlugConnector",
+      input,
+    },
+    () => plugConnectorCore(context, input),
+  );
+}
+
+async function plugConnectorCore(
   context: Ocpp16RuntimeContext,
   input: Ocpp16ConnectorActionInput,
 ): Promise<Ocpp16ConnectorActionResult> {
@@ -66,6 +82,21 @@ export async function plugConnector(
 }
 
 export async function unplugConnector(
+  context: Ocpp16RuntimeContext,
+  input: Ocpp16ConnectorActionInput,
+): Promise<Ocpp16ConnectorActionResult> {
+  return traceOcpp16RuntimeOperation(
+    context,
+    {
+      category: "action",
+      name: "UnplugConnector",
+      input,
+    },
+    () => unplugConnectorCore(context, input),
+  );
+}
+
+async function unplugConnectorCore(
   context: Ocpp16RuntimeContext,
   input: Ocpp16ConnectorActionInput,
 ): Promise<Ocpp16ConnectorActionResult> {

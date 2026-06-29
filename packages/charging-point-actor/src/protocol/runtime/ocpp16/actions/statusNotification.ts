@@ -12,6 +12,7 @@ import {
 } from "../events";
 import { getUnexpectedResponseFields, toRequestErrorInfo } from "../requestErrors";
 import type { Ocpp16RuntimeContext } from "../state";
+import { traceOcpp16RuntimeOperation } from "../diagnostics";
 import type {
   Ocpp16ConnectorStatus,
   Ocpp16ReportConnectorStatusInput,
@@ -86,6 +87,21 @@ export async function reportChargingPointStatus(
 }
 
 export async function sendStatusNotification(
+  context: Ocpp16RuntimeContext,
+  input: StatusNotificationInput,
+): Promise<Ocpp16StatusNotificationResult> {
+  return traceOcpp16RuntimeOperation(
+    context,
+    {
+      category: "action",
+      name: "StatusNotification",
+      input,
+    },
+    () => sendStatusNotificationCore(context, input),
+  );
+}
+
+async function sendStatusNotificationCore(
   context: Ocpp16RuntimeContext,
   input: StatusNotificationInput,
 ): Promise<Ocpp16StatusNotificationResult> {

@@ -18,4 +18,14 @@ describe("server config", () => {
     expect(normalize(serverEnvPath)).toBe(normalize(workspaceEnvPath));
     expect(logSpy).not.toHaveBeenCalled();
   });
+
+  test("loads the charging point diagnostics directory with a development default", async () => {
+    vi.resetModules();
+    const { loadServerConfig } = await import("../../src/config/env");
+
+    expect(loadServerConfig({}).diagnosticDirectory).toBe("logs/diagnostics");
+    expect(loadServerConfig({
+      CHARGING_POINT_DIAGNOSTIC_DIRECTORY: "tmp/diagnostics",
+    }).diagnosticDirectory).toBe("tmp/diagnostics");
+  });
 });

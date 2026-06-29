@@ -5,8 +5,28 @@ import type {
 import { shouldSyncProtocolClock, type Ocpp16RuntimeContext } from "../state";
 import type { Ocpp16BootResult } from "../types";
 import { getOcpp16TransactionDelivery } from "../Ocpp16TransactionDelivery";
+import { traceOcpp16RuntimeOperation } from "../diagnostics";
 
 export async function boot(
+  context: Ocpp16RuntimeContext,
+): Promise<Ocpp16BootResult> {
+  return traceOcpp16RuntimeOperation(
+    context,
+    {
+      category: "action",
+      name: "BootNotification",
+      input: {
+        chargePointVendor: context.chargingPoint.vendor,
+        chargePointModel: context.chargingPoint.model,
+        chargePointSerialNumber: context.chargingPoint.serialNumber,
+        firmwareVersion: context.chargingPoint.firmwareVersion,
+      },
+    },
+    () => bootCore(context),
+  );
+}
+
+async function bootCore(
   context: Ocpp16RuntimeContext,
 ): Promise<Ocpp16BootResult> {
   const response = await requestResponse(context, "BootNotification", {

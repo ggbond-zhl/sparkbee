@@ -6,7 +6,10 @@ import { createPostgresDatabase } from "./db/client";
 
 const config = loadServerConfig();
 const database = createPostgresDatabase(config.databaseUrl);
-const app = createApp({ database });
+const app = createApp({
+  database,
+  diagnosticDirectory: config.diagnosticDirectory,
+});
 
 serve({
   fetch: app.fetch,

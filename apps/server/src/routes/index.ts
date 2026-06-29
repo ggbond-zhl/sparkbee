@@ -2,6 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 
 import type { ServerDatabase } from "../db";
 import { ChargingPointActorRegistry } from "../lib/chargingPointActorRegistry";
+import { ChargingPointDiagnosticFileWriter } from "../lib/chargingPointDiagnosticFileWriter";
 import { ChargingPointEventStreamHub } from "../lib/chargingPointEventStreamHub";
 import type { ChargingPointActorFactory } from "../modules/chargingPointOperation/chargingPointOperation.service";
 import { createChargingPointRoute } from "../modules/chargingPoint/chargingPoint.route";
@@ -12,6 +13,7 @@ import { createHealthRoute } from "./health.route";
 export interface RouteDependencies {
   database?: ServerDatabase;
   chargingPointActorRegistry?: ChargingPointActorRegistry;
+  chargingPointDiagnosticFileWriter?: ChargingPointDiagnosticFileWriter;
   chargingPointEventStreamHub?: ChargingPointEventStreamHub;
   createChargingPointActor?: ChargingPointActorFactory;
 }
@@ -22,6 +24,9 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
     dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry();
   const chargingPointEventStreamHub =
     dependencies.chargingPointEventStreamHub ?? new ChargingPointEventStreamHub();
+  const chargingPointDiagnosticFileWriter =
+    dependencies.chargingPointDiagnosticFileWriter ??
+    new ChargingPointDiagnosticFileWriter("logs/diagnostics");
 
   routes.route("/", createHealthRoute());
   if (dependencies.database !== undefined) {
@@ -36,6 +41,7 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
       "/charging-points",
       createChargingPointOperationRoute(dependencies.database, {
         chargingPointActorRegistry,
+        chargingPointDiagnosticFileWriter,
         chargingPointEventStreamHub,
         createChargingPointActor: dependencies.createChargingPointActor,
       }),

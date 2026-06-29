@@ -5,6 +5,7 @@ import { createMeterValue } from "../payloadBuilders";
 import { emitTransactionMeterValue } from "../events";
 import { requireOcppConnectorId } from "../resourceAccess";
 import { requireConnectorSelection } from "../connectorSelection";
+import { traceOcpp16RuntimeOperation } from "../diagnostics";
 import { getUnexpectedResponseFields, toRequestErrorInfo } from "../requestErrors";
 import type { Ocpp16RuntimeContext } from "../state";
 import type {
@@ -28,13 +29,40 @@ export async function reportMeterValue(
   context: Ocpp16RuntimeContext,
   input: Ocpp16MeterValueInput,
 ): Promise<Ocpp16MeterValuesResult> {
-  return reportMeterValueWithContext(context, {
-    ...input,
-    readingContext: "Sample.Periodic",
-  });
+  return traceOcpp16RuntimeOperation(
+    context,
+    {
+      category: "action",
+      name: "MeterValues",
+      input,
+    },
+    () => reportMeterValueWithContext(context, {
+      ...input,
+      readingContext: "Sample.Periodic",
+    }),
+  );
 }
 
 export async function reportTriggeredMeterValue(
+  context: Ocpp16RuntimeContext,
+  input: {
+    connectorId: number;
+    meterWh: number;
+    sampledAt?: Date;
+  },
+): Promise<void> {
+  return traceOcpp16RuntimeOperation(
+    context,
+    {
+      category: "action",
+      name: "MeterValues",
+      input,
+    },
+    () => reportTriggeredMeterValueCore(context, input),
+  );
+}
+
+async function reportTriggeredMeterValueCore(
   context: Ocpp16RuntimeContext,
   input: {
     connectorId: number;

@@ -15,6 +15,7 @@ import type { ProtocolVersion } from "../shared/types";
 
 export type ChargingPointActorProtocol = "OCPP16J";
 export type ChargingPointActorOperationStatus = "accepted" | "rejected" | "failed";
+export type ChargingPointActorDiagnosticLevel = "info" | "warn" | "error";
 
 export type ChargingPointActorStatus = "starting" | "running" | "stopped";
 export type ChargingPointActorSessionStatus = "online" | "reconnecting" | "offline";
@@ -180,6 +181,21 @@ export interface ChargingPointActorEventBus {
   ): () => void;
 }
 
+export interface ChargingPointActorDiagnosticRecord {
+  id: string;
+  sequence: number;
+  chargingPointId: string;
+  occurredAt: string;
+  level: ChargingPointActorDiagnosticLevel;
+  message: string;
+  code?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface ChargingPointActorDiagnosticSink {
+  write(record: ChargingPointActorDiagnosticRecord): void | Promise<void>;
+}
+
 export type ChargingPointActorStartResult =
   | ChargingPointActorHeartbeatStartedResult
   | ChargingPointActorStartingStartResult;
@@ -311,6 +327,7 @@ export type Ocpp16ChargingPointActorOptions = {
   centralSystemUrl: string;
   chargingPoint: ChargingPoint | ChargingPointOptions;
   configurationCatalog?: Ocpp16ConfigurationCatalogInput;
+  diagnosticSink?: ChargingPointActorDiagnosticSink;
 };
 
 export type ChargingPointActorOptions = Ocpp16ChargingPointActorOptions;

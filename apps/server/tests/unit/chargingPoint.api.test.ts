@@ -9,6 +9,7 @@ import {
 } from "@spark-bee/contracts";
 import type {
   ChargingPointActor,
+  ChargingPointActorOptions,
   ChargingPointActorEvent,
   ChargingPointActorStartResult,
   ChargingPointActorStatus,
@@ -852,6 +853,48 @@ describe("chargingPoint management API", () => {
 
     expect(response.status).toBe(200);
     expect(actorCentralSystemUrl).toBe("ws://localhost:9000/ocpp/CP001");
+  });
+
+  test("injects a diagnostic sink when starting a chargingPoint", async () => {
+    const database = await createTestDatabase();
+    let actorOptions: ChargingPointActorOptions | undefined;
+    const app = createApp({
+      database,
+      diagnosticDirectory: "logs/diagnostics",
+      createChargingPointActor: (options) => {
+        actorOptions = options;
+        return createActorDouble({
+          id: options.id,
+          startResult: {
+            chargingPointId: options.id,
+            chargingPointActorStatus: "running",
+            bootStatus: "Accepted",
+          },
+        });
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(actorOptions?.diagnosticSink).toBeDefined();
+    expect(typeof actorOptions?.diagnosticSink?.write).toBe("function");
   });
 
   test("maps Boot Pending to starting status", async () => {

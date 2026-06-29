@@ -3,6 +3,7 @@ import { cloneDate, cloneNullableDate } from "../../../../shared/utils";
 import { toRequestErrorInfo } from "../requestErrors";
 import { parseHeartbeatCurrentTime } from "../responseParsers";
 import { requireRegisteredChargingPoint } from "../connectorSelection";
+import { traceOcpp16RuntimeOperation } from "../diagnostics";
 import type { Ocpp16RuntimeContext } from "../state";
 import type {
   Ocpp16HeartbeatLoopOptions,
@@ -12,6 +13,19 @@ import type {
 import { getOcpp16TransactionDelivery } from "../Ocpp16TransactionDelivery";
 
 export async function sendHeartbeat(
+  context: Ocpp16RuntimeContext,
+): Promise<Ocpp16HeartbeatResult> {
+  return traceOcpp16RuntimeOperation(
+    context,
+    {
+      category: "action",
+      name: "Heartbeat",
+    },
+    () => sendHeartbeatCore(context),
+  );
+}
+
+async function sendHeartbeatCore(
   context: Ocpp16RuntimeContext,
 ): Promise<Ocpp16HeartbeatResult> {
   requireRegisteredChargingPoint(

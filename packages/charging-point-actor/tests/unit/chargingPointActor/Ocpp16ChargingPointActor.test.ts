@@ -4,6 +4,8 @@ import { afterEach, describe, expect, vi, test } from "vitest";
 import { Ocpp16ChargingPointActor } from "../../../src/chargingPointActor/ocpp16/Ocpp16ChargingPointActor";
 import { ChargingPointActorError } from "../../../src/chargingPointActor/errors";
 import type {
+  ChargingPointActorDiagnosticRecord,
+  ChargingPointActorDiagnosticSink,
   ChargingPointActorEvent,
   ChargingPointActorEventType,
 } from "../../../src/chargingPointActor/index.ts";
@@ -12,6 +14,7 @@ import {
   type ISession,
   type OutboundRequestResult,
   type ProtocolMessageEvent,
+  type SessionDiagnostic,
   type SessionConnectionState,
   type SessionEvents,
 } from "../../../src/protocol/session/types.ts";
@@ -108,6 +111,10 @@ class FakeSession implements ISession {
 
   emitProtocolMessage(event: ProtocolMessageEvent): void {
     this.emitter.emit("protocolMessage", event);
+  }
+
+  emitSessionError(diagnostic: SessionDiagnostic): void {
+    this.emitter.emit("sessionError", diagnostic);
   }
 }
 
@@ -593,7 +600,9 @@ function mapAuthorizationStatus(
   }
 }
 
-function createHarness() {
+function createHarness(dependencies: {
+  diagnosticSink?: ChargingPointActorDiagnosticSink;
+} = {}) {
   const session = new FakeSession();
   const protocolRuntime = new FakeProtocolRuntime();
   const actor = new Ocpp16ChargingPointActor(
@@ -602,6 +611,7 @@ function createHarness() {
       protocol: "OCPP16J",
       centralSystemUrl: "ws://localhost/cp-1",
       chargingPoint: createChargingPoint(),
+      diagnosticSink: dependencies.diagnosticSink,
     },
     {
       session,
@@ -618,6 +628,7 @@ function createRuntimeHarness(
   replies: ConstructorParameters<typeof RuntimeFakeSession>[0],
   dependencies: {
     configurationCatalog?: Ocpp16RuntimeOptions["configurationCatalog"];
+    diagnosticSink?: ChargingPointActorDiagnosticSink;
   } = {},
 ) {
   const session = new RuntimeFakeSession(replies);
@@ -627,6 +638,7 @@ function createRuntimeHarness(
       protocol: "OCPP16J",
       centralSystemUrl: "ws://localhost/cp-1",
       chargingPoint: createChargingPoint(),
+      diagnosticSink: dependencies.diagnosticSink,
     },
     {
       session,
@@ -686,6 +698,244 @@ describe("Ocpp16ChargingPointActor", () => {
       chargingPointActorStatus: "running",
     });
     expect(actor.status).toBe("running");
+  });
+
+  test("writes diagnostic records for actor lifecycle transitions", async () => {
+    const diagnostics: ChargingPointActorDiagnosticRecord[] = [];
+    const { actor } = createHarness({
+      diagnosticSink: {
+        write: (record) => {
+          diagnostics.push(record);
+        },
+      },
+    });
+
+    await actor.start();
+    await actor.stop();
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        id: "event-1",
+        sequence: 1,
+        chargingPointId: "cp-1",
+        occurredAt: "2026-01-01T00:00:00.000Z",
+        level: "info",
+        code: "CHARGING_POINT_ACTOR_STATUS_CHANGED",
+        message: "Charging point actor status changed",
+        context: {
+          previousStatus: "stopped",
+          currentStatus: "starting",
+        },
+      }),
+      expect.objectContaining({
+        sequence: 2,
+        level: "info",
+        code: "CHARGING_POINT_ACTOR_STATUS_CHANGED",
+        context: {
+          previousStatus: "starting",
+          currentStatus: "running",
+        },
+      }),
+      expect.objectContaining({
+        sequence: 3,
+        level: "info",
+        code: "CHARGING_POINT_ACTOR_STATUS_CHANGED",
+        context: {
+          previousStatus: "running",
+          currentStatus: "stopped",
+        },
+      }),
+    ]);
+  });
+
+  test("isolates diagnostic sink failures from actor operations", async () => {
+    const unhandledRejections: unknown[] = [];
+    const handleUnhandledRejection = (reason: unknown): void => {
+      unhandledRejections.push(reason);
+    };
+    process.on("unhandledRejection", handleUnhandledRejection);
+    const { actor } = createHarness({
+      diagnosticSink: {
+        write: (record) => {
+          if (record.sequence === 1) {
+            throw new Error("diagnostic write failed");
+          }
+
+          return Promise.reject(new Error("async diagnostic write failed"));
+        },
+      },
+    });
+
+    try {
+      await expect(actor.start()).resolves.toMatchObject({
+        chargingPointActorStatus: "running",
+      });
+      await flushMacrotasks();
+
+      expect(actor.status).toBe("running");
+      expect(unhandledRejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", handleUnhandledRejection);
+    }
+  });
+
+  test("writes session errors as diagnostic records without raw protocol bodies", () => {
+    const diagnostics: ChargingPointActorDiagnosticRecord[] = [];
+    const { session } = createHarness({
+      diagnosticSink: {
+        write: (record) => {
+          diagnostics.push(record);
+        },
+      },
+    });
+
+    session.emitSessionError({
+      source: "decode",
+      action: "BootNotification",
+      messageId: "message-1",
+      raw: "[2,\"message-1\",\"BootNotification\",{}]",
+      error: new SessionError("DECODE_ERROR", "Invalid inbound message"),
+    });
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        chargingPointId: "cp-1",
+        level: "error",
+        code: "DECODE_ERROR",
+        message: "Charging point session reported diagnostic error",
+        context: {
+          source: "decode",
+          action: "BootNotification",
+          messageId: "message-1",
+          error: {
+            code: "DECODE_ERROR",
+            message: "Invalid inbound message",
+          },
+        },
+      }),
+    ]);
+  });
+
+  test("writes session connection changes as diagnostic records", () => {
+    const diagnostics: ChargingPointActorDiagnosticRecord[] = [];
+    const { session } = createHarness({
+      diagnosticSink: {
+        write: (record) => {
+          diagnostics.push(record);
+        },
+      },
+    });
+
+    session.emitOnline();
+    session.emitReconnecting(2, new SessionError("CONNECT_FAILED", "Connection failed"));
+    session.emitOffline();
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        level: "info",
+        code: "CHARGING_POINT_SESSION_ONLINE",
+        message: "Charging point session went online",
+      }),
+      expect.objectContaining({
+        sequence: 2,
+        level: "warn",
+        code: "CHARGING_POINT_SESSION_RECONNECTING",
+        message: "Charging point session is reconnecting",
+        context: {
+          attempt: 2,
+          error: {
+            code: "CONNECT_FAILED",
+            message: "Connection failed",
+          },
+        },
+      }),
+      expect.objectContaining({
+        sequence: 3,
+        level: "warn",
+        code: "CHARGING_POINT_SESSION_OFFLINE",
+        message: "Charging point session went offline",
+        context: {
+          reason: "unexpected_disconnect",
+        },
+      }),
+    ]);
+  });
+
+  test("writes startup protocol actions as diagnostic records", async () => {
+    const diagnostics: ChargingPointActorDiagnosticRecord[] = [];
+    const { actor } = createRuntimeHarness(
+      [
+        runtimeBootAccepted(),
+        runtimeResponse("StatusNotification", {}),
+        runtimeResponse("StatusNotification", {}),
+      ],
+      {
+        diagnosticSink: {
+          write: (record) => {
+            diagnostics.push(record);
+          },
+        },
+      },
+    );
+
+    await actor.start();
+
+    const actionDiagnostics = diagnostics.filter((record) =>
+      record.context?.category === "action"
+    );
+    const bootStarted = actionDiagnostics.find((record) =>
+      record.context?.name === "BootNotification" &&
+      record.context.phase === "started"
+    );
+    const bootCompleted = actionDiagnostics.find((record) =>
+      record.context?.name === "BootNotification" &&
+      record.context.phase === "completed"
+    );
+
+    expect(bootStarted).toMatchObject({
+      level: "info",
+      code: "OCPP16_ACTION_STARTED",
+      message: "OCPP 1.6 action started",
+      context: {
+        category: "action",
+        phase: "started",
+        name: "BootNotification",
+      },
+    });
+    expect(bootCompleted).toMatchObject({
+      level: "info",
+      code: "OCPP16_ACTION_COMPLETED",
+      message: "OCPP 1.6 action completed",
+      context: {
+        category: "action",
+        phase: "completed",
+        name: "BootNotification",
+        result: expect.objectContaining({ status: "Accepted" }),
+        durationMs: 0,
+      },
+    });
+    expect(bootCompleted?.context?.operationId).toBe(
+      bootStarted?.context?.operationId,
+    );
+    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+      code: "OCPP16_ACTION_STARTED",
+      context: expect.objectContaining({
+        category: "action",
+        phase: "started",
+        name: "StatusNotification",
+      }),
+    }));
+    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+      code: "OCPP16_ACTION_COMPLETED",
+      context: expect.objectContaining({
+        category: "action",
+        phase: "completed",
+        name: "StatusNotification",
+        result: expect.objectContaining({ outcome: "Accepted" }),
+      }),
+    }));
   });
 
   test("uses direct connector id for StartTransaction", async () => {

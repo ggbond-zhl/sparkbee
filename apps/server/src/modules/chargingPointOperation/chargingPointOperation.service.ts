@@ -1,4 +1,7 @@
-import type { ChargingPointOperationResponse } from "@spark-bee/contracts";
+import type {
+  ChargingPointDetailResponse,
+  ChargingPointOperationResponse,
+} from "@spark-bee/contracts";
 
 import type { ServerDatabase } from "../../db";
 import {
@@ -8,6 +11,7 @@ import {
   type ChargingPointActorOptions,
   type ChargingPointActorStartResult,
 } from "../../lib/chargingPointActor";
+import { ChargingPointDiagnosticFileWriter } from "../../lib/chargingPointDiagnosticFileWriter";
 import { ChargingPointActorRegistry } from "../../lib/chargingPointActorRegistry";
 import { ChargingPointEventStreamHub } from "../../lib/chargingPointEventStreamHub";
 import { AppError } from "../../utils/errors";
@@ -20,6 +24,7 @@ export type ChargingPointActorFactory = (
 
 export interface ChargingPointOperationServiceDependencies {
   chargingPointActorRegistry?: ChargingPointActorRegistry;
+  chargingPointDiagnosticFileWriter?: ChargingPointDiagnosticFileWriter;
   chargingPointEventStreamHub?: ChargingPointEventStreamHub;
   createChargingPointActor?: ChargingPointActorFactory;
 }
@@ -36,6 +41,7 @@ export function createChargingPointOperationService(
 
 export class ChargingPointOperationService {
   private readonly registry: ChargingPointActorRegistry;
+  private readonly diagnosticFileWriter?: ChargingPointDiagnosticFileWriter;
   private readonly eventStreamHub?: ChargingPointEventStreamHub;
   private readonly actorFactory: ChargingPointActorFactory;
 
@@ -45,6 +51,7 @@ export class ChargingPointOperationService {
   ) {
     this.registry =
       dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry();
+    this.diagnosticFileWriter = dependencies.chargingPointDiagnosticFileWriter;
     this.eventStreamHub = dependencies.chargingPointEventStreamHub;
     this.actorFactory = dependencies.createChargingPointActor ?? createChargingPointActor;
   }
@@ -62,7 +69,7 @@ export class ChargingPointOperationService {
     let entry: { actor: ChargingPointActor; created: boolean };
     try {
       entry = this.registry.acquire(id, () =>
-        this.actorFactory(toChargingPointActorOptions(chargingPoint)),
+        this.actorFactory(this.toActorOptions(chargingPoint)),
       );
     } catch (error) {
       throw this.mapStartError(error);
@@ -133,6 +140,18 @@ export class ChargingPointOperationService {
       bootStatus: result.bootStatus,
       retryAfterSec: "retryAfterSec" in result ? result.retryAfterSec : undefined,
     };
+  }
+
+  private toActorOptions(chargingPoint: ChargingPointDetailResponse): ChargingPointActorOptions {
+    const options = toChargingPointActorOptions(chargingPoint);
+    const diagnosticSink = this.diagnosticFileWriter?.createSink(chargingPoint.id);
+
+    return diagnosticSink === undefined
+      ? options
+      : {
+          ...options,
+          diagnosticSink,
+        };
   }
 
   private mapStartError(error: unknown): AppError {

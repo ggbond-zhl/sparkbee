@@ -1,5 +1,9 @@
 import type { InboundRequest } from "../../../session/types";
 import type { Ocpp16RuntimeContext } from "../state";
+import {
+  emitOcpp16RuntimeCommandResult,
+  traceOcpp16RuntimeCommandStarted,
+} from "../diagnostics";
 import { handleChangeAvailability } from "./changeAvailability";
 import { handleChangeConfiguration } from "./changeConfiguration";
 import { handleClearCache } from "./clearCache";
@@ -30,15 +34,124 @@ const handlers: Record<string, Ocpp16CommandHandler> = {
 };
 
 export class Ocpp16CommandDispatch {
-  handle(
+  async handle(
     context: Ocpp16RuntimeContext,
     request: InboundRequest,
   ): Promise<void> {
+    const trace = traceOcpp16RuntimeCommandStarted(context, {
+      name: request.action,
+      messageId: request.messageId,
+      payload: request.payload,
+    });
     const handler = handlers[request.action];
     if (handler === undefined) {
-      return request.reject("NotSupported", `${request.action} 暂不支持`);
+      const responsePayload = {
+        errorCode: "NotSupported",
+        message: `${request.action} 暂不支持`,
+      };
+      try {
+        await request.reject(responsePayload.errorCode, responsePayload.message);
+        emitOcpp16RuntimeCommandResult(context, {
+          name: request.action,
+          messageId: request.messageId,
+          operationId: trace.operationId,
+          startedAt: trace.startedAt,
+          requestPayload: request.payload,
+          phase: "rejected",
+          responsePayload,
+        });
+      } catch (cause) {
+        emitOcpp16RuntimeCommandResult(context, {
+          name: request.action,
+          messageId: request.messageId,
+          operationId: trace.operationId,
+          startedAt: trace.startedAt,
+          requestPayload: request.payload,
+          phase: "failed",
+          responsePayload,
+          error: cause,
+        });
+        throw cause;
+      }
+      return;
     }
 
-    return handler(context, request);
+    let terminalEmitted = false;
+    const tracedRequest: InboundRequest = {
+      action: request.action,
+      payload: request.payload,
+      messageId: request.messageId,
+      respond: async (payload) => {
+        await request.respond(payload);
+        terminalEmitted = true;
+        emitOcpp16RuntimeCommandResult(context, {
+          name: request.action,
+          messageId: request.messageId,
+          operationId: trace.operationId,
+          startedAt: trace.startedAt,
+          requestPayload: request.payload,
+          phase: classifyCommandResponse(payload),
+          responsePayload: payload,
+        });
+      },
+      reject: async (errorCode, message, details) => {
+        const responsePayload = { errorCode, message, details };
+        await request.reject(errorCode, message, details);
+        terminalEmitted = true;
+        emitOcpp16RuntimeCommandResult(context, {
+          name: request.action,
+          messageId: request.messageId,
+          operationId: trace.operationId,
+          startedAt: trace.startedAt,
+          requestPayload: request.payload,
+          phase: "failed",
+          responsePayload,
+        });
+      },
+    };
+
+    try {
+      await handler(context, tracedRequest);
+      if (!terminalEmitted) {
+        emitOcpp16RuntimeCommandResult(context, {
+          name: request.action,
+          messageId: request.messageId,
+          operationId: trace.operationId,
+          startedAt: trace.startedAt,
+          requestPayload: request.payload,
+          phase: "completed",
+        });
+      }
+    } catch (cause) {
+      if (!terminalEmitted) {
+        emitOcpp16RuntimeCommandResult(context, {
+          name: request.action,
+          messageId: request.messageId,
+          operationId: trace.operationId,
+          startedAt: trace.startedAt,
+          requestPayload: request.payload,
+          phase: "failed",
+          error: cause,
+        });
+      }
+      throw cause;
+    }
   }
+}
+
+function classifyCommandResponse(payload: unknown): "completed" | "rejected" {
+  if (
+    typeof payload === "object" &&
+    payload !== null &&
+    "status" in payload &&
+    (
+      payload.status === "Rejected" ||
+      payload.status === "NotSupported" ||
+      payload.status === "NotImplemented"
+    )
+  ) {
+    return "rejected";
+  }
+
+  return "completed";
 }
