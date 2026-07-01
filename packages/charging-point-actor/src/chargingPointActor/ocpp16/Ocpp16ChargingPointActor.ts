@@ -11,6 +11,7 @@ import {
   createProtocolClock,
   type ProtocolClock,
 } from "../../protocol/runtime/ocpp16/protocolClock";
+import { ProtocolRuntimeError } from "../../protocol/runtime/ocpp16/errors";
 import { ChargingPointActorError } from "../errors";
 import type {
   Ocpp16ChargingPointActorOptions,
@@ -191,22 +192,30 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     input: ChargingPointActorConnectorActionInput,
   ): Promise<ChargingPointActorConnectorActionResult> {
     this.requireStarted();
-    const result = toChargingPointActorConnectorActionResult(
-      await this.ocpp16Runtime.plugConnector(input),
-    );
+    try {
+      const result = toChargingPointActorConnectorActionResult(
+        await this.ocpp16Runtime.plugConnector(input),
+      );
 
-    return { chargingPointId: this.id, ...result };
+      return { chargingPointId: this.id, ...result };
+    } catch (error) {
+      throw this.mapConnectorActionError(error);
+    }
   }
 
   async unplug(
     input: ChargingPointActorConnectorActionInput,
   ): Promise<ChargingPointActorConnectorActionResult> {
     this.requireStarted();
-    const result = toChargingPointActorConnectorActionResult(
-      await this.ocpp16Runtime.unplugConnector(input),
-    );
+    try {
+      const result = toChargingPointActorConnectorActionResult(
+        await this.ocpp16Runtime.unplugConnector(input),
+      );
 
-    return { chargingPointId: this.id, ...result };
+      return { chargingPointId: this.id, ...result };
+    } catch (error) {
+      throw this.mapConnectorActionError(error);
+    }
   }
 
   async authorize(
@@ -280,6 +289,25 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     if (this.currentStatus !== "running" && this.currentStatus !== "starting") {
       throw new ChargingPointActorError("CHARGING_POINT_ACTOR_NOT_RUNNING", "actor 未运行");
     }
+  }
+
+  private mapConnectorActionError(error: unknown): Error {
+    if (error instanceof ProtocolRuntimeError) {
+      const actorErrorCode = error.code === "PROTOCOL_RUNTIME_INVALID_OPERATION" ||
+        error.code === "PROTOCOL_RUNTIME_CONNECTOR_NOT_FOUND"
+        ? "CHARGING_POINT_ACTOR_INVALID_OPERATION"
+        : "CHARGING_POINT_ACTOR_OPERATION_FAILED";
+
+      return new ChargingPointActorError(actorErrorCode, error.message, error);
+    }
+
+    return error instanceof Error
+      ? error
+      : new ChargingPointActorError(
+          "CHARGING_POINT_ACTOR_OPERATION_FAILED",
+          "actor 操作失败",
+          error,
+        );
   }
 
   private readonly handleOnline = (): void => {

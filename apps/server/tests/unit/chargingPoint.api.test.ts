@@ -2,13 +2,17 @@ import { describe, expect, test } from "vitest";
 
 import {
   apiErrorResponseSchema,
+  chargingPointConnectorActionResponseSchema,
   chargingPointDetailResponseSchema,
-  chargingPointOperationResponseSchema,
   connectorResponseSchema,
   listChargingPointsResponseSchema,
+  runtimeOperationResponseSchema,
 } from "@spark-bee/contracts";
+import { ChargingPointActorError } from "@spark-bee/charging-point-actor";
 import type {
   ChargingPointActor,
+  ChargingPointActorConnectorActionInput,
+  ChargingPointActorConnectorActionResult,
   ChargingPointActorOptions,
   ChargingPointActorEvent,
   ChargingPointActorStartResult,
@@ -39,19 +43,19 @@ describe("chargingPoint management API", () => {
       "启动桩实例",
     );
     expect(document.paths["/api/charging-points/{id}/start"].post.tags).toEqual([
-      "ChargingPointOperation",
+      "RuntimeOperation",
     ]);
     expect(document.paths["/api/charging-points/{id}/stop"].post.summary).toBe(
       "停止桩实例",
     );
     expect(document.paths["/api/charging-points/{id}/stop"].post.tags).toEqual([
-      "ChargingPointOperation",
+      "RuntimeOperation",
     ]);
     expect(document.paths["/api/charging-points/{id}/status"].get.summary).toBe(
       "查询桩实例运行状态",
     );
     expect(document.paths["/api/charging-points/{id}/status"].get.tags).toEqual([
-      "ChargingPointOperation",
+      "RuntimeOperation",
     ]);
     expect(document.paths["/api/charging-points/{id}/events"].get.summary).toBe(
       "订阅桩事件流",
@@ -71,6 +75,18 @@ describe("chargingPoint management API", () => {
     expect(
       document.paths["/api/charging-points/{id}/connectors/{connectorId}"].patch.summary,
     ).toBe("更新枪口");
+    expect(
+      document.paths["/api/charging-points/{id}/connectors/{connectorId}/plug"].post.summary,
+    ).toBe("插枪");
+    expect(
+      document.paths["/api/charging-points/{id}/connectors/{connectorId}/plug"].post.tags,
+    ).toEqual(["RuntimeOperation"]);
+    expect(
+      document.paths["/api/charging-points/{id}/connectors/{connectorId}/unplug"].post.summary,
+    ).toBe("拔枪");
+    expect(
+      document.paths["/api/charging-points/{id}/connectors/{connectorId}/unplug"].post.tags,
+    ).toEqual(["RuntimeOperation"]);
 
     const serializedDocument = JSON.stringify(document);
     expect(serializedDocument).toContain(
@@ -79,6 +95,9 @@ describe("chargingPoint management API", () => {
     expect(serializedDocument).toContain("CSMS 基础 WebSocket 地址");
     expect(serializedDocument).toContain("枪口在所属桩实例内的 connectorId");
     expect(serializedDocument).toContain("当前服务进程中的运行状态");
+    expect(serializedDocument).toContain("车辆接入枪口模拟动作");
+    expect(serializedDocument).toContain("枪口的 UUID 主键");
+    expect(serializedDocument).toContain("枪口在 OCPP 协议中的 connectorId");
   });
 
   test("does not expose the old camelCase chargingPoint path", async () => {
@@ -450,7 +469,7 @@ describe("chargingPoint management API", () => {
     const response = await app.request(`/api/charging-points/${chargingPoint.id}/status`);
 
     expect(response.status).toBe(200);
-    expect(chargingPointOperationResponseSchema.parse(await response.json())).toEqual({
+    expect(runtimeOperationResponseSchema.parse(await response.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "stopped",
     });
@@ -802,17 +821,165 @@ describe("chargingPoint management API", () => {
     );
 
     expect(firstResponse.status).toBe(200);
-    expect(chargingPointOperationResponseSchema.parse(await firstResponse.json())).toEqual({
+    expect(runtimeOperationResponseSchema.parse(await firstResponse.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "running",
       bootStatus: "Accepted",
     });
     expect(secondResponse.status).toBe(200);
-    expect(chargingPointOperationResponseSchema.parse(await secondResponse.json())).toEqual({
+    expect(runtimeOperationResponseSchema.parse(await secondResponse.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "running",
     });
     expect(actor.startCalls).toBe(1);
+  });
+
+  test("plugs and unplugs a running connector by connector resource id", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble();
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(app, chargingPoint.id, {
+      evseId: 2,
+      connectorId: 7,
+      type: "CCS2",
+      format: "cable",
+      powerType: "dc",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    const plugResponse = await app.request(
+      `/api/charging-points/${chargingPoint.id}/connectors/${connector.id}/plug`,
+      { method: "POST" },
+    );
+    const unplugResponse = await app.request(
+      `/api/charging-points/${chargingPoint.id}/connectors/${connector.id}/unplug`,
+      { method: "POST" },
+    );
+
+    expect(plugResponse.status).toBe(200);
+    expect(chargingPointConnectorActionResponseSchema.parse(await plugResponse.json()))
+      .toEqual({
+        chargingPointId: chargingPoint.id,
+        connectorId: connector.id,
+        evseId: 2,
+        protocolConnectorId: 7,
+        plugState: "plugged",
+        vehiclePresence: "detected",
+        connectorStatus: "occupied",
+      });
+    expect(unplugResponse.status).toBe(200);
+    expect(chargingPointConnectorActionResponseSchema.parse(await unplugResponse.json()))
+      .toEqual({
+        chargingPointId: chargingPoint.id,
+        connectorId: connector.id,
+        evseId: 2,
+        protocolConnectorId: 7,
+        plugState: "unplugged",
+        vehiclePresence: "absent",
+        connectorStatus: "available",
+      });
+    expect(actor.plugInputs).toEqual([{ evseId: 2, connectorId: 7 }]);
+    expect(actor.unplugInputs).toEqual([{ evseId: 2, connectorId: 7 }]);
+  });
+
+  test("rejects connector actions while the chargingPoint is not running", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+
+    const response = await app.request(
+      `/api/charging-points/${chargingPoint.id}/connectors/${connector.id}/plug`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(409);
+    expect(apiErrorResponseSchema.parse(await response.json())).toEqual({
+      error: {
+        code: "CHARGING_POINT_NOT_RUNNING",
+        message: "Charging point is not running",
+      },
+    });
+  });
+
+  test("maps rejected connector actor actions to conflict responses", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble({
+      plugError: new ChargingPointActorError(
+        "CHARGING_POINT_ACTOR_INVALID_OPERATION",
+        "枪口 1/1 当前不可插枪",
+      ),
+    });
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    const response = await app.request(
+      `/api/charging-points/${chargingPoint.id}/connectors/${connector.id}/plug`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(409);
+    expect(apiErrorResponseSchema.parse(await response.json())).toEqual({
+      error: {
+        code: "CONNECTOR_OPERATION_CONFLICT",
+        message: "枪口 1/1 当前不可插枪",
+      },
+    });
   });
 
   test("starts a chargingPoint with identity appended to the centralSystemUrl", async () => {
@@ -932,7 +1099,7 @@ describe("chargingPoint management API", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(chargingPointOperationResponseSchema.parse(await response.json())).toEqual({
+    expect(runtimeOperationResponseSchema.parse(await response.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "starting",
       bootStatus: "Pending",
@@ -956,7 +1123,7 @@ describe("chargingPoint management API", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(chargingPointOperationResponseSchema.parse(await response.json())).toEqual({
+    expect(runtimeOperationResponseSchema.parse(await response.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "stopped",
     });
@@ -1045,7 +1212,7 @@ describe("chargingPoint management API", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(chargingPointOperationResponseSchema.parse(await response.json())).toEqual({
+    expect(runtimeOperationResponseSchema.parse(await response.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "stopped",
     });
@@ -1092,9 +1259,13 @@ function createActorDouble(
     stopResult: ChargingPointActorStopResult;
     startError: Error;
     stopError: Error;
+    plugError: Error;
+    unplugError: Error;
   }> = {},
 ) {
   const listeners = new Set<(event: ChargingPointActorEvent) => void | Promise<void>>();
+  const plugInputs: ChargingPointActorConnectorActionInput[] = [];
+  const unplugInputs: ChargingPointActorConnectorActionInput[] = [];
 
   return {
     id: overrides.id ?? "00000000-0000-4000-8000-000000000001",
@@ -1116,6 +1287,8 @@ function createActorDouble(
     startCalls: 0,
     stopCalls: 0,
     disposeCalls: 0,
+    plugInputs,
+    unplugInputs,
     events: {
       subscribe: (listener) => {
         listeners.add(listener);
@@ -1148,11 +1321,21 @@ function createActorDouble(
     async dispose() {
       this.disposeCalls += 1;
     },
-    async plug() {
-      throw new Error("not implemented");
+    async plug(input: ChargingPointActorConnectorActionInput) {
+      this.plugInputs.push(input);
+      if (overrides.plugError !== undefined) {
+        throw overrides.plugError;
+      }
+
+      return createConnectorActionResult(this.id, input, "plugged");
     },
-    async unplug() {
-      throw new Error("not implemented");
+    async unplug(input: ChargingPointActorConnectorActionInput) {
+      this.unplugInputs.push(input);
+      if (overrides.unplugError !== undefined) {
+        throw overrides.unplugError;
+      }
+
+      return createConnectorActionResult(this.id, input, "unplugged");
     },
     async authorize() {
       throw new Error("not implemented");
@@ -1174,7 +1357,24 @@ function createActorDouble(
     startCalls: number;
     stopCalls: number;
     disposeCalls: number;
+    plugInputs: ChargingPointActorConnectorActionInput[];
+    unplugInputs: ChargingPointActorConnectorActionInput[];
     publish(event: ChargingPointActorEvent): void;
+  };
+}
+
+function createConnectorActionResult(
+  chargingPointId: string,
+  input: ChargingPointActorConnectorActionInput,
+  plugState: "plugged" | "unplugged",
+): ChargingPointActorConnectorActionResult {
+  return {
+    chargingPointId,
+    evseId: input.evseId,
+    connectorId: input.connectorId,
+    plugState,
+    vehiclePresence: plugState === "plugged" ? "detected" : "absent",
+    connectorStatus: plugState === "plugged" ? "occupied" : "available",
   };
 }
 

@@ -2,7 +2,8 @@ import type { z } from "zod";
 
 import type {
   chargingPointDetailResponseSchema,
-  chargingPointOperationResponseSchema,
+  chargingPointConnectorActionResponseSchema,
+  runtimeOperationResponseSchema,
   chargingPointSummaryResponseSchema,
   connectorResponseSchema,
   createChargingPointRequestSchema,
@@ -17,8 +18,9 @@ export type CreateChargingPointRequest = z.infer<typeof createChargingPointReque
 export type UpdateChargingPointRequest = z.infer<typeof updateChargingPointRequestSchema>;
 export type ChargingPointSummaryResponse = z.infer<typeof chargingPointSummaryResponseSchema>;
 export type ChargingPointDetailResponse = z.infer<typeof chargingPointDetailResponseSchema>;
-export type ChargingPointOperationResponse = z.infer<
-  typeof chargingPointOperationResponseSchema
+export type RuntimeOperationResponse = z.infer<typeof runtimeOperationResponseSchema>;
+export type ChargingPointConnectorActionResponse = z.infer<
+  typeof chargingPointConnectorActionResponseSchema
 >;
 export type ListChargingPointsQuery = z.infer<typeof listChargingPointsQuerySchema>;
 export type ListChargingPointsResponse = z.infer<typeof listChargingPointsResponseSchema>;

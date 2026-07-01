@@ -101,7 +101,7 @@ export const chargingPointDetailResponseSchema = chargingPointSummaryResponseSch
     connectors: z.array(connectorResponseSchema),
   });
 
-export const chargingPointOperationResponseSchema = z.object({
+export const runtimeOperationResponseSchema = z.object({
   chargingPointId: z.string().uuid().describe("桩实例的 UUID 主键。"),
   status: z
     .enum(["stopped", "starting", "running"])
@@ -116,6 +116,27 @@ export const chargingPointOperationResponseSchema = z.object({
     .nonnegative()
     .optional()
     .describe("Boot Pending 后建议等待的重试秒数。"),
+});
+
+export const connectorRuntimeStatusSchema = z.enum([
+  "available",
+  "occupied",
+  "unavailable",
+  "faulted",
+]);
+
+export const chargingPointConnectorActionResponseSchema = z.object({
+  chargingPointId: z.string().uuid().describe("桩实例的 UUID 主键。"),
+  connectorId: z.string().uuid().describe("枪口的 UUID 主键。"),
+  evseId: z.number().int().positive().describe("枪口在协议拓扑中所属的 EVSE 编号。"),
+  protocolConnectorId: z
+    .number()
+    .int()
+    .positive()
+    .describe("枪口在 OCPP 协议中的 connectorId。"),
+  plugState: z.enum(["plugged", "unplugged"]).describe("车辆接入状态。"),
+  vehiclePresence: z.enum(["detected", "absent"]).describe("车辆检测状态。"),
+  connectorStatus: connectorRuntimeStatusSchema.describe("枪口运行状态。"),
 });
 
 export const listChargingPointsQuerySchema = paginationQuerySchema.extend({

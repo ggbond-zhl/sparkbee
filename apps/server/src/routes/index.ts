@@ -4,10 +4,10 @@ import type { ServerDatabase } from "../db";
 import { ChargingPointActorRegistry } from "../lib/chargingPointActorRegistry";
 import { ChargingPointDiagnosticFileWriter } from "../lib/chargingPointDiagnosticFileWriter";
 import { ChargingPointEventStreamHub } from "../lib/chargingPointEventStreamHub";
-import type { ChargingPointActorFactory } from "../modules/chargingPointOperation/chargingPointOperation.service";
+import type { ChargingPointActorFactory } from "../modules/runtimeOperation/runtimeOperation.service";
 import { createChargingPointRoute } from "../modules/chargingPoint/chargingPoint.route";
-import { createChargingPointOperationRoute } from "../modules/chargingPointOperation/chargingPointOperation.route";
 import { createConnectorRoute } from "../modules/connector/connector.route";
+import { createRuntimeOperationRoute } from "../modules/runtimeOperation/runtimeOperation.route";
 import { createHealthRoute } from "./health.route";
 
 export interface RouteDependencies {
@@ -39,7 +39,7 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
     routes.route("/charging-points", createConnectorRoute(dependencies.database));
     routes.route(
       "/charging-points",
-      createChargingPointOperationRoute(dependencies.database, {
+      createRuntimeOperationRoute(dependencies.database, {
         chargingPointActorRegistry,
         chargingPointDiagnosticFileWriter,
         chargingPointEventStreamHub,

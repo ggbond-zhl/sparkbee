@@ -156,9 +156,9 @@ describe("server architecture", () => {
     expect(chargingPointRepoSource).not.toContain("CONNECTOR_CONFLICT");
   });
 
-  test("keeps charging point operation in its own module", () => {
+  test("keeps runtime operation in its own module", () => {
     const chargingPointModule = join(srcRoot, "modules/chargingPoint");
-    const operationModule = join(srcRoot, "modules/chargingPointOperation");
+    const operationModule = join(srcRoot, "modules/runtimeOperation");
     const operationFiles = walk(operationModule)
       .filter((filePath) => extname(filePath) === ".ts")
       .map((filePath) => relative(operationModule, filePath).replaceAll("\\", "/"))
@@ -166,11 +166,11 @@ describe("server architecture", () => {
 
     expect(operationFiles).toEqual([
       "chargingPointActorOptions.ts",
-      "chargingPointOperation.repo.ts",
-      "chargingPointOperation.route.ts",
-      "chargingPointOperation.service.ts",
+      "runtimeOperation.repo.ts",
+      "runtimeOperation.route.ts",
+      "runtimeOperation.service.ts",
     ]);
-    expect(existsSync(join(chargingPointModule, "chargingPointOperation.route.ts"))).toBe(
+    expect(existsSync(join(chargingPointModule, "runtimeOperation.route.ts"))).toBe(
       false,
     );
     expect(existsSync(join(chargingPointModule, "chargingPointActorOptions.ts"))).toBe(

@@ -4,6 +4,7 @@ export {
 } from "@spark-bee/charging-point-actor";
 export type {
   ChargingPointActor,
+  ChargingPointActorConnectorActionResult,
   ChargingPointActorDiagnosticRecord,
   ChargingPointActorDiagnosticSink,
   ChargingPointActorEvent,

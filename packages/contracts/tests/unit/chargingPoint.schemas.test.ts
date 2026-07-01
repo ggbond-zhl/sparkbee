@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  chargingPointOperationResponseSchema,
+  chargingPointConnectorActionResponseSchema,
   createChargingPointRequestSchema,
   createConnectorRequestSchema,
   listChargingPointsQuerySchema,
+  runtimeOperationResponseSchema,
 } from "../../src";
 
 describe("chargingPoint contract schemas", () => {
@@ -75,9 +76,9 @@ describe("chargingPoint contract schemas", () => {
     });
   });
 
-  test("describes chargingPoint operation response in Chinese", () => {
+  test("describes runtime operation response in Chinese", () => {
     expect(
-      chargingPointOperationResponseSchema.parse({
+      runtimeOperationResponseSchema.parse({
         chargingPointId: "00000000-0000-4000-8000-000000000001",
         status: "starting",
         bootStatus: "Pending",
@@ -89,8 +90,35 @@ describe("chargingPoint contract schemas", () => {
       bootStatus: "Pending",
       retryAfterSec: 30,
     });
-    expect(chargingPointOperationResponseSchema.shape.status.description).toBe(
+    expect(runtimeOperationResponseSchema.shape.status.description).toBe(
       "当前服务进程中的运行状态。",
     );
+  });
+
+  test("describes connector action response with business and protocol ids", () => {
+    expect(
+      chargingPointConnectorActionResponseSchema.parse({
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        connectorId: "00000000-0000-4000-8000-000000000002",
+        evseId: 1,
+        protocolConnectorId: 2,
+        plugState: "plugged",
+        vehiclePresence: "detected",
+        connectorStatus: "occupied",
+      }),
+    ).toEqual({
+      chargingPointId: "00000000-0000-4000-8000-000000000001",
+      connectorId: "00000000-0000-4000-8000-000000000002",
+      evseId: 1,
+      protocolConnectorId: 2,
+      plugState: "plugged",
+      vehiclePresence: "detected",
+      connectorStatus: "occupied",
+    });
+    expect(chargingPointConnectorActionResponseSchema.shape.connectorId.description)
+      .toBe("枪口的 UUID 主键。");
+    expect(
+      chargingPointConnectorActionResponseSchema.shape.protocolConnectorId.description,
+    ).toBe("枪口在 OCPP 协议中的 connectorId。");
   });
 });

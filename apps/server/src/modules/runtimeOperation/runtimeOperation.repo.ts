@@ -8,7 +8,7 @@ import { AppError } from "../../utils/errors";
 type ChargingPointRow = typeof chargingPoints.$inferSelect;
 type ConnectorRow = typeof connectors.$inferSelect;
 
-export class ChargingPointOperationRepository {
+export class RuntimeOperationRepository {
   constructor(private readonly db: ServerDatabase) {}
 
   async getOperationDetail(id: string): Promise<ChargingPointDetailResponse> {

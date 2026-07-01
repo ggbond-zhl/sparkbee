@@ -24,6 +24,7 @@ import type {
   Ocpp16RuntimeEventListener,
   Ocpp16RuntimeOptions,
 } from "../../../src/protocol/runtime";
+import { ProtocolRuntimeError } from "../../../src/protocol/runtime/ocpp16/errors";
 import {
   FakeInboundRequest as RuntimeFakeInboundRequest,
   FakeSession as RuntimeFakeSession,
@@ -2276,6 +2277,22 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(protocolRuntime.startLocalTransactionInput).toBeNull();
     expect(protocolRuntime.calls).not.toContain("startLocalTransaction");
     expect(events).toEqual([]);
+  });
+
+  test("maps protocol connector action conflicts to actor invalid operations", async () => {
+    const { actor, protocolRuntime } = createHarness();
+    protocolRuntime.plugConnector = () => {
+      throw new ProtocolRuntimeError(
+        "PROTOCOL_RUNTIME_INVALID_OPERATION",
+        "枪口 1/1 当前不可插枪",
+      );
+    };
+    await actor.start();
+
+    await expect(actor.plug({ evseId: 1, connectorId: 1 })).rejects.toMatchObject({
+      code: "CHARGING_POINT_ACTOR_INVALID_OPERATION",
+      message: "枪口 1/1 当前不可插枪",
+    });
   });
 
   test("dispose releases embedded runtime resources and session listeners", async () => {

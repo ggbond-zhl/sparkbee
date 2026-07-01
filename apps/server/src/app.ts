@@ -12,7 +12,7 @@ import { ChargingPointActorRegistry } from "./lib/chargingPointActorRegistry";
 import { ChargingPointDiagnosticFileWriter } from "./lib/chargingPointDiagnosticFileWriter";
 import { ChargingPointEventStreamHub } from "./lib/chargingPointEventStreamHub";
 import { errorMiddleware } from "./middlewares/error.middleware";
-import type { ChargingPointActorFactory } from "./modules/chargingPointOperation/chargingPointOperation.service";
+import type { ChargingPointActorFactory } from "./modules/runtimeOperation/runtimeOperation.service";
 import { createRoutes } from "./routes";
 
 export interface AppDependencies {
