@@ -210,7 +210,7 @@ export class Transaction {
     });
   }
 
-  startEnding(reason: TransactionStopReason): Transaction {
+  startEnding(reason?: TransactionStopReason): Transaction {
     if (this._state === "ended") {
       throw new ModelError("MODEL_STATE_CONFLICT", "已结束交易不能重复结束");
     }
@@ -223,7 +223,7 @@ export class Transaction {
   }
 
   end(
-    reason: TransactionStopReason,
+    reason: TransactionStopReason | undefined,
     endedAt: Date,
     endMeterWh?: number,
   ): Transaction {

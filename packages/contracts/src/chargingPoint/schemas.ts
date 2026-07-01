@@ -7,6 +7,7 @@ export const connectorFormatSchema = z.enum(["socket", "cable", "unknown"]);
 export const connectorPowerTypeSchema = z.enum(["ac", "dc", "unknown"]);
 
 const trimmedRequiredString = z.string().trim().min(1);
+const trimmedRequiredIdTag = z.string().trim().min(1).max(20);
 const optionalTrimmedString = z.preprocess(
   (value) => {
     if (value === undefined || value === null) {
@@ -138,6 +139,113 @@ export const chargingPointConnectorActionResponseSchema = z.object({
   vehiclePresence: z.enum(["detected", "absent"]).describe("车辆检测状态。"),
   connectorStatus: connectorRuntimeStatusSchema.describe("枪口运行状态。"),
 });
+
+export const runtimeAuthorizeRequestSchema = z.object({
+  idTag: trimmedRequiredIdTag.describe("用于 OCPP Authorize 的 idTag。"),
+});
+
+const runtimeConnectorOperationResponseBaseSchema = z.object({
+  chargingPointId: z.string().uuid().describe("桩实例的 UUID 主键。"),
+  connectorId: z.string().uuid().describe("枪口的 UUID 主键。"),
+  evseId: z.number().int().positive().describe("枪口在协议拓扑中所属的 EVSE 编号。"),
+  protocolConnectorId: z
+    .number()
+    .int()
+    .positive()
+    .describe("枪口在 OCPP 协议中的 connectorId。"),
+});
+
+const runtimeAuthorizeResponseBaseSchema = runtimeConnectorOperationResponseBaseSchema.extend({
+  idTag: z.string().describe("本次鉴权使用的 idTag。"),
+});
+
+export const runtimeAuthorizeResponseSchema = z.discriminatedUnion("status", [
+  runtimeAuthorizeResponseBaseSchema.extend({
+    status: z.literal("accepted").describe("鉴权已通过。"),
+  }),
+  runtimeAuthorizeResponseBaseSchema.extend({
+    status: z.literal("rejected").describe("鉴权被 CSMS 拒绝。"),
+    reason: z.string().describe("鉴权被拒绝的原因。"),
+    authorizationStatus: z.string().optional().describe("CSMS 返回的授权状态。"),
+  }),
+  runtimeAuthorizeResponseBaseSchema.extend({
+    status: z.literal("failed").describe("鉴权请求发送或处理失败。"),
+    errorCode: z.string().describe("鉴权失败错误码。"),
+    errorMessage: z.string().describe("鉴权失败错误说明。"),
+    shouldReconnect: z.boolean().describe("是否建议重连桩实例会话。"),
+  }),
+]);
+
+export const runtimeStartTransactionRequestSchema = z.object({
+  idTag: trimmedRequiredIdTag.describe("用于 OCPP StartTransaction 的 idTag。"),
+  meterStartWh: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe("开始交易时的电表读数，单位 Wh；未提供时由运行时使用默认值。"),
+  reservationId: z
+    .number()
+    .int()
+    .optional()
+    .describe("OCPP 预约编号；没有预约时不提供。"),
+});
+
+export const runtimeStartTransactionResponseSchema = z.discriminatedUnion("status", [
+  runtimeConnectorOperationResponseBaseSchema.extend({
+    status: z.literal("accepted").describe("交易已开始。"),
+    transactionId: z.string().describe("SparkBee 记录的交易 ID。"),
+    idTag: z.string().describe("本次开始交易使用的 idTag。"),
+  }),
+  runtimeConnectorOperationResponseBaseSchema.extend({
+    status: z.literal("rejected").describe("开始交易被拒绝。"),
+    idTag: z.string().describe("本次开始交易使用的 idTag。"),
+    reason: z.string().describe("开始交易被拒绝的原因。"),
+    authorizationStatus: z.string().optional().describe("CSMS 返回的授权状态。"),
+  }),
+]);
+
+export const runtimeTransactionStopReasonSchema = z.enum([
+  "local",
+  "remote",
+  "unlock-command",
+  "ev-disconnected",
+  "deauthorized",
+  "emergency-stop",
+  "other",
+]);
+
+export const runtimeStopTransactionRequestSchema = z.object({
+  transactionId: trimmedRequiredString.describe("要停止的 SparkBee 交易 ID。"),
+  meterStopWh: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe("停止交易时的电表读数，单位 Wh；未提供时使用交易最新电表值。"),
+  reason: runtimeTransactionStopReasonSchema
+    .optional()
+    .describe("停止交易原因；未提供时 OCPP StopTransaction 不携带 reason。"),
+  idTag: trimmedRequiredIdTag
+    .optional()
+    .describe("停止交易时可选上报的 idTag。"),
+});
+
+export const runtimeStopTransactionResponseSchema = z.discriminatedUnion("status", [
+  runtimeConnectorOperationResponseBaseSchema.extend({
+    status: z.literal("accepted").describe("交易已停止。"),
+    transactionId: z.string().describe("SparkBee 记录的交易 ID。"),
+    meterStopWh: z.number().int().nonnegative().describe("停止交易时的电表读数，单位 Wh。"),
+    stoppedAt: z.string().datetime().describe("交易停止时间。"),
+  }),
+  runtimeConnectorOperationResponseBaseSchema.extend({
+    status: z.literal("failed").describe("停止交易请求发送或处理失败。"),
+    transactionId: z.string().describe("SparkBee 记录的交易 ID。"),
+    errorCode: z.string().describe("停止交易失败错误码。"),
+    errorMessage: z.string().describe("停止交易失败错误说明。"),
+    shouldReconnect: z.boolean().describe("是否建议重连桩实例会话。"),
+  }),
+]);
 
 export const listChargingPointsQuerySchema = paginationQuerySchema.extend({
   keyword: z

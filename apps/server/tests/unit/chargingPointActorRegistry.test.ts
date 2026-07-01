@@ -39,6 +39,7 @@ function createActor(
     startTransaction: async () => {
       throw new Error("not used");
     },
+    getTransactionResource: () => undefined,
     reportMeterValue: async () => {
       throw new Error("not used");
     },

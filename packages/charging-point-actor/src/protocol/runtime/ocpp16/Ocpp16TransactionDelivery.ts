@@ -216,7 +216,7 @@ export function endTransactionDelivery(
   input: {
     transaction: Transaction;
     connectorRef: TransactionConnectorRef;
-    reason: TransactionStopReason;
+    reason?: TransactionStopReason;
     stoppedAt: Date;
     meterStopWh?: number;
     idTag?: string;
@@ -248,7 +248,7 @@ export function recordOfflineTransactionStopDelivery(
   input: {
     transaction: Transaction;
     connectorRef: TransactionConnectorRef;
-    reason: TransactionStopReason;
+    reason?: TransactionStopReason;
     stoppedAt: Date;
     meterStopWh?: number;
     idTag?: string;
@@ -411,7 +411,7 @@ function recordOfflineTransactionStop(
   record: {
     meterStopWh: number;
     stoppedAt: Date;
-    reason: TransactionStopReason;
+    reason?: TransactionStopReason;
     idTag: string | null;
   },
 ): void {

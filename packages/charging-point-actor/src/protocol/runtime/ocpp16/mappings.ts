@@ -15,8 +15,12 @@ export type Ocpp16ConnectorFlowPhase =
   | "available";
 
 export function mapStopReason(
-  reason: TransactionStopReason,
+  reason: TransactionStopReason | undefined,
 ): Ocpp16RequestOf<"StopTransaction">["reason"] {
+  if (reason === undefined) {
+    return undefined;
+  }
+
   switch (reason) {
     case "local":
       return "Local";

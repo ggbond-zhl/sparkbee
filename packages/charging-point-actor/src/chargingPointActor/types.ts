@@ -299,7 +299,7 @@ export interface ChargingPointActorMeterValueInput {
 
 export interface ChargingPointActorStopTransactionInput {
   transactionId: string;
-  reason: TransactionStopReason;
+  reason?: TransactionStopReason;
   meterStopWh?: number;
   stoppedAt?: Date;
   idTag?: string;
@@ -317,6 +317,9 @@ export interface ChargingPointActor {
   unplug(input: ChargingPointActorConnectorActionInput): Promise<ChargingPointActorConnectorActionResult>;
   authorize(input: ChargingPointActorAuthorizeInput): Promise<ChargingPointActorAuthorizeResult>;
   startTransaction(input: ChargingPointActorStartTransactionInput): Promise<ChargingPointActorTransactionStartResult>;
+  getTransactionResource(
+    transactionId: string,
+  ): Extract<ChargingPointActorResourceRef, { scope: "transaction" }> | undefined;
   reportMeterValue(input: ChargingPointActorMeterValueInput): Promise<ChargingPointActorMeterValueResult>;
   stopTransaction(input: ChargingPointActorStopTransactionInput): Promise<ChargingPointActorStopTransactionResult>;
 }

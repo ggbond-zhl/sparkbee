@@ -461,7 +461,7 @@ export interface Ocpp16MeterValueInput {
 export interface Ocpp16StopTransactionInput {
   transactionId?: string;
   ocppTransactionId?: number;
-  reason: TransactionStopReason;
+  reason?: TransactionStopReason;
   meterStopWh?: number;
   stoppedAt?: Date;
   idTag?: string;

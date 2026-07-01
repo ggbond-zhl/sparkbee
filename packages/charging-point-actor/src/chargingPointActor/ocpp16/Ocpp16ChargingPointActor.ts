@@ -265,6 +265,26 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     );
   }
 
+  getTransactionResource(
+    transactionId: string,
+  ): Extract<ChargingPointActorResourceRef, { scope: "transaction" }> | undefined {
+    if (transactionId.length === 0) {
+      return undefined;
+    }
+
+    const resource = this.ocpp16Runtime.getTransactionResource(transactionId);
+    if (resource === undefined) {
+      return undefined;
+    }
+
+    return {
+      scope: "transaction",
+      evseId: resource.evseId,
+      connectorId: resource.connectorId,
+      transactionId,
+    };
+  }
+
   async stopTransaction(
     input: ChargingPointActorStopTransactionInput,
   ): Promise<ChargingPointActorStopTransactionResult> {

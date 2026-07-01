@@ -24,7 +24,7 @@ export interface OfflineTransactionMeterValueRecord {
 export interface OfflineTransactionStopRecord {
   meterStopWh: number;
   stoppedAt: Date;
-  reason: TransactionStopReason;
+  reason?: TransactionStopReason;
   idTag: string | null;
   replayed: boolean;
 }
@@ -55,7 +55,7 @@ export interface OfflineTransactionOutbox {
     record: {
       meterStopWh: number;
       stoppedAt: Date;
-      reason: TransactionStopReason;
+      reason?: TransactionStopReason;
       idTag: string | null;
     },
   ): void;
@@ -124,7 +124,7 @@ export class MemoryOfflineTransactionOutbox implements OfflineTransactionOutbox 
     record: {
       meterStopWh: number;
       stoppedAt: Date;
-      reason: TransactionStopReason;
+      reason?: TransactionStopReason;
       idTag: string | null;
     },
   ): void {

@@ -6,18 +6,28 @@ import {
   chargingPointDetailResponseSchema,
   connectorResponseSchema,
   listChargingPointsResponseSchema,
+  runtimeAuthorizeResponseSchema,
   runtimeOperationResponseSchema,
+  runtimeStartTransactionResponseSchema,
+  runtimeStopTransactionResponseSchema,
 } from "@spark-bee/contracts";
 import { ChargingPointActorError } from "@spark-bee/charging-point-actor";
 import type {
   ChargingPointActor,
+  ChargingPointActorAuthorizeInput,
+  ChargingPointActorAuthorizeResult,
   ChargingPointActorConnectorActionInput,
   ChargingPointActorConnectorActionResult,
   ChargingPointActorOptions,
+  ChargingPointActorResourceRef,
   ChargingPointActorEvent,
   ChargingPointActorStartResult,
   ChargingPointActorStatus,
+  ChargingPointActorStartTransactionInput,
   ChargingPointActorStopResult,
+  ChargingPointActorStopTransactionInput,
+  ChargingPointActorStopTransactionResult,
+  ChargingPointActorTransactionStartResult,
 } from "@spark-bee/charging-point-actor";
 
 import { createApp } from "../../src/app";
@@ -87,6 +97,32 @@ describe("chargingPoint management API", () => {
     expect(
       document.paths["/api/charging-points/{id}/connectors/{connectorId}/unplug"].post.tags,
     ).toEqual(["RuntimeOperation"]);
+    expect(
+      document.paths["/api/charging-points/{id}/connectors/{connectorId}/authorize"].post.summary,
+    ).toBe("鉴权");
+    expect(
+      document.paths["/api/charging-points/{id}/connectors/{connectorId}/authorize"].post.tags,
+    ).toEqual(["RuntimeOperation"]);
+    expect(
+      document.paths[
+        "/api/charging-points/{id}/connectors/{connectorId}/start-transaction"
+      ].post.summary,
+    ).toBe("开始交易");
+    expect(
+      document.paths[
+        "/api/charging-points/{id}/connectors/{connectorId}/start-transaction"
+      ].post.tags,
+    ).toEqual(["RuntimeOperation"]);
+    expect(
+      document.paths[
+        "/api/charging-points/{id}/connectors/{connectorId}/stop-transaction"
+      ].post.summary,
+    ).toBe("停止交易");
+    expect(
+      document.paths[
+        "/api/charging-points/{id}/connectors/{connectorId}/stop-transaction"
+      ].post.tags,
+    ).toEqual(["RuntimeOperation"]);
 
     const serializedDocument = JSON.stringify(document);
     expect(serializedDocument).toContain(
@@ -96,6 +132,9 @@ describe("chargingPoint management API", () => {
     expect(serializedDocument).toContain("枪口在所属桩实例内的 connectorId");
     expect(serializedDocument).toContain("当前服务进程中的运行状态");
     expect(serializedDocument).toContain("车辆接入枪口模拟动作");
+    expect(serializedDocument).toContain("用于 OCPP Authorize 的 idTag");
+    expect(serializedDocument).toContain("不要求事先调用鉴权接口");
+    expect(serializedDocument).toContain("未提供时 OCPP StopTransaction 不携带 reason");
     expect(serializedDocument).toContain("枪口的 UUID 主键");
     expect(serializedDocument).toContain("枪口在 OCPP 协议中的 connectorId");
   });
@@ -900,6 +939,438 @@ describe("chargingPoint management API", () => {
     expect(actor.unplugInputs).toEqual([{ evseId: 2, connectorId: 7 }]);
   });
 
+  test("authorizes a running connector by connector resource id", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble();
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(app, chargingPoint.id, {
+      evseId: 2,
+      connectorId: 7,
+      type: "CCS2",
+      format: "cable",
+      powerType: "dc",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    const response = await app.request(
+      `/api/charging-points/${chargingPoint.id}/connectors/${connector.id}/authorize`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idTag: " CARD001 " }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(runtimeAuthorizeResponseSchema.parse(await response.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      connectorId: connector.id,
+      evseId: 2,
+      protocolConnectorId: 7,
+      idTag: "CARD001",
+      status: "accepted",
+    });
+    expect(actor.authorizeInputs).toEqual([
+      { evseId: 2, connectorId: 7, idTag: "CARD001" },
+    ]);
+  });
+
+  test("returns rejected and failed authorize results with HTTP 200", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble({
+      authorizeResults: [
+        {
+          status: "rejected",
+          reason: "Authorize 被中心系统拒绝",
+          authorizationStatus: "Invalid",
+        },
+        {
+          status: "failed",
+          errorCode: "InternalError",
+          errorMessage: "authorize timeout",
+          shouldReconnect: true,
+        },
+      ],
+    });
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    const rejectedResponse = await authorizeConnector(
+      app,
+      chargingPoint.id,
+      connector.id,
+      "CARD-BLOCKED",
+    );
+    const failedResponse = await authorizeConnector(
+      app,
+      chargingPoint.id,
+      connector.id,
+      "CARD-FAILED",
+    );
+
+    expect(rejectedResponse.status).toBe(200);
+    expect(runtimeAuthorizeResponseSchema.parse(await rejectedResponse.json()))
+      .toMatchObject({
+        chargingPointId: chargingPoint.id,
+        connectorId: connector.id,
+        evseId: 1,
+        protocolConnectorId: 1,
+        idTag: "CARD-BLOCKED",
+        status: "rejected",
+        reason: "Authorize 被中心系统拒绝",
+        authorizationStatus: "Invalid",
+      });
+    expect(failedResponse.status).toBe(200);
+    expect(runtimeAuthorizeResponseSchema.parse(await failedResponse.json()))
+      .toMatchObject({
+        chargingPointId: chargingPoint.id,
+        connectorId: connector.id,
+        evseId: 1,
+        protocolConnectorId: 1,
+        idTag: "CARD-FAILED",
+        status: "failed",
+        errorCode: "InternalError",
+        errorMessage: "authorize timeout",
+        shouldReconnect: true,
+      });
+  });
+
+  test("starts a transaction on a running connector without prior authorize", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble({
+      startTransactionResults: [{ status: "accepted", transactionId: "1001" }],
+    });
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(app, chargingPoint.id, {
+      evseId: 2,
+      connectorId: 7,
+      type: "CCS2",
+      format: "cable",
+      powerType: "dc",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    const response = await app.request(
+      `/api/charging-points/${chargingPoint.id}/connectors/${connector.id}/start-transaction`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          idTag: " CARD001 ",
+          meterStartWh: 10,
+          reservationId: 123,
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(runtimeStartTransactionResponseSchema.parse(await response.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      connectorId: connector.id,
+      evseId: 2,
+      protocolConnectorId: 7,
+      idTag: "CARD001",
+      status: "accepted",
+      transactionId: "1001",
+    });
+    expect(actor.authorizeInputs).toEqual([]);
+    expect(actor.startTransactionInputs).toEqual([
+      {
+        evseId: 2,
+        connectorId: 7,
+        idTag: "CARD001",
+        meterStartWh: 10,
+        reservationId: 123,
+      },
+    ]);
+  });
+
+  test("returns rejected start transaction results with HTTP 200", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble({
+      startTransactionResults: [
+        {
+          status: "rejected",
+          reason: "未找到有效授权",
+          authorizationStatus: "Invalid",
+        },
+      ],
+    });
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    const response = await startTransaction(
+      app,
+      chargingPoint.id,
+      connector.id,
+      "CARD-BLOCKED",
+    );
+
+    expect(response.status).toBe(200);
+    expect(runtimeStartTransactionResponseSchema.parse(await response.json()))
+      .toMatchObject({
+        chargingPointId: chargingPoint.id,
+        connectorId: connector.id,
+        evseId: 1,
+        protocolConnectorId: 1,
+        idTag: "CARD-BLOCKED",
+        status: "rejected",
+        reason: "未找到有效授权",
+        authorizationStatus: "Invalid",
+      });
+  });
+
+  test("stops a transaction without sending a reason", async () => {
+    const database = await createTestDatabase();
+    const stoppedAt = new Date("2026-07-01T00:00:00.000Z");
+    const actor = createActorDouble({
+      transactionResources: new Map([
+        ["1001", { scope: "transaction", evseId: 2, connectorId: 7, transactionId: "1001" }],
+      ]),
+      stopTransactionResults: [
+        {
+          status: "accepted",
+          transactionId: "1001",
+          meterStopWh: 100,
+          stoppedAt,
+        },
+      ],
+    });
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(app, chargingPoint.id, {
+      evseId: 2,
+      connectorId: 7,
+      type: "CCS2",
+      format: "cable",
+      powerType: "dc",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    const response = await app.request(
+      `/api/charging-points/${chargingPoint.id}/connectors/${connector.id}/stop-transaction`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          transactionId: "1001",
+          meterStopWh: 100,
+          idTag: " CARD001 ",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(runtimeStopTransactionResponseSchema.parse(await response.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      connectorId: connector.id,
+      evseId: 2,
+      protocolConnectorId: 7,
+      status: "accepted",
+      transactionId: "1001",
+      meterStopWh: 100,
+      stoppedAt: "2026-07-01T00:00:00.000Z",
+    });
+    expect(actor.stopTransactionInputs).toEqual([
+      {
+        transactionId: "1001",
+        reason: undefined,
+        meterStopWh: 100,
+        idTag: "CARD001",
+      },
+    ]);
+  });
+
+  test("rejects stop transaction when the transaction belongs to another connector", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble({
+      transactionResources: new Map([
+        ["1001", { scope: "transaction", evseId: 9, connectorId: 9, transactionId: "1001" }],
+      ]),
+    });
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    const response = await app.request(
+      `/api/charging-points/${chargingPoint.id}/connectors/${connector.id}/stop-transaction`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transactionId: "1001", reason: "remote" }),
+      },
+    );
+
+    expect(response.status).toBe(409);
+    expect(apiErrorResponseSchema.parse(await response.json())).toEqual({
+      error: {
+        code: "TRANSACTION_CONNECTOR_MISMATCH",
+        message: "Transaction does not belong to connector",
+      },
+    });
+    expect(actor.stopTransactionInputs).toEqual([]);
+  });
+
+  test("validates authorize idTag", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+
+    const response = await app.request(
+      `/api/charging-points/${chargingPoint.id}/connectors/${connector.id}/authorize`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idTag: "123456789012345678901" }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(apiErrorResponseSchema.parse(await response.json()).error.code).toBe(
+      "VALIDATION_FAILED",
+    );
+  });
+
   test("rejects connector actions while the chargingPoint is not running", async () => {
     const database = await createTestDatabase();
     const app = createApp({ database });
@@ -1251,6 +1722,38 @@ async function createConnector(
   return connectorResponseSchema.parse(await response.json());
 }
 
+function authorizeConnector(
+  app: ReturnType<typeof createApp>,
+  chargingPointId: string,
+  connectorId: string,
+  idTag: string,
+) {
+  return app.request(
+    `/api/charging-points/${chargingPointId}/connectors/${connectorId}/authorize`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idTag }),
+    },
+  );
+}
+
+function startTransaction(
+  app: ReturnType<typeof createApp>,
+  chargingPointId: string,
+  connectorId: string,
+  idTag: string,
+) {
+  return app.request(
+    `/api/charging-points/${chargingPointId}/connectors/${connectorId}/start-transaction`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idTag }),
+    },
+  );
+}
+
 function createActorDouble(
   overrides: Partial<{
     id: string;
@@ -1261,11 +1764,25 @@ function createActorDouble(
     stopError: Error;
     plugError: Error;
     unplugError: Error;
+    authorizeResults: ChargingPointActorAuthorizeResult[];
+    startTransactionResults: ChargingPointActorTransactionStartResult[];
+    stopTransactionResults: ChargingPointActorStopTransactionResult[];
+    transactionResources: Map<
+      string,
+      Extract<ChargingPointActorResourceRef, { scope: "transaction" }>
+    >;
   }> = {},
 ) {
   const listeners = new Set<(event: ChargingPointActorEvent) => void | Promise<void>>();
   const plugInputs: ChargingPointActorConnectorActionInput[] = [];
   const unplugInputs: ChargingPointActorConnectorActionInput[] = [];
+  const authorizeInputs: ChargingPointActorAuthorizeInput[] = [];
+  const startTransactionInputs: ChargingPointActorStartTransactionInput[] = [];
+  const stopTransactionInputs: ChargingPointActorStopTransactionInput[] = [];
+  const authorizeResults = [...(overrides.authorizeResults ?? [])];
+  const startTransactionResults = [...(overrides.startTransactionResults ?? [])];
+  const stopTransactionResults = [...(overrides.stopTransactionResults ?? [])];
+  const transactionResources = overrides.transactionResources ?? new Map();
 
   return {
     id: overrides.id ?? "00000000-0000-4000-8000-000000000001",
@@ -1289,6 +1806,9 @@ function createActorDouble(
     disposeCalls: 0,
     plugInputs,
     unplugInputs,
+    authorizeInputs,
+    startTransactionInputs,
+    stopTransactionInputs,
     events: {
       subscribe: (listener) => {
         listeners.add(listener);
@@ -1337,17 +1857,41 @@ function createActorDouble(
 
       return createConnectorActionResult(this.id, input, "unplugged");
     },
-    async authorize() {
-      throw new Error("not implemented");
+    async authorize(input: ChargingPointActorAuthorizeInput) {
+      this.authorizeInputs.push(input);
+      return authorizeResults.shift() ?? { status: "accepted" };
     },
-    async startTransaction() {
-      throw new Error("not implemented");
+    async startTransaction(input: ChargingPointActorStartTransactionInput) {
+      this.startTransactionInputs.push(input);
+      const result = startTransactionResults.shift() ?? {
+        status: "accepted",
+        transactionId: "1001",
+      };
+      if (result.status === "accepted") {
+        transactionResources.set(result.transactionId, {
+          scope: "transaction",
+          evseId: input.evseId,
+          connectorId: input.connectorId,
+          transactionId: result.transactionId,
+        });
+      }
+
+      return result;
+    },
+    getTransactionResource(transactionId: string) {
+      return transactionResources.get(transactionId);
     },
     async reportMeterValue() {
       throw new Error("not implemented");
     },
-    async stopTransaction() {
-      throw new Error("not implemented");
+    async stopTransaction(input: ChargingPointActorStopTransactionInput) {
+      this.stopTransactionInputs.push(input);
+      return stopTransactionResults.shift() ?? {
+        status: "accepted",
+        transactionId: input.transactionId,
+        meterStopWh: input.meterStopWh ?? 0,
+        stoppedAt: new Date("2026-07-01T00:00:00.000Z"),
+      };
     },
   } satisfies ChargingPointActor & {
     id: string;
@@ -1359,6 +1903,9 @@ function createActorDouble(
     disposeCalls: number;
     plugInputs: ChargingPointActorConnectorActionInput[];
     unplugInputs: ChargingPointActorConnectorActionInput[];
+    authorizeInputs: ChargingPointActorAuthorizeInput[];
+    startTransactionInputs: ChargingPointActorStartTransactionInput[];
+    stopTransactionInputs: ChargingPointActorStopTransactionInput[];
     publish(event: ChargingPointActorEvent): void;
   };
 }

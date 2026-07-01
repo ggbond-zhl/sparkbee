@@ -2,7 +2,13 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   apiErrorResponseSchema,
   chargingPointConnectorActionResponseSchema,
+  runtimeAuthorizeRequestSchema,
+  runtimeAuthorizeResponseSchema,
   runtimeOperationResponseSchema,
+  runtimeStartTransactionRequestSchema,
+  runtimeStartTransactionResponseSchema,
+  runtimeStopTransactionRequestSchema,
+  runtimeStopTransactionResponseSchema,
 } from "@spark-bee/contracts";
 
 import type { ServerDatabase } from "../../db";
@@ -53,6 +59,21 @@ const connectorActionSuccessResponse = (description: string) => ({
   description,
   content: jsonContent(chargingPointConnectorActionResponseSchema),
 });
+
+const authorizeSuccessResponse = {
+  description: "鉴权动作已完成，结果见响应体 status。",
+  content: jsonContent(runtimeAuthorizeResponseSchema),
+};
+
+const startTransactionSuccessResponse = {
+  description: "开始交易动作已完成，结果见响应体 status。",
+  content: jsonContent(runtimeStartTransactionResponseSchema),
+};
+
+const stopTransactionSuccessResponse = {
+  description: "停止交易动作已完成，结果见响应体 status。",
+  content: jsonContent(runtimeStopTransactionResponseSchema),
+};
 
 const eventStreamContent = {
   "text/event-stream": {
@@ -170,6 +191,93 @@ const unplugConnectorRoute = createRoute({
   },
 });
 
+const authorizeConnectorRoute = createRoute({
+  method: "post",
+  path: "/{id}/connectors/{connectorId}/authorize",
+  tags: ["RuntimeOperation"],
+  summary: "鉴权",
+  description:
+    "在运行中的桩实例上使用 idTag 对指定枪口执行 OCPP Authorize；不会自动开始交易。",
+  request: {
+    params: connectorActionParamSchema,
+    body: {
+      required: true,
+      content: jsonContent(runtimeAuthorizeRequestSchema),
+    },
+  },
+  responses: {
+    200: authorizeSuccessResponse,
+    400: validationErrorResponse,
+    404: connectorActionNotFoundResponse,
+    409: {
+      description: "桩实例未运行，不能执行鉴权。",
+      content: jsonContent(apiErrorResponseSchema),
+    },
+    502: {
+      description: "鉴权操作失败。",
+      content: jsonContent(apiErrorResponseSchema),
+    },
+  },
+});
+
+const startTransactionRoute = createRoute({
+  method: "post",
+  path: "/{id}/connectors/{connectorId}/start-transaction",
+  tags: ["RuntimeOperation"],
+  summary: "开始交易",
+  description:
+    "在运行中的桩实例上对指定枪口执行 OCPP StartTransaction；不要求事先调用鉴权接口，授权结果由运行时和 CSMS 决定。",
+  request: {
+    params: connectorActionParamSchema,
+    body: {
+      required: true,
+      content: jsonContent(runtimeStartTransactionRequestSchema),
+    },
+  },
+  responses: {
+    200: startTransactionSuccessResponse,
+    400: validationErrorResponse,
+    404: connectorActionNotFoundResponse,
+    409: {
+      description: "桩实例未运行，或当前枪口状态不允许开始交易。",
+      content: jsonContent(apiErrorResponseSchema),
+    },
+    502: {
+      description: "开始交易操作失败。",
+      content: jsonContent(apiErrorResponseSchema),
+    },
+  },
+});
+
+const stopTransactionRoute = createRoute({
+  method: "post",
+  path: "/{id}/connectors/{connectorId}/stop-transaction",
+  tags: ["RuntimeOperation"],
+  summary: "停止交易",
+  description:
+    "在运行中的桩实例上对指定枪口执行 OCPP StopTransaction；reason 未提供时不会写入 OCPP 报文。",
+  request: {
+    params: connectorActionParamSchema,
+    body: {
+      required: true,
+      content: jsonContent(runtimeStopTransactionRequestSchema),
+    },
+  },
+  responses: {
+    200: stopTransactionSuccessResponse,
+    400: validationErrorResponse,
+    404: connectorActionNotFoundResponse,
+    409: {
+      description: "桩实例未运行，交易不存在，或交易不属于路径中的枪口。",
+      content: jsonContent(apiErrorResponseSchema),
+    },
+    502: {
+      description: "停止交易操作失败。",
+      content: jsonContent(apiErrorResponseSchema),
+    },
+  },
+});
+
 const getChargingPointEventsRoute = createRoute({
   method: "get",
   path: "/{id}/events",
@@ -239,6 +347,24 @@ export function createRuntimeOperationRoute(
   route.openapi(unplugConnectorRoute, async (context) => {
     const { id, connectorId } = context.req.valid("param");
     return context.json(await service.unplug(id, connectorId), 200);
+  });
+
+  route.openapi(authorizeConnectorRoute, async (context) => {
+    const { id, connectorId } = context.req.valid("param");
+    const input = context.req.valid("json");
+    return context.json(await service.authorize(id, connectorId, input), 200);
+  });
+
+  route.openapi(startTransactionRoute, async (context) => {
+    const { id, connectorId } = context.req.valid("param");
+    const input = context.req.valid("json");
+    return context.json(await service.startTransaction(id, connectorId, input), 200);
+  });
+
+  route.openapi(stopTransactionRoute, async (context) => {
+    const { id, connectorId } = context.req.valid("param");
+    const input = context.req.valid("json");
+    return context.json(await service.stopTransaction(id, connectorId, input), 200);
   });
 
   route.openapi(getChargingPointEventsRoute, async (context) => {

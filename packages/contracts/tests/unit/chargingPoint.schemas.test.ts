@@ -5,7 +5,13 @@ import {
   createChargingPointRequestSchema,
   createConnectorRequestSchema,
   listChargingPointsQuerySchema,
+  runtimeAuthorizeRequestSchema,
+  runtimeAuthorizeResponseSchema,
   runtimeOperationResponseSchema,
+  runtimeStartTransactionRequestSchema,
+  runtimeStartTransactionResponseSchema,
+  runtimeStopTransactionRequestSchema,
+  runtimeStopTransactionResponseSchema,
 } from "../../src";
 
 describe("chargingPoint contract schemas", () => {
@@ -120,5 +126,111 @@ describe("chargingPoint contract schemas", () => {
     expect(
       chargingPointConnectorActionResponseSchema.shape.protocolConnectorId.description,
     ).toBe("枪口在 OCPP 协议中的 connectorId。");
+  });
+
+  test("normalizes runtime authorize input and describes authorize results", () => {
+    expect(runtimeAuthorizeRequestSchema.parse({ idTag: " CARD001 " })).toEqual({
+      idTag: "CARD001",
+    });
+    expect(() => runtimeAuthorizeRequestSchema.parse({ idTag: "" })).toThrow();
+    expect(() =>
+      runtimeAuthorizeRequestSchema.parse({ idTag: "123456789012345678901" }),
+    ).toThrow();
+
+    expect(
+      runtimeAuthorizeResponseSchema.parse({
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        connectorId: "00000000-0000-4000-8000-000000000002",
+        evseId: 1,
+        protocolConnectorId: 2,
+        idTag: "CARD001",
+        status: "rejected",
+        reason: "Authorize 被中心系统拒绝",
+        authorizationStatus: "Invalid",
+      }),
+    ).toEqual({
+      chargingPointId: "00000000-0000-4000-8000-000000000001",
+      connectorId: "00000000-0000-4000-8000-000000000002",
+      evseId: 1,
+      protocolConnectorId: 2,
+      idTag: "CARD001",
+      status: "rejected",
+      reason: "Authorize 被中心系统拒绝",
+      authorizationStatus: "Invalid",
+    });
+  });
+
+  test("normalizes runtime transaction inputs and describes transaction results", () => {
+    expect(runtimeStartTransactionRequestSchema.parse({ idTag: " CARD001 " })).toEqual({
+      idTag: "CARD001",
+    });
+    expect(
+      runtimeStartTransactionRequestSchema.parse({
+        idTag: "CARD001",
+        meterStartWh: 0,
+        reservationId: 123,
+      }),
+    ).toEqual({
+      idTag: "CARD001",
+      meterStartWh: 0,
+      reservationId: 123,
+    });
+    expect(() =>
+      runtimeStartTransactionRequestSchema.parse({ idTag: "123456789012345678901" }),
+    ).toThrow();
+
+    expect(
+      runtimeStopTransactionRequestSchema.parse({
+        transactionId: " 1001 ",
+        meterStopWh: 100,
+        idTag: " CARD001 ",
+      }),
+    ).toEqual({
+      transactionId: "1001",
+      meterStopWh: 100,
+      idTag: "CARD001",
+    });
+    expect(
+      runtimeStopTransactionRequestSchema.parse({
+        transactionId: "1001",
+        reason: "ev-disconnected",
+      }),
+    ).toEqual({
+      transactionId: "1001",
+      reason: "ev-disconnected",
+    });
+
+    expect(
+      runtimeStartTransactionResponseSchema.parse({
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        connectorId: "00000000-0000-4000-8000-000000000002",
+        evseId: 1,
+        protocolConnectorId: 2,
+        idTag: "CARD001",
+        status: "accepted",
+        transactionId: "1001",
+      }),
+    ).toMatchObject({
+      status: "accepted",
+      transactionId: "1001",
+    });
+    expect(
+      runtimeStopTransactionResponseSchema.parse({
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        connectorId: "00000000-0000-4000-8000-000000000002",
+        evseId: 1,
+        protocolConnectorId: 2,
+        status: "accepted",
+        transactionId: "1001",
+        meterStopWh: 100,
+        stoppedAt: "2026-07-01T00:00:00.000Z",
+      }),
+    ).toMatchObject({
+      status: "accepted",
+      meterStopWh: 100,
+    });
+    expect(runtimeStopTransactionRequestSchema.shape.reason.description).toContain(
+      "未提供时 OCPP StopTransaction 不携带 reason",
+    );
   });
 });
