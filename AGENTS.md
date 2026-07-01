@@ -38,6 +38,10 @@ type 可选值：feat,fix,refactor,perf,style,docs,test,chore
 - 请求参数、请求体和响应字段说明使用中文，优先写在 `@spark-bee/contracts` 的 Zod schema metadata 中。
 - 测试需要覆盖关键接口是否出现在 `/openapi.json`，以及重要中文说明是否存在。
 
+## 前端 UI 规范
+
+- 能使用 shadcn/ui 组件时优先使用 shadcn/ui 组件，再进行轻量业务组合。
+
 ## 四个原则
 
 ### 1. 编码前思考

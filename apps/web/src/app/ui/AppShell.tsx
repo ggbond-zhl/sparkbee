@@ -1,0 +1,29 @@
+import type { PropsWithChildren } from "react";
+
+import { AppSidebar } from "@/app/ui/AppSidebar";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
+
+export function AppShell({ children }: PropsWithChildren) {
+  return (
+    <TooltipProvider>
+      <SidebarProvider open onOpenChange={() => undefined}>
+        <AppSidebar />
+        <SidebarInset>
+          <header className="hidden items-center justify-center border-b p-2 md:flex">
+            <span>充电桩列表</span>
+          </header>
+          <header className="flex items-center gap-2 border-b p-2 md:hidden">
+            <SidebarTrigger />
+            <span>SparkBee</span>
+          </header>
+          <main className="flex w-full flex-1 flex-col p-4">{children}</main>
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+}

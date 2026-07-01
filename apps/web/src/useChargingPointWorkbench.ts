@@ -1,21 +1,21 @@
-export interface StationWorkbench {
+export interface ChargingPointWorkbench {
   authPanel: {
     authenticated: boolean | null;
     login(): Promise<void>;
     logout(): Promise<void>;
   };
-  stationList: {
+  chargingPointList: {
     selectedId: string | null;
-    stations: readonly unknown[];
+    chargingPoints: readonly unknown[];
     refresh(): Promise<void>;
-    selectStation(id: string | null): void;
+    selectChargingPoint(id: string | null): void;
   };
-  stationEditor: {
+  chargingPointEditor: {
     editing: boolean;
     createDraft(): void;
     save(): Promise<void>;
   };
-  stationDetail: {
+  chargingPointDetail: {
     detail: unknown | null;
     start(): Promise<void>;
     stop(): Promise<void>;
@@ -39,24 +39,24 @@ export interface StationWorkbench {
 const noop = () => {};
 const noopAsync = async () => {};
 
-const emptyWorkbench: StationWorkbench = {
+const emptyWorkbench: ChargingPointWorkbench = {
   authPanel: {
     authenticated: null,
     login: noopAsync,
     logout: noopAsync,
   },
-  stationList: {
+  chargingPointList: {
     selectedId: null,
-    stations: [],
+    chargingPoints: [],
     refresh: noopAsync,
-    selectStation: noop,
+    selectChargingPoint: noop,
   },
-  stationEditor: {
+  chargingPointEditor: {
     editing: false,
     createDraft: noop,
     save: noopAsync,
   },
-  stationDetail: {
+  chargingPointDetail: {
     detail: null,
     start: noopAsync,
     stop: noopAsync,
@@ -77,6 +77,6 @@ const emptyWorkbench: StationWorkbench = {
   },
 };
 
-export function useStationWorkbench(): StationWorkbench {
+export function useChargingPointWorkbench(): ChargingPointWorkbench {
   return emptyWorkbench;
 }

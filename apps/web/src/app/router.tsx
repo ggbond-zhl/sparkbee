@@ -5,8 +5,8 @@ import {
   redirect,
 } from "@tanstack/react-router";
 
-import { ChargingPointsRoute } from "@/routes/charging-points";
-import { RootRoute } from "@/routes/root";
+import { RootRoute } from "@/app/routes/RootRoute";
+import { ChargingPointsRoute } from "@/features/charging-points/routes/ChargingPointsRoute";
 
 const rootRoute = createRootRoute({
   component: RootRoute,
