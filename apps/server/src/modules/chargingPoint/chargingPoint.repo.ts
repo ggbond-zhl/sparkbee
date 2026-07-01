@@ -22,6 +22,7 @@ export class ChargingPointRepository {
       .values({
         ...input,
         centralSystemUrl: normalizeCentralSystemUrl(input.centralSystemUrl),
+        description: input.description ?? null,
         firmwareVersion: input.firmwareVersion ?? null,
         serialNumber: input.serialNumber ?? null,
       })
@@ -103,6 +104,10 @@ export class ChargingPointRepository {
       values.centralSystemUrl = normalizeCentralSystemUrl(input.centralSystemUrl);
     }
 
+    if ("description" in input) {
+      values.description = input.description ?? null;
+    }
+
     if ("firmwareVersion" in input) {
       values.firmwareVersion = input.firmwareVersion ?? null;
     }
@@ -158,6 +163,7 @@ export class ChargingPointRepository {
     return and(
       base,
       or(
+        ilike(chargingPoints.name, pattern),
         ilike(chargingPoints.identity, pattern),
         ilike(chargingPoints.vendor, pattern),
         ilike(chargingPoints.model, pattern),
@@ -188,6 +194,8 @@ export class ChargingPointRepository {
   private toSummary(row: ChargingPointRow, connectorCount: number) {
     return {
       id: row.id,
+      name: row.name,
+      description: row.description,
       identity: row.identity,
       protocol: row.protocol,
       centralSystemUrl: row.centralSystemUrl,
@@ -204,6 +212,8 @@ export class ChargingPointRepository {
   private toDetail(row: ChargingPointRow, connectorRows: ConnectorRow[]) {
     return {
       id: row.id,
+      name: row.name,
+      description: row.description,
       identity: row.identity,
       protocol: row.protocol,
       centralSystemUrl: row.centralSystemUrl,

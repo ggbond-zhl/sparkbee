@@ -40,7 +40,7 @@ const listChargingPointsRoute = createRoute({
   path: "/",
   tags: ["ChargingPoint"],
   summary: "查询桩实例列表",
-  description: "分页查询未删除的桩实例，可按 identity、vendor 或 model 关键词过滤。",
+  description: "分页查询未删除的桩实例，可按桩名称、桩身份、vendor 或 model 关键词过滤。",
   request: {
     query: listChargingPointsQuerySchema,
   },

@@ -37,6 +37,8 @@ export class RuntimeOperationRepository {
   ): ChargingPointDetailResponse {
     return {
       id: row.id,
+      name: row.name,
+      description: row.description,
       identity: row.identity,
       protocol: row.protocol,
       centralSystemUrl: row.centralSystemUrl,

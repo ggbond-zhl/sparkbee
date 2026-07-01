@@ -18,6 +18,8 @@ describe("chargingPoint contract schemas", () => {
   test("normalizes chargingPoint create input", () => {
     expect(
       createChargingPointRequestSchema.parse({
+        name: " 调试桩 A ",
+        description: "  ",
         identity: " CP001 ",
         protocol: "OCPP16J",
         centralSystemUrl: " ws://localhost:9000/ocpp ",
@@ -27,6 +29,8 @@ describe("chargingPoint contract schemas", () => {
         serialNumber: " SN-001 ",
       }),
     ).toEqual({
+      name: "调试桩 A",
+      description: null,
       identity: "CP001",
       protocol: "OCPP16J",
       centralSystemUrl: "ws://localhost:9000/ocpp",
@@ -40,6 +44,7 @@ describe("chargingPoint contract schemas", () => {
   test("rejects invalid chargingPoint identity", () => {
     expect(() =>
       createChargingPointRequestSchema.parse({
+        name: "调试桩 A",
         identity: "CP 001",
         protocol: "OCPP16J",
         centralSystemUrl: "ws://localhost:9000/ocpp",

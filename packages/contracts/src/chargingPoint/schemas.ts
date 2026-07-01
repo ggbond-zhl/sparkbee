@@ -26,6 +26,10 @@ const optionalTrimmedString = z.preprocess(
 const nonNegativeIntegerSchema = z.number().int().nonnegative().nullable();
 
 export const createChargingPointRequestSchema = z.object({
+  name: trimmedRequiredString.describe("桩实例在 SparkBee 内部使用的展示名称。"),
+  description: optionalTrimmedString
+    .optional()
+    .describe("桩实例的备注说明，空字符串会保存为 null。"),
   identity: trimmedRequiredString
     .regex(/^[A-Za-z0-9_.-]+$/)
     .describe("桩实例连接 CSMS 时使用的 charge point identity。"),
@@ -84,6 +88,8 @@ export const connectorResponseSchema = z.object({
 
 export const chargingPointSummaryResponseSchema = z.object({
   id: z.string().uuid().describe("桩实例的 UUID 主键。"),
+  name: z.string().describe("桩实例在 SparkBee 内部使用的展示名称。"),
+  description: z.string().nullable().describe("桩实例的备注说明。"),
   identity: z.string().describe("桩实例连接 CSMS 时使用的 charge point identity。"),
   protocol: chargingPointProtocolSchema.describe("桩实例使用的 OCPP 协议版本。"),
   centralSystemUrl: z.string().describe("CSMS 基础 WebSocket 地址。"),
@@ -252,7 +258,7 @@ export const listChargingPointsQuerySchema = paginationQuerySchema.extend({
     .string()
     .trim()
     .optional()
-    .describe("按 identity、vendor 或 model 模糊搜索的关键词。"),
+    .describe("按桩名称、桩身份、vendor 或 model 模糊搜索的关键词。"),
 });
 
 export const listChargingPointsResponseSchema = paginatedResponseSchema(

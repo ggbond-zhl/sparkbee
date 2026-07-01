@@ -8,6 +8,8 @@ export async function migrateDatabase(client: Pick<PGlite, "exec">): Promise<voi
 
     create table charging_points (
       id uuid primary key default gen_random_uuid(),
+      name text not null,
+      description text,
       identity text not null,
       protocol charging_point_protocol not null,
       central_system_url text not null,

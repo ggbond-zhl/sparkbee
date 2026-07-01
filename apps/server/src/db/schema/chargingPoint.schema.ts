@@ -14,6 +14,8 @@ export const chargingPoints = pgTable(
   "charging_points",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
     identity: text("identity").notNull(),
     protocol: chargingPointProtocol("protocol").notNull(),
     centralSystemUrl: text("central_system_url").notNull(),

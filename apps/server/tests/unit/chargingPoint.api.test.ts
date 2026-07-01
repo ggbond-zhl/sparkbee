@@ -128,6 +128,8 @@ describe("chargingPoint management API", () => {
     expect(serializedDocument).toContain(
       "桩实例连接 CSMS 时使用的 charge point identity",
     );
+    expect(serializedDocument).toContain("桩实例在 SparkBee 内部使用的展示名称");
+    expect(serializedDocument).toContain("桩实例的备注说明");
     expect(serializedDocument).toContain("CSMS 基础 WebSocket 地址");
     expect(serializedDocument).toContain("枪口在所属桩实例内的 connectorId");
     expect(serializedDocument).toContain("当前服务进程中的运行状态");
@@ -165,6 +167,8 @@ describe("chargingPoint management API", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        name: " 调试桩 A ",
+        description: " 主调试桩 ",
         identity: "CP001",
         protocol: "OCPP16J",
         centralSystemUrl: "ws://localhost:9000/ocpp///",
@@ -178,6 +182,8 @@ describe("chargingPoint management API", () => {
     expect(createResponse.status).toBe(201);
     const created = chargingPointDetailResponseSchema.parse(await createResponse.json());
     expect(created).toMatchObject({
+      name: "调试桩 A",
+      description: "主调试桩",
       identity: "CP001",
       protocol: "OCPP16J",
       centralSystemUrl: "ws://localhost:9000/ocpp",
@@ -203,6 +209,7 @@ describe("chargingPoint management API", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          name: `调试桩 ${identity}`,
           identity,
           protocol: "OCPP16J",
           centralSystemUrl: "ws://localhost:9000/ocpp",
@@ -241,6 +248,8 @@ describe("chargingPoint management API", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         identity: "CP002",
+        name: "调试桩 B",
+        description: "",
         centralSystemUrl: "wss://csms.example.com/root///",
         vendor: "NextVendor",
         firmwareVersion: "1.2.3",
@@ -251,6 +260,8 @@ describe("chargingPoint management API", () => {
     expect(response.status).toBe(200);
     expect(chargingPointDetailResponseSchema.parse(await response.json())).toMatchObject({
       id: created.id,
+      name: "调试桩 B",
+      description: null,
       identity: "CP002",
       centralSystemUrl: "wss://csms.example.com/root",
       vendor: "NextVendor",
@@ -1697,10 +1708,14 @@ async function createChargingPoint(
   app: ReturnType<typeof createApp>,
   input: Record<string, unknown>,
 ) {
+  const requestInput = {
+    name: typeof input.identity === "string" ? `调试桩 ${input.identity}` : "调试桩",
+    ...input,
+  };
   const response = await app.request("/api/charging-points", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify(requestInput),
   });
 
   expect(response.status).toBe(201);

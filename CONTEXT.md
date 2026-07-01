@@ -16,6 +16,10 @@ _Avoid_: station、设备、模拟器、充电桩配置
 桩实例连接 CSMS 时使用的 charge point identity，并参与生成最终 WebSocket 地址。
 _Avoid_: 设备编号、桩编号、连接路径
 
+**桩名称**:
+用户在 SparkBee 内部识别桩实例的展示名，不参与 OCPP 协议连接，也不替代桩身份。
+_Avoid_: 桩身份、charge point identity、连接路径
+
 **枪口**:
 用户在 V1 前端直接管理的充电连接点。V1 不要求用户理解 EVSE，内部可以映射到协议核心的 EVSE/connector 模型。
 _Avoid_: connector、EVSE、插座
