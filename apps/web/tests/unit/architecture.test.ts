@@ -24,10 +24,33 @@ describe("web architecture", () => {
   test("app shell does not own transport or workbench state details", () => {
     const appSource = readFileSync(join(srcRoot, "App.tsx"), "utf8");
 
+    expect(appSource).toContain("QueryClientProvider");
+    expect(appSource).toContain("RouterProvider");
     expect(appSource).not.toContain("fetch(");
     expect(appSource).not.toContain("EventSource");
     expect(appSource).not.toContain("setLoginPassword");
     expect(appSource).not.toContain("setConnectorId");
     expect(appSource).not.toContain("setActiveTransactionId");
+  });
+
+  test("charging point list route owns list data and filter state", () => {
+    const routePath = join(srcRoot, "routes", "charging-points.tsx");
+    const routeSource = readFileSync(routePath, "utf8");
+
+    expect(existsSync(routePath)).toBe(true);
+    expect(routeSource).toContain("useQuery");
+    expect(routeSource).toContain("useForm");
+    expect(routeSource).toContain("standardSchemaResolver");
+    expect(routeSource).toContain("z.object");
+    expect(routeSource).toContain("useChargingPointListStore");
+  });
+
+  test("router uses code-defined routes for the initial shell", () => {
+    const routerPath = join(srcRoot, "router.tsx");
+    const routerSource = readFileSync(routerPath, "utf8");
+
+    expect(existsSync(routerPath)).toBe(true);
+    expect(routerSource).toContain("createRootRoute");
+    expect(routerSource).toContain("/charging-points");
   });
 });
