@@ -1,13 +1,17 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type {
+  ColumnDef,
+  OnChangeFn,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import type { ListChargingPointsResponse } from "@spark-bee/contracts";
 import {
-  ListFilterIcon,
   MoreHorizontalIcon,
   PlusIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { UseFormRegisterReturn } from "react-hook-form";
 import { useForm } from "react-hook-form";
 
@@ -44,6 +48,8 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -54,14 +60,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/data-table/DataTable";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createChargingPoint,
@@ -90,11 +89,8 @@ export function ChargingPointListPage() {
   const selectChargingPoint = useChargingPointListStore(
     (state) => state.selectChargingPoint,
   );
-  const toggleSelectedId = useChargingPointListStore(
-    (state) => state.toggleSelectedId,
-  );
-  const toggleAllVisible = useChargingPointListStore(
-    (state) => state.toggleAllVisible,
+  const setSelectedIds = useChargingPointListStore(
+    (state) => state.setSelectedIds,
   );
   const form = useForm<ChargingPointListSearchFormValues>({
     resolver: standardSchemaResolver(chargingPointListSearchFormSchema),
@@ -139,8 +135,7 @@ export function ChargingPointListPage() {
         items={items}
         onSearch={form.handleSubmit((values) => setKeyword(values.keyword))}
         onSelect={selectChargingPoint}
-        onToggleAllVisible={() => toggleAllVisible(items.map((item) => item.id))}
-        onToggleSelected={toggleSelectedId}
+        onSelectedIdsChange={setSelectedIds}
         searchInput={form.register("keyword")}
         selectedIds={selectedIds}
         selectedId={selectedId}
@@ -158,9 +153,8 @@ interface ChargingPointListViewProps {
 }
 
 interface ChargingPointTableProps extends ChargingPointListViewProps {
+  onSelectedIdsChange(ids: string[]): void;
   onSearch(): void;
-  onToggleAllVisible(): void;
-  onToggleSelected(id: string): void;
   searchInput: UseFormRegisterReturn<"keyword">;
   selectedIds: string[];
 }
@@ -228,135 +222,172 @@ function ChargingPointTable({
   isError,
   isLoading,
   items,
+  onSelectedIdsChange,
   onSearch,
   onSelect,
-  onToggleAllVisible,
-  onToggleSelected,
   searchInput,
   selectedIds,
   selectedId,
 }: ChargingPointTableProps) {
-  const visibleIds = items.map((item) => item.id);
-  const allVisibleSelected =
-    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
-  const someVisibleSelected = visibleIds.some((id) => selectedIds.includes(id));
+  const columns = useMemo<ColumnDef<ChargingPointListItem>[]>(
+    () => [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            aria-label="全选当前列表"
+            checked={
+              table.getIsAllPageRowsSelected()
+                ? true
+                : table.getIsSomePageRowsSelected()
+                  ? "indeterminate"
+                  : false
+            }
+            disabled={table.getRowModel().rows.length === 0}
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(Boolean(value))
+            }
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            aria-label={`选择 ${row.original.name}`}
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
+          />
+        ),
+        enableHiding: false,
+        enableSorting: false,
+      },
+      {
+        accessorKey: "name",
+        header: "名称",
+        cell: ({ row }) => (
+          <button
+            type="button"
+            className="flex max-w-56 appearance-none flex-col gap-0.5 rounded-md border-0 bg-transparent p-0 text-left text-inherit outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            onClick={() => onSelect(row.original.id)}
+          >
+            <span className="truncate font-medium">{row.original.name}</span>
+            {row.original.description && (
+              <span className="truncate text-muted-foreground">
+                {row.original.description}
+              </span>
+            )}
+          </button>
+        ),
+      },
+      {
+        accessorKey: "identity",
+        header: "桩身份",
+        cell: ({ row }) => (
+          <span className="font-mono">{row.original.identity}</span>
+        ),
+      },
+      {
+        accessorKey: "centralSystemUrl",
+        header: "CSMS",
+        cell: ({ row }) => (
+          <span className="block max-w-72 truncate">
+            {row.original.centralSystemUrl}
+          </span>
+        ),
+      },
+      {
+        id: "model",
+        header: "型号",
+        cell: ({ row }) => (
+          <>
+            {row.original.vendor} / {row.original.model}
+          </>
+        ),
+      },
+      {
+        accessorKey: "connectorCount",
+        header: () => <div className="text-right">枪口</div>,
+        cell: ({ row }) => (
+          <div className="text-right tabular-nums">
+            {row.original.connectorCount}
+          </div>
+        ),
+      },
+      {
+        id: "actions",
+        header: () => <span className="sr-only">操作</span>,
+        cell: ({ row }) => (
+          <div className="text-right">
+            <ChargingPointRowActionMenu item={row.original} />
+          </div>
+        ),
+        enableHiding: false,
+        enableSorting: false,
+      },
+    ],
+    [onSelect],
+  );
+  const rowSelection = useMemo<RowSelectionState>(
+    () =>
+      Object.fromEntries(
+        selectedIds.map((id) => [id, true] as const),
+      ),
+    [selectedIds],
+  );
+  const handleRowSelectionChange: OnChangeFn<RowSelectionState> = (updater) => {
+    const nextSelection =
+      typeof updater === "function" ? updater(rowSelection) : updater;
+    onSelectedIdsChange(
+      Object.entries(nextSelection)
+        .filter(([, selected]) => selected)
+        .map(([id]) => id),
+    );
+  };
+  const tableItems = isLoading || isError ? [] : items;
+  const emptyText = isLoading
+    ? "加载中"
+    : isError
+      ? "列表加载失败"
+      : "暂无桩实例";
 
   return (
     <div className="hidden flex-col gap-3 md:flex">
-      <form className="flex items-center gap-2" onSubmit={onSearch}>
-        <Button type="button" variant="outline" size="icon">
-          <ListFilterIcon />
-          <span className="sr-only">筛选</span>
-        </Button>
-        <Input
-          aria-label="搜索充电桩"
-          className="flex-1"
-          placeholder="搜索名称、桩身份、厂商或型号"
-          {...searchInput}
-        />
-        <Button type="submit">
-          搜索
-        </Button>
-        <ChargingPointCreateDialog />
+      <form
+        className="flex items-center justify-between gap-2"
+        onSubmit={onSearch}
+      >
+        <div className="flex items-center gap-2">
+          <Input
+            aria-label="搜索充电桩"
+            className="max-w-sm"
+            placeholder="搜索名称、桩身份、厂商或型号"
+            {...searchInput}
+          />
+          <Button type="submit">
+            搜索
+          </Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <ChargingPointCreateDialog />
+        </div>
       </form>
 
-      <Table className="min-w-[840px]">
-        <TableHeader>
-          <TableRow>
-            <TableHead>
-              <Checkbox
-                aria-label="全选当前列表"
-                checked={
-                  allVisibleSelected
-                    ? true
-                    : someVisibleSelected
-                      ? "indeterminate"
-                      : false
-                }
-                disabled={visibleIds.length === 0}
-                onCheckedChange={onToggleAllVisible}
-              />
-            </TableHead>
-            <TableHead>名称</TableHead>
-            <TableHead>桩身份</TableHead>
-            <TableHead>CSMS</TableHead>
-            <TableHead>型号</TableHead>
-            <TableHead className="text-right">枪口</TableHead>
-            <TableHead className="text-right">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading && (
-            <TableRow>
-              <TableCell className="text-muted-foreground" colSpan={7}>
-                加载中
-              </TableCell>
-            </TableRow>
-          )}
-          {isError && (
-            <TableRow>
-              <TableCell className="text-destructive" colSpan={7}>
-                列表加载失败
-              </TableCell>
-            </TableRow>
-          )}
-          {!isLoading && !isError && items.length === 0 && (
-            <TableRow>
-              <TableCell className="text-muted-foreground" colSpan={7}>
-                暂无桩实例
-              </TableCell>
-            </TableRow>
-          )}
-          {items.map((item) => (
-            <TableRow
-              key={item.id}
-              data-state={item.id === selectedId ? "selected" : undefined}
-            >
-              <TableCell>
-                <Checkbox
-                  aria-label={`选择 ${item.name}`}
-                  checked={selectedIds.includes(item.id)}
-                  onCheckedChange={() => onToggleSelected(item.id)}
-                />
-              </TableCell>
-              <TableCell>
-                <button
-                  type="button"
-                  className="flex max-w-56 appearance-none flex-col gap-0.5 rounded-md border-0 bg-transparent p-0 text-left text-inherit outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                  onClick={() => onSelect(item.id)}
-                >
-                  <span className="truncate font-medium">{item.name}</span>
-                  {item.description && (
-                    <span className="truncate text-muted-foreground">
-                      {item.description}
-                    </span>
-                  )}
-                </button>
-              </TableCell>
-              <TableCell className="font-mono">{item.identity}</TableCell>
-              <TableCell>
-                <span className="block max-w-72 truncate">
-                  {item.centralSystemUrl}
-                </span>
-              </TableCell>
-              <TableCell>
-                {item.vendor} / {item.model}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {item.connectorCount}
-              </TableCell>
-              <TableCell className="text-right">
-                <ChargingPointRowActions item={item} />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DataTable
+        columns={columns}
+        data={tableItems}
+        emptyClassName={isError ? "text-destructive" : undefined}
+        emptyText={emptyText}
+        getRowId={(item) => item.id}
+        getRowState={(row) =>
+          row.original.id === selectedId ? "selected" : undefined
+        }
+        onRowSelectionChange={handleRowSelectionChange}
+        rowSelection={rowSelection}
+        tableClassName="min-w-[840px]"
+      />
     </div>
   );
 }
 
-function ChargingPointRowActions({ item }: { item: ChargingPointListItem }) {
+function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const queryClient = useQueryClient();
   const removeDeletedId = useChargingPointListStore(
@@ -387,8 +418,11 @@ function ChargingPointRowActions({ item }: { item: ChargingPointListItem }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-32">
+          <DropdownMenuLabel>操作</DropdownMenuLabel>
+          <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem
+              disabled={deleteMutation.isPending}
               variant="destructive"
               onSelect={(event) => {
                 event.preventDefault();

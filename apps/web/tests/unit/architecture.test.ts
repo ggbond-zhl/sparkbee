@@ -78,6 +78,7 @@ describe("web architecture", () => {
     const formPath = join(featureRoot, "model", "chargingPointListForm.ts");
     const createFormPath = join(featureRoot, "model", "chargingPointCreateForm.ts");
     const storePath = join(featureRoot, "model", "chargingPointListStore.ts");
+    const dataTablePath = join(srcRoot, "components", "data-table", "DataTable.tsx");
     const routeSource = readFileSync(routePath, "utf8");
     const pageSource = readFileSync(pagePath, "utf8");
     const apiSource = readFileSync(apiPath, "utf8");
@@ -85,6 +86,9 @@ describe("web architecture", () => {
     const formSource = readFileSync(formPath, "utf8");
     const createFormSource = readFileSync(createFormPath, "utf8");
     const storeSource = readFileSync(storePath, "utf8");
+    const dataTableSource = existsSync(dataTablePath)
+      ? readFileSync(dataTablePath, "utf8")
+      : "";
 
     expect(existsSync(routePath)).toBe(true);
     expect(existsSync(pagePath)).toBe(true);
@@ -93,6 +97,7 @@ describe("web architecture", () => {
     expect(existsSync(formPath)).toBe(true);
     expect(existsSync(createFormPath)).toBe(true);
     expect(existsSync(storePath)).toBe(true);
+    expect(existsSync(dataTablePath)).toBe(true);
 
     expect(routeSource).toContain("ChargingPointListPage");
     expect(routeSource).not.toContain("useQuery");
@@ -107,12 +112,16 @@ describe("web architecture", () => {
     expect(pageSource).toContain("ChargingPointTable");
     expect(pageSource).toContain("md:hidden");
     expect(pageSource).toContain("hidden flex-col gap-3 md:flex");
-    expect(pageSource).toContain("TableHeader");
-    expect(pageSource).toContain("TableCell");
+    expect(pageSource).toContain("DataTable");
+    expect(pageSource).toContain("ColumnDef");
+    expect(pageSource).not.toContain("TableHeader");
     expect(pageSource).toContain("Card");
     expect(pageSource).toContain("Checkbox");
     expect(pageSource).toContain("DialogTrigger");
     expect(pageSource).toContain("DropdownMenuTrigger");
+    expect(pageSource).toContain("DropdownMenuLabel");
+    expect(pageSource).toContain("DropdownMenuSeparator");
+    expect(pageSource).toContain("ChargingPointRowActionMenu");
     expect(pageSource).toContain("AlertDialogContent");
     expect(pageSource).toContain("新增");
     expect(pageSource).toContain("操作");
@@ -127,9 +136,16 @@ describe("web architecture", () => {
     expect(pageSource).toContain("CSMS 地址");
     expect(pageSource).toContain("全选当前列表");
     expect(storeSource).toContain("selectedIds");
-    expect(storeSource).toContain("toggleSelectedId");
-    expect(storeSource).toContain("toggleAllVisible");
+    expect(storeSource).toContain("setSelectedIds");
     expect(storeSource).toContain("removeDeletedId");
+    expect(dataTableSource).toContain("useReactTable");
+    expect(dataTableSource).toContain("getCoreRowModel");
+    expect(dataTableSource).toContain("flexRender");
+    expect(dataTableSource).toContain("@/components/ui/table");
+    expect(dataTableSource).toContain("rounded-md border");
+    expect(dataTableSource).toContain("已选择");
+    expect(dataTableSource).toContain("上一页");
+    expect(dataTableSource).toContain("下一页");
     expect(apiSource).toContain("@spark-bee/contracts");
     expect(apiSource).toContain("fetch(");
     expect(apiSource).toContain("createChargingPoint");
@@ -164,5 +180,8 @@ describe("web architecture", () => {
     expect(existsSync(join(srcRoot, "components", "ui", "sidebar.tsx"))).toBe(
       true,
     );
+    expect(
+      existsSync(join(srcRoot, "components", "data-table", "DataTable.tsx")),
+    ).toBe(true);
   });
 });
