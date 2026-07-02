@@ -13,6 +13,7 @@ import {
 import {
   ChevronDownIcon,
   MoreHorizontalIcon,
+  PencilIcon,
   SearchIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -71,6 +72,7 @@ import {
 import { chargingPointListQueryOptions } from "@/features/charging-points/model/chargingPointQueries";
 import { useChargingPointListStore } from "@/features/charging-points/model/chargingPointListStore";
 import { ChargingPointCreateDialog } from "@/features/charging-points/ui/ChargingPointCreateDialog";
+import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingPointEditDialog";
 
 type ChargingPointListItem = ListChargingPointsResponse["items"][number];
 
@@ -550,6 +552,7 @@ function PageSizeMenu({
 }
 
 function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
+  const [editOpen, setEditOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const queryClient = useQueryClient();
   const removeDeletedId = useChargingPointListStore(
@@ -567,68 +570,85 @@ function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
     deleteMutation.error instanceof Error ? deleteMutation.error.message : null;
 
   return (
-    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            aria-label={`打开 ${item.name} 操作菜单`}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            <MoreHorizontalIcon />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-32">
-          <DropdownMenuLabel>操作</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              disabled={deleteMutation.isPending}
-              variant="destructive"
-              onSelect={(event) => {
-                event.preventDefault();
-                deleteMutation.reset();
-                setConfirmOpen(true);
-              }}
+    <>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              aria-label={`打开 ${item.name} 操作菜单`}
+              size="icon"
+              type="button"
+              variant="ghost"
             >
-              <Trash2Icon />
-              删除
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <AlertDialogContent size="sm">
-        <AlertDialogHeader>
-          <AlertDialogTitle>确认删除</AlertDialogTitle>
-          <AlertDialogDescription>
-            删除后，{item.name} 及其枪口将不再出现在列表中。
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {deleteError && (
-          <div role="alert" className="text-sm text-destructive">
-            {deleteError}
-          </div>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            disabled={deleteMutation.isPending}
-            type="button"
-            variant="outline"
-          >
-            取消
-          </AlertDialogCancel>
-          <Button
-            disabled={deleteMutation.isPending}
-            type="button"
-            variant="destructive"
-            onClick={() => deleteMutation.mutate()}
-          >
-            {deleteMutation.isPending ? "删除中" : "删除"}
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+              <MoreHorizontalIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-32">
+            <DropdownMenuLabel>操作</DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setEditOpen(true);
+                }}
+              >
+                <PencilIcon />
+                编辑
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                disabled={deleteMutation.isPending}
+                variant="destructive"
+                onSelect={(event) => {
+                  event.preventDefault();
+                  deleteMutation.reset();
+                  setConfirmOpen(true);
+                }}
+              >
+                <Trash2Icon />
+                删除
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              删除后，{item.name} 及其枪口将不再出现在列表中。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError && (
+            <div role="alert" className="text-sm text-destructive">
+              {deleteError}
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={deleteMutation.isPending}
+              type="button"
+              variant="outline"
+            >
+              取消
+            </AlertDialogCancel>
+            <Button
+              disabled={deleteMutation.isPending}
+              type="button"
+              variant="destructive"
+              onClick={() => deleteMutation.mutate()}
+            >
+              {deleteMutation.isPending ? "删除中" : "删除"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <ChargingPointEditDialog
+        item={item}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
+    </>
   );
 }
 

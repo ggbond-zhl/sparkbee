@@ -1,7 +1,7 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { PlusIcon } from "lucide-react";
-import { useState } from "react";
+import type { ChargingPointSummaryResponse } from "@spark-bee/contracts";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -12,47 +12,71 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { createChargingPoint } from "@/features/charging-points/api/chargingPoints";
+import { updateChargingPoint } from "@/features/charging-points/api/chargingPoints";
 import {
-  chargingPointCreateFormDefaultValues,
   chargingPointCreateFormSchema,
   type ChargingPointCreateFormInput,
   type ChargingPointCreateFormValues,
 } from "@/features/charging-points/model/chargingPointCreateForm";
 import { ChargingPointFormFields } from "@/features/charging-points/ui/ChargingPointFormFields";
 
-export function ChargingPointCreateDialog() {
-  const [open, setOpen] = useState(false);
+interface ChargingPointEditDialogProps {
+  item: ChargingPointSummaryResponse;
+  open: boolean;
+  onOpenChange(open: boolean): void;
+}
+
+function createEditFormValues(
+  item: ChargingPointSummaryResponse,
+): ChargingPointCreateFormInput {
+  return {
+    name: item.name,
+    description: item.description ?? "",
+    identity: item.identity,
+    protocol: item.protocol,
+    centralSystemUrl: item.centralSystemUrl,
+    vendor: item.vendor,
+    model: item.model,
+    firmwareVersion: item.firmwareVersion ?? "",
+    serialNumber: item.serialNumber ?? "",
+  };
+}
+
+export function ChargingPointEditDialog({
+  item,
+  onOpenChange,
+  open,
+}: ChargingPointEditDialogProps) {
   const [protocolSelectOpen, setProtocolSelectOpen] = useState(false);
   const queryClient = useQueryClient();
+  const formValues = useMemo(() => createEditFormValues(item), [item]);
   const form = useForm<
     ChargingPointCreateFormInput,
     undefined,
     ChargingPointCreateFormValues
   >({
     resolver: standardSchemaResolver(chargingPointCreateFormSchema),
-    defaultValues: chargingPointCreateFormDefaultValues,
+    values: formValues,
   });
-  const createMutation = useMutation({
-    mutationFn: createChargingPoint,
+  const updateMutation = useMutation({
+    mutationFn: (values: ChargingPointCreateFormValues) =>
+      updateChargingPoint(item.id, values),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["charging-points"] });
-      form.reset(chargingPointCreateFormDefaultValues);
       setProtocolSelectOpen(false);
-      setOpen(false);
+      onOpenChange(false);
     },
   });
-  const createError =
-    createMutation.error instanceof Error ? createMutation.error.message : null;
+  const updateError =
+    updateMutation.error instanceof Error ? updateMutation.error.message : null;
 
   function handleOpenChange(nextOpen: boolean) {
-    setOpen(nextOpen);
+    onOpenChange(nextOpen);
     if (!nextOpen) {
       setProtocolSelectOpen(false);
-      form.reset(chargingPointCreateFormDefaultValues);
-      createMutation.reset();
+      form.reset(formValues);
+      updateMutation.reset();
     }
   }
 
@@ -67,46 +91,40 @@ export function ChargingPointCreateDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button type="button">
-          <PlusIcon data-icon="inline-start" />
-          新增
-        </Button>
-      </DialogTrigger>
       <DialogContent
         onEscapeKeyDown={closeProtocolSelectBeforeDialog}
         onInteractOutside={closeProtocolSelectBeforeDialog}
       >
         <form
           className="flex flex-col gap-4"
-          onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}
+          onSubmit={form.handleSubmit((values) => updateMutation.mutate(values))}
         >
           <DialogHeader>
-            <DialogTitle>新增充电桩</DialogTitle>
+            <DialogTitle>编辑充电桩</DialogTitle>
           </DialogHeader>
           <ChargingPointFormFields
             form={form}
-            idPrefix="charging-point-create"
+            idPrefix="charging-point-edit"
             protocolSelectOpen={protocolSelectOpen}
             onProtocolSelectOpenChange={setProtocolSelectOpen}
           />
-          {createError && (
+          {updateError && (
             <div role="alert" className="text-sm text-destructive">
-              {createError}
+              {updateError}
             </div>
           )}
           <DialogFooter>
             <DialogClose asChild>
               <Button
-                disabled={createMutation.isPending}
+                disabled={updateMutation.isPending}
                 type="button"
                 variant="outline"
               >
                 取消
               </Button>
             </DialogClose>
-            <Button disabled={createMutation.isPending} type="submit">
-              {createMutation.isPending ? "创建中" : "确认"}
+            <Button disabled={updateMutation.isPending} type="submit">
+              {updateMutation.isPending ? "保存中" : "保存"}
             </Button>
           </DialogFooter>
         </form>

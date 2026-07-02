@@ -5,6 +5,7 @@ import {
   listChargingPointsResponseSchema,
   type ListChargingPointsResponse,
   type PageSize,
+  type UpdateChargingPointRequest,
 } from "@spark-bee/contracts";
 
 export interface ListChargingPointsInput {
@@ -46,6 +47,25 @@ export async function createChargingPoint(
 
   if (!response.ok) {
     throw new Error("充电桩创建失败");
+  }
+
+  return chargingPointDetailResponseSchema.parse(await response.json());
+}
+
+export async function updateChargingPoint(
+  id: string,
+  input: UpdateChargingPointRequest,
+): Promise<ChargingPointDetailResponse> {
+  const response = await fetch(`/api/charging-points/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    throw new Error("充电桩更新失败");
   }
 
   return chargingPointDetailResponseSchema.parse(await response.json());
