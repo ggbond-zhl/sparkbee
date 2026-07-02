@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BatteryChargingIcon, ListIcon } from "lucide-react";
+import { ListIcon } from "lucide-react";
 
 import {
   Sidebar,
@@ -24,7 +24,11 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <Link to="/charging-points">
-                <BatteryChargingIcon />
+                <img
+                  src="/logo.svg"
+                  alt=""
+                  className="size-5 rounded-sm object-contain"
+                />
                 <span>SparkBee</span>
               </Link>
             </SidebarMenuButton>
@@ -39,6 +43,7 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   asChild
                   isActive={pathname.startsWith("/charging-points")}
+                  className="h-9"
                 >
                   <Link to="/charging-points">
                     <ListIcon />

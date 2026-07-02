@@ -19,6 +19,11 @@ export function AppShell({ children }: PropsWithChildren) {
           </header>
           <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:hidden">
             <SidebarTrigger />
+            <img
+              src="/logo.svg"
+              alt=""
+              className="size-5 rounded-sm object-contain"
+            />
             <span>SparkBee</span>
           </header>
           <main className="flex w-full flex-1 flex-col p-4">{children}</main>
