@@ -17,7 +17,7 @@ import {
   SearchIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Controller, type UseFormRegisterReturn } from "react-hook-form";
 import { useForm } from "react-hook-form";
 
@@ -662,6 +662,8 @@ function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
 
 function ChargingPointCreateDialog() {
   const [open, setOpen] = useState(false);
+  const [protocolSelectOpen, setProtocolSelectOpen] = useState(false);
+  const ignoreNextDialogOutsideInteractionRef = useRef(false);
   const queryClient = useQueryClient();
   const form = useForm<
     ChargingPointCreateFormInput,
@@ -686,9 +688,30 @@ function ChargingPointCreateDialog() {
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
     if (!nextOpen) {
+      ignoreNextDialogOutsideInteractionRef.current = false;
       form.reset(chargingPointCreateFormDefaultValues);
       createMutation.reset();
     }
+  }
+
+  function handleProtocolSelectOpenChange(nextOpen: boolean) {
+    setProtocolSelectOpen(nextOpen);
+    if (nextOpen) {
+      ignoreNextDialogOutsideInteractionRef.current = true;
+    }
+  }
+
+  function preventDialogCloseAfterProtocolSelectInteraction(event: {
+    preventDefault(): void;
+  }) {
+    if (!ignoreNextDialogOutsideInteractionRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    window.setTimeout(() => {
+      ignoreNextDialogOutsideInteractionRef.current = false;
+    }, 0);
   }
 
   return (
@@ -699,7 +722,11 @@ function ChargingPointCreateDialog() {
           新增
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent
+        onFocusOutside={preventDialogCloseAfterProtocolSelectInteraction}
+        onInteractOutside={preventDialogCloseAfterProtocolSelectInteraction}
+        onPointerDownOutside={preventDialogCloseAfterProtocolSelectInteraction}
+      >
         <form
           className="flex flex-col gap-4"
           onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}
@@ -743,7 +770,15 @@ function ChargingPointCreateDialog() {
                 control={form.control}
                 name="protocol"
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select
+                    open={protocolSelectOpen}
+                    value={field.value}
+                    onOpenChange={handleProtocolSelectOpenChange}
+                    onValueChange={(value) => {
+                      ignoreNextDialogOutsideInteractionRef.current = false;
+                      field.onChange(value);
+                    }}
+                  >
                     <SelectTrigger
                       id="charging-point-create-protocol"
                       ref={field.ref}

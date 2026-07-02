@@ -156,6 +156,14 @@ describe("web architecture", () => {
     expect(dataTableSource).toContain("已选择");
     expect(dataTableSource).toContain("上一页");
     expect(dataTableSource).toContain("下一页");
+    expect(pageSource).toContain("protocolSelectOpen");
+    expect(pageSource).toContain("ignoreNextDialogOutsideInteractionRef");
+    expect(pageSource).toContain("preventDialogCloseAfterProtocolSelectInteraction");
+    expect(pageSource).toContain("onPointerDownOutside");
+    expect(pageSource).toContain("onFocusOutside");
+    expect(pageSource).toContain("onInteractOutside");
+    expect(pageSource).toContain("event.preventDefault()");
+    expect(pageSource).toContain("onOpenChange={handleProtocolSelectOpenChange}");
     expect(apiSource).toContain("@spark-bee/contracts");
     expect(apiSource).toContain("fetch(");
     expect(apiSource).toContain("pageSize");
