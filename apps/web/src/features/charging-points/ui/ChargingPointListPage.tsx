@@ -9,6 +9,7 @@ import type { ListChargingPointsResponse } from "@spark-bee/contracts";
 import {
   MoreHorizontalIcon,
   PlusIcon,
+  SearchIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -63,6 +64,11 @@ import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/data-table/DataTable";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   createChargingPoint,
   deleteChargingPoint,
 } from "@/features/charging-points/api/chargingPoints";
@@ -80,6 +86,23 @@ import { chargingPointListQueryOptions } from "@/features/charging-points/model/
 import { useChargingPointListStore } from "@/features/charging-points/model/chargingPointListStore";
 
 type ChargingPointListItem = ListChargingPointsResponse["items"][number];
+
+function TruncatedText({
+  className,
+  value,
+}: {
+  className?: string;
+  value: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={className}>{value}</span>
+      </TooltipTrigger>
+      <TooltipContent className="break-all">{value}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function ChargingPointListPage() {
   const keyword = useChargingPointListStore((state) => state.keyword);
@@ -118,7 +141,10 @@ export function ChargingPointListPage() {
             />
             <FieldError errors={[form.formState.errors.keyword]} />
           </Field>
-          <Button type="submit">搜索</Button>
+          <Button type="submit">
+            <SearchIcon data-icon="inline-start" />
+            搜索
+          </Button>
         </FieldGroup>
       </form>
 
@@ -202,12 +228,22 @@ function ChargingPointMobileCardList({
             <CardContent>
               <dl className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
                 <dt className="text-muted-foreground">桩身份</dt>
-                <dd className="truncate font-mono text-xs">{item.identity}</dd>
+                <dd className="truncate font-mono text-xs">
+                  <TruncatedText className="block truncate" value={item.identity} />
+                </dd>
                 <dt className="text-muted-foreground">CSMS</dt>
-                <dd className="truncate">{item.centralSystemUrl}</dd>
+                <dd className="truncate">
+                  <TruncatedText
+                    className="block truncate"
+                    value={item.centralSystemUrl}
+                  />
+                </dd>
                 <dt className="text-muted-foreground">型号</dt>
                 <dd className="truncate">
-                  {item.vendor} / {item.model}
+                  <TruncatedText
+                    className="block truncate"
+                    value={`${item.vendor} / ${item.model}`}
+                  />
                 </dd>
               </dl>
             </CardContent>
@@ -268,11 +304,15 @@ function ChargingPointTable({
             className="flex max-w-56 appearance-none flex-col gap-0.5 rounded-md border-0 bg-transparent p-0 text-left text-inherit outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             onClick={() => onSelect(row.original.id)}
           >
-            <span className="truncate font-medium">{row.original.name}</span>
+            <TruncatedText
+              className="block max-w-full truncate font-medium"
+              value={row.original.name}
+            />
             {row.original.description && (
-              <span className="truncate text-muted-foreground">
-                {row.original.description}
-              </span>
+              <TruncatedText
+                className="block max-w-full truncate text-muted-foreground"
+                value={row.original.description}
+              />
             )}
           </button>
         ),
@@ -288,18 +328,20 @@ function ChargingPointTable({
         accessorKey: "centralSystemUrl",
         header: "CSMS",
         cell: ({ row }) => (
-          <span className="block max-w-72 truncate">
-            {row.original.centralSystemUrl}
-          </span>
+          <TruncatedText
+            className="block max-w-72 truncate"
+            value={row.original.centralSystemUrl}
+          />
         ),
       },
       {
         id: "model",
         header: "型号",
         cell: ({ row }) => (
-          <>
-            {row.original.vendor} / {row.original.model}
-          </>
+          <TruncatedText
+            className="block max-w-48 truncate"
+            value={`${row.original.vendor} / ${row.original.model}`}
+          />
         ),
       },
       {
@@ -362,6 +404,7 @@ function ChargingPointTable({
             {...searchInput}
           />
           <Button type="submit">
+            <SearchIcon data-icon="inline-start" />
             搜索
           </Button>
         </div>

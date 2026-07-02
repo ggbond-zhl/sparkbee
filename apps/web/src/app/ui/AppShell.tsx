@@ -14,10 +14,10 @@ export function AppShell({ children }: PropsWithChildren) {
       <SidebarProvider open onOpenChange={() => undefined}>
         <AppSidebar />
         <SidebarInset>
-          <header className="hidden items-center justify-center border-b p-2 md:flex">
+          <header className="hidden h-12 shrink-0 items-center justify-center border-b px-2 md:flex">
             <span>充电桩列表</span>
           </header>
-          <header className="flex items-center gap-2 border-b p-2 md:hidden">
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:hidden">
             <SidebarTrigger />
             <span>SparkBee</span>
           </header>
