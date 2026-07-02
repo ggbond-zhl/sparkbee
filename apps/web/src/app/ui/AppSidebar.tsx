@@ -22,16 +22,10 @@ export function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <Link to="/charging-points">
-                <img
-                  src="/logo.svg"
-                  alt=""
-                  className="size-5 rounded-sm object-contain"
-                />
-                <span>SparkBee</span>
-              </Link>
-            </SidebarMenuButton>
+            <div className="flex items-center gap-2 h-8">
+              <img src="/logo.svg" alt="logo" className="size-8" />
+              <p className="flex items-center font-semibold">SparkBee</p>
+            </div>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -43,7 +37,7 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   asChild
                   isActive={pathname.startsWith("/charging-points")}
-                  className="h-9"
+                  className="h-9 data-active:bg-sidebar-border/55!"
                 >
                   <Link to="/charging-points">
                     <ListIcon />

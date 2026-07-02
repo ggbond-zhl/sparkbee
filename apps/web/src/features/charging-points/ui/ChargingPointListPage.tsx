@@ -5,15 +5,20 @@ import type {
   OnChangeFn,
   RowSelectionState,
 } from "@tanstack/react-table";
-import type { ListChargingPointsResponse } from "@spark-bee/contracts";
 import {
+  PAGE_SIZE_OPTIONS,
+  type ListChargingPointsResponse,
+  type PageSize,
+} from "@spark-bee/contracts";
+import {
+  ChevronDownIcon,
   MoreHorizontalIcon,
   PlusIcon,
   SearchIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { UseFormRegisterReturn } from "react-hook-form";
+import { Controller, type UseFormRegisterReturn } from "react-hook-form";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -50,6 +55,8 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -62,6 +69,14 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/data-table/DataTable";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -105,8 +120,13 @@ function TruncatedText({
 }
 
 export function ChargingPointListPage() {
+  const queryClient = useQueryClient();
   const keyword = useChargingPointListStore((state) => state.keyword);
+  const page = useChargingPointListStore((state) => state.page);
+  const pageSize = useChargingPointListStore((state) => state.pageSize);
   const setKeyword = useChargingPointListStore((state) => state.setKeyword);
+  const setPage = useChargingPointListStore((state) => state.setPage);
+  const setPageSize = useChargingPointListStore((state) => state.setPageSize);
   const selectedId = useChargingPointListStore((state) => state.selectedId);
   const selectedIds = useChargingPointListStore((state) => state.selectedIds);
   const selectChargingPoint = useChargingPointListStore(
@@ -119,14 +139,26 @@ export function ChargingPointListPage() {
     resolver: standardSchemaResolver(chargingPointListSearchFormSchema),
     values: { keyword },
   });
-  const chargingPointsQuery = useQuery(chargingPointListQueryOptions({ keyword }));
+  const chargingPointsQuery = useQuery(
+    chargingPointListQueryOptions({ keyword, page, pageSize }),
+  );
   const items = chargingPointsQuery.data?.items ?? [];
+  const total = chargingPointsQuery.data?.total ?? 0;
+
+  function handlePageSizeChange(nextPageSize: PageSize) {
+    setPageSize(nextPageSize);
+  }
+
+  async function handleListSearch(values: ChargingPointListSearchFormValues) {
+    setKeyword(values.keyword);
+    await queryClient.invalidateQueries({ queryKey: ["charging-points"] });
+  }
 
   return (
     <section className="flex flex-col gap-5">
       <form
         className="md:hidden"
-        onSubmit={form.handleSubmit((values) => setKeyword(values.keyword))}
+        onSubmit={form.handleSubmit(handleListSearch)}
       >
         <FieldGroup>
           <Field data-invalid={Boolean(form.formState.errors.keyword)}>
@@ -152,19 +184,29 @@ export function ChargingPointListPage() {
         isError={chargingPointsQuery.isError}
         isLoading={chargingPointsQuery.isLoading}
         items={items}
+        onPageChange={setPage}
+        onPageSizeChange={handlePageSizeChange}
         onSelect={selectChargingPoint}
+        page={page}
+        pageSize={pageSize}
         selectedId={selectedId}
+        total={total}
       />
       <ChargingPointTable
         isError={chargingPointsQuery.isError}
         isLoading={chargingPointsQuery.isLoading}
         items={items}
-        onSearch={form.handleSubmit((values) => setKeyword(values.keyword))}
+        onPageChange={setPage}
+        onPageSizeChange={handlePageSizeChange}
+        onSearch={form.handleSubmit(handleListSearch)}
         onSelect={selectChargingPoint}
         onSelectedIdsChange={setSelectedIds}
+        page={page}
+        pageSize={pageSize}
         searchInput={form.register("keyword")}
         selectedIds={selectedIds}
         selectedId={selectedId}
+        total={total}
       />
     </section>
   );
@@ -174,8 +216,13 @@ interface ChargingPointListViewProps {
   isError: boolean;
   isLoading: boolean;
   items: ChargingPointListItem[];
+  onPageChange(page: number): void;
+  onPageSizeChange(pageSize: PageSize): void;
   onSelect(id: string): void;
+  page: number;
+  pageSize: PageSize;
   selectedId: string | null;
+  total: number;
 }
 
 interface ChargingPointTableProps extends ChargingPointListViewProps {
@@ -189,8 +236,13 @@ function ChargingPointMobileCardList({
   isError,
   isLoading,
   items,
+  onPageChange,
+  onPageSizeChange,
   onSelect,
+  page,
+  pageSize,
   selectedId,
+  total,
 }: ChargingPointListViewProps) {
   if (isLoading) {
     return <ListState className="md:hidden" text="加载中" />;
@@ -250,6 +302,13 @@ function ChargingPointMobileCardList({
           </Card>
         </button>
       ))}
+      <MobilePagination
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        page={page}
+        pageSize={pageSize}
+        total={total}
+      />
     </div>
   );
 }
@@ -258,12 +317,17 @@ function ChargingPointTable({
   isError,
   isLoading,
   items,
+  onPageChange,
+  onPageSizeChange,
   onSelectedIdsChange,
   onSearch,
   onSelect,
+  page,
+  pageSize,
   searchInput,
   selectedIds,
   selectedId,
+  total,
 }: ChargingPointTableProps) {
   const columns = useMemo<ColumnDef<ChargingPointListItem>[]>(
     () => [
@@ -329,7 +393,7 @@ function ChargingPointTable({
         header: "CSMS",
         cell: ({ row }) => (
           <TruncatedText
-            className="block max-w-72 truncate"
+            className="block w-full truncate"
             value={row.original.centralSystemUrl}
           />
         ),
@@ -422,11 +486,94 @@ function ChargingPointTable({
         getRowState={(row) =>
           row.original.id === selectedId ? "selected" : undefined
         }
+        onPageChange={onPageChange}
+        onPageSizeChange={(nextPageSize) =>
+          onPageSizeChange(nextPageSize as PageSize)
+        }
         onRowSelectionChange={handleRowSelectionChange}
+        page={page}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
         rowSelection={rowSelection}
         tableClassName="min-w-[840px]"
+        total={total}
       />
     </div>
+  );
+}
+
+function MobilePagination({
+  onPageChange,
+  onPageSizeChange,
+  page,
+  pageSize,
+  total,
+}: {
+  onPageChange(page: number): void;
+  onPageSizeChange(pageSize: PageSize): void;
+  page: number;
+  pageSize: PageSize;
+  total: number;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+      <div className="text-muted-foreground tabular-nums">
+        第 {page} / {totalPages} 页，共 {total} 条
+      </div>
+      <div className="flex items-center gap-2">
+        <PageSizeMenu pageSize={pageSize} onPageSizeChange={onPageSizeChange} />
+        <Button
+          disabled={page <= 1}
+          type="button"
+          variant="outline"
+          onClick={() => onPageChange(page - 1)}
+        >
+          上一页
+        </Button>
+        <Button
+          disabled={page >= totalPages}
+          type="button"
+          variant="outline"
+          onClick={() => onPageChange(page + 1)}
+        >
+          下一页
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PageSizeMenu({
+  onPageSizeChange,
+  pageSize,
+}: {
+  onPageSizeChange(pageSize: PageSize): void;
+  pageSize: PageSize;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline">
+          每页 {pageSize}
+          <ChevronDownIcon data-icon="inline-end" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-28">
+        <DropdownMenuLabel>每页数量</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={String(pageSize)}
+          onValueChange={(value) => onPageSizeChange(Number(value) as PageSize)}
+        >
+          {PAGE_SIZE_OPTIONS.map((option) => (
+            <DropdownMenuRadioItem key={option} value={String(option)}>
+              {option}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -575,7 +722,6 @@ function ChargingPointCreateDialog() {
               <FieldError errors={[fieldErrors.name]} />
             </Field>
             <Field
-              className="md:col-span-2"
               data-invalid={Boolean(fieldErrors.identity)}
             >
               <FieldLabel htmlFor="charging-point-create-identity">
@@ -588,6 +734,34 @@ function ChargingPointCreateDialog() {
                 {...form.register("identity")}
               />
               <FieldError errors={[fieldErrors.identity]} />
+            </Field>
+            <Field data-invalid={Boolean(fieldErrors.protocol)}>
+              <FieldLabel htmlFor="charging-point-create-protocol">
+                协议版本
+              </FieldLabel>
+              <Controller
+                control={form.control}
+                name="protocol"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger
+                      id="charging-point-create-protocol"
+                      ref={field.ref}
+                      aria-invalid={Boolean(fieldErrors.protocol)}
+                      className="w-full"
+                      onBlur={field.onBlur}
+                    >
+                      <SelectValue placeholder="选择协议版本" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="OCPP16J">OCPP 1.6J</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <FieldError errors={[fieldErrors.protocol]} />
             </Field>
             <Field
               className="md:col-span-2"
@@ -657,7 +831,6 @@ function ChargingPointCreateDialog() {
                 {...form.register("description")}
               />
             </Field>
-            <input type="hidden" {...form.register("protocol")} />
           </FieldGroup>
           {createError && (
             <div role="alert" className="text-sm text-destructive">

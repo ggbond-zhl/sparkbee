@@ -65,6 +65,10 @@ describe("chargingPoint contract schemas", () => {
       page: 2,
       pageSize: 10,
     });
+
+    expect(() =>
+      listChargingPointsQuerySchema.parse({ page: "1", pageSize: "30" }),
+    ).toThrow();
   });
 
   test("accepts nullable connector rated values", () => {

@@ -108,6 +108,8 @@ describe("web architecture", () => {
     expect(pageSource).toContain("useQuery");
     expect(pageSource).toContain("useForm");
     expect(pageSource).toContain("useChargingPointListStore");
+    expect(pageSource).toContain("handleListSearch");
+    expect(pageSource).toContain("onSearch={form.handleSubmit(handleListSearch)}");
     expect(pageSource).toContain("ChargingPointMobileCardList");
     expect(pageSource).toContain("ChargingPointTable");
     expect(pageSource).toContain("md:hidden");
@@ -120,6 +122,7 @@ describe("web architecture", () => {
     expect(pageSource).toContain("DialogTrigger");
     expect(pageSource).toContain("DropdownMenuTrigger");
     expect(pageSource).toContain("DropdownMenuLabel");
+    expect(pageSource).toContain("DropdownMenuRadioItem");
     expect(pageSource).toContain("DropdownMenuSeparator");
     expect(pageSource).toContain("ChargingPointRowActionMenu");
     expect(pageSource).toContain("AlertDialogContent");
@@ -132,11 +135,18 @@ describe("web architecture", () => {
     expect(pageSource).toContain("invalidateQueries");
     expect(pageSource).toContain("FieldGroup");
     expect(pageSource).toContain("FieldLabel");
+    expect(pageSource).toContain("协议版本");
+    expect(pageSource).toContain("SelectTrigger");
+    expect(pageSource).toContain("SelectItem");
+    expect(pageSource).toContain("OCPP 1.6J");
+    expect(pageSource).not.toContain('type="hidden" {...form.register("protocol")}');
     expect(pageSource).toContain("Textarea");
     expect(pageSource).toContain("CSMS 地址");
     expect(pageSource).toContain("全选当前列表");
     expect(storeSource).toContain("selectedIds");
     expect(storeSource).toContain("setSelectedIds");
+    expect(storeSource).toContain("pageSize");
+    expect(storeSource).toContain("setPageSize");
     expect(storeSource).toContain("removeDeletedId");
     expect(dataTableSource).toContain("useReactTable");
     expect(dataTableSource).toContain("getCoreRowModel");
@@ -148,6 +158,7 @@ describe("web architecture", () => {
     expect(dataTableSource).toContain("下一页");
     expect(apiSource).toContain("@spark-bee/contracts");
     expect(apiSource).toContain("fetch(");
+    expect(apiSource).toContain("pageSize");
     expect(apiSource).toContain("createChargingPoint");
     expect(apiSource).toContain("deleteChargingPoint");
     expect(apiSource).toContain("POST");

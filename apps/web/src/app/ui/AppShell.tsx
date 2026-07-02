@@ -21,8 +21,8 @@ export function AppShell({ children }: PropsWithChildren) {
             <SidebarTrigger />
             <img
               src="/logo.svg"
-              alt=""
-              className="size-5 rounded-sm object-contain"
+              alt="logo"
+              className="size-7 rounded-sm object-contain"
             />
             <span>SparkBee</span>
           </header>

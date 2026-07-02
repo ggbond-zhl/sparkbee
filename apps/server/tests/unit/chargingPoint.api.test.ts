@@ -219,16 +219,16 @@ describe("chargingPoint management API", () => {
       });
     }
 
-    const listResponse = await app.request("/api/charging-points?page=1&pageSize=1&keyword=CP");
+    const listResponse = await app.request("/api/charging-points?page=1&pageSize=10&keyword=CP");
 
     expect(listResponse.status).toBe(200);
     const list = listChargingPointsResponseSchema.parse(await listResponse.json());
     expect(list).toMatchObject({
       page: 1,
-      pageSize: 1,
+      pageSize: 10,
       total: 2,
     });
-    expect(list.items).toHaveLength(1);
+    expect(list.items).toHaveLength(2);
     expect(list.items[0]?.connectorCount).toBe(0);
   });
 

@@ -4,18 +4,21 @@ import {
   type CreateChargingPointRequest,
   listChargingPointsResponseSchema,
   type ListChargingPointsResponse,
+  type PageSize,
 } from "@spark-bee/contracts";
 
 export interface ListChargingPointsInput {
   keyword?: string;
+  page?: number;
+  pageSize?: PageSize;
 }
 
 export async function listChargingPoints(
   input: ListChargingPointsInput = {},
 ): Promise<ListChargingPointsResponse> {
   const search = new URLSearchParams({
-    page: "1",
-    pageSize: "20",
+    page: String(input.page ?? 1),
+    pageSize: String(input.pageSize ?? 20),
   });
   const keyword = input.keyword?.trim();
   if (keyword) {

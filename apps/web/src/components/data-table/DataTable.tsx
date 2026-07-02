@@ -9,8 +9,17 @@ import {
   type Row,
   type RowSelectionState,
 } from "@tanstack/react-table";
+import { ChevronDownIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -29,8 +38,14 @@ interface DataTableProps<TData, TValue> {
   getRowId?: (originalRow: TData, index: number, parent?: Row<TData>) => string;
   getRowState?: (row: Row<TData>) => string | undefined;
   onRowSelectionChange?: OnChangeFn<RowSelectionState>;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
+  page?: number;
+  pageSize?: number;
+  pageSizeOptions?: readonly number[];
   rowSelection?: RowSelectionState;
   tableClassName?: string;
+  total?: number;
 }
 
 export function DataTable<TData, TValue>({
@@ -41,8 +56,14 @@ export function DataTable<TData, TValue>({
   getRowId,
   getRowState,
   onRowSelectionChange,
+  onPageChange,
+  onPageSizeChange,
+  page = 1,
+  pageSize,
+  pageSizeOptions = [],
   rowSelection,
   tableClassName,
+  total = data.length,
 }: DataTableProps<TData, TValue>) {
   const table = useReactTable({
     columns,
@@ -57,6 +78,9 @@ export function DataTable<TData, TValue>({
   const columnCount = table.getAllLeafColumns().length;
   const selectedCount = table.getSelectedRowModel().rows.length;
   const rowCount = rows.length;
+  const totalPages = pageSize ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+  const canPreviousPage = page > 1;
+  const canNextPage = page < totalPages;
 
   return (
     <div className="flex flex-col gap-4">
@@ -109,13 +133,49 @@ export function DataTable<TData, TValue>({
       </div>
       <div className="flex items-center justify-between text-sm">
         <div className="text-muted-foreground">
-          已选择 {selectedCount} / {rowCount} 行
+          已选择 {selectedCount} / {rowCount} 行，共 {total} 条
         </div>
         <div className="flex items-center gap-2">
-          <Button disabled type="button" variant="outline">
+          {pageSize && onPageSizeChange ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline">
+                  每页 {pageSize}
+                  <ChevronDownIcon data-icon="inline-end" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-28">
+                <DropdownMenuLabel>每页数量</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={String(pageSize)}
+                  onValueChange={(value) => onPageSizeChange(Number(value))}
+                >
+                  {pageSizeOptions.map((option) => (
+                    <DropdownMenuRadioItem key={option} value={String(option)}>
+                      {option}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+          <span className="text-muted-foreground tabular-nums">
+            第 {page} / {totalPages} 页
+          </span>
+          <Button
+            disabled={!canPreviousPage || !onPageChange}
+            type="button"
+            variant="outline"
+            onClick={() => onPageChange?.(page - 1)}
+          >
             上一页
           </Button>
-          <Button disabled type="button" variant="outline">
+          <Button
+            disabled={!canNextPage || !onPageChange}
+            type="button"
+            variant="outline"
+            onClick={() => onPageChange?.(page + 1)}
+          >
             下一页
           </Button>
         </div>
