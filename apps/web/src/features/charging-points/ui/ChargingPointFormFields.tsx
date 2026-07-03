@@ -75,7 +75,11 @@ export function ChargingPointFormFields({
               >
                 <SelectValue placeholder="选择协议版本" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent
+                data-dialog-select-content
+                position="popper"
+                className="z-[100]"
+              >
                 <SelectGroup>
                   <SelectItem value="OCPP16J">OCPP 1.6J</SelectItem>
                 </SelectGroup>

@@ -413,7 +413,11 @@ function ConnectorTabForm({
                     >
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent
+                      data-dialog-select-content
+                      position="popper"
+                      className="z-[100]"
+                    >
                       <SelectGroup>
                         <SelectItem value="socket">socket</SelectItem>
                         <SelectItem value="cable">cable</SelectItem>
@@ -446,7 +450,11 @@ function ConnectorTabForm({
                     >
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent
+                      data-dialog-select-content
+                      position="popper"
+                      className="z-[100]"
+                    >
                       <SelectGroup>
                         <SelectItem value="ac">ac</SelectItem>
                         <SelectItem value="dc">dc</SelectItem>

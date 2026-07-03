@@ -45,9 +45,22 @@ function DialogOverlay({
   )
 }
 
+function isClickInsideSelectContent(event: Event) {
+  const originalEvent = (event as CustomEvent<{ originalEvent?: Event }>).detail
+    ?.originalEvent
+  const target = originalEvent?.target
+
+  return (
+    target instanceof Element &&
+    Boolean(target.closest("[data-dialog-select-content]"))
+  )
+}
+
 function DialogContent({
   className,
   children,
+  onInteractOutside,
+  onPointerDownOutside,
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
@@ -62,6 +75,18 @@ function DialogContent({
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
+        onInteractOutside={(event) => {
+          if (isClickInsideSelectContent(event)) {
+            event.preventDefault()
+          }
+          onInteractOutside?.(event)
+        }}
+        onPointerDownOutside={(event) => {
+          if (isClickInsideSelectContent(event)) {
+            event.preventDefault()
+          }
+          onPointerDownOutside?.(event)
+        }}
         {...props}
       >
         {children}

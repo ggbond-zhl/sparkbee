@@ -238,6 +238,38 @@ describe("web architecture", () => {
     expect(createFormSource).toContain("createChargingPointRequestSchema");
   });
 
+  test("dialog select content clicks are not treated as outside dialog clicks", () => {
+    const dialogSource = readSource("components", "ui", "dialog.tsx");
+    const formFieldsSource = readSource(
+      "features",
+      "charging-points",
+      "ui",
+      "ChargingPointFormFields.tsx",
+    );
+    const connectorDialogSource = readSource(
+      "features",
+      "charging-points",
+      "ui",
+      "ChargingPointConnectorManagementDialog.tsx",
+    );
+
+    expect(dialogSource).toContain("isClickInsideSelectContent");
+    expect(dialogSource).toContain("CustomEvent");
+    expect(dialogSource).toContain("originalEvent?: Event");
+    expect(dialogSource).toContain(".detail");
+    expect(dialogSource).toContain("?.originalEvent");
+    expect(dialogSource).toContain("onPointerDownOutside");
+    expect(dialogSource).toContain("onInteractOutside");
+    expect(dialogSource).toContain("[data-dialog-select-content]");
+
+    expect(formFieldsSource).toContain("data-dialog-select-content");
+    expect(formFieldsSource).toContain('position="popper"');
+    expect(formFieldsSource).toContain('className="z-[100]"');
+    expect(connectorDialogSource).toContain("data-dialog-select-content");
+    expect(connectorDialogSource).toContain('position="popper"');
+    expect(connectorDialogSource).toContain('className="z-[100]"');
+  });
+
   test("router uses code-defined routes and shared ui stays outside features", () => {
     const routerSource = readSource("app", "router.tsx");
 
