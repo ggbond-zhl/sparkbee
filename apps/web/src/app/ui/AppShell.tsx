@@ -1,5 +1,7 @@
+import { useRouterState } from "@tanstack/react-router";
 import type { PropsWithChildren } from "react";
 
+import { getMenuItemForPath } from "@/app/navigation";
 import { AppSidebar } from "@/app/ui/AppSidebar";
 import {
   SidebarInset,
@@ -9,13 +11,17 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function AppShell({ children }: PropsWithChildren) {
+  const currentMenuItem = useRouterState({
+    select: (state) => getMenuItemForPath(state.location.pathname),
+  });
+
   return (
     <TooltipProvider>
       <SidebarProvider open onOpenChange={() => undefined}>
         <AppSidebar />
         <SidebarInset>
           <header className="hidden h-12 shrink-0 items-center justify-center border-b px-2 md:flex">
-            <span>充电桩列表</span>
+            <span>{currentMenuItem?.label ?? "SparkBee"}</span>
           </header>
           <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:hidden">
             <SidebarTrigger />

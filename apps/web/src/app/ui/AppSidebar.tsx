@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ListIcon } from "lucide-react";
 
+import { appMenuItems } from "@/app/navigation";
 import {
   Sidebar,
   SidebarContent,
@@ -33,18 +34,20 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname.startsWith("/charging-points")}
-                  className="h-9 data-active:bg-sidebar-border/55!"
-                >
-                  <Link to="/charging-points">
-                    <ListIcon />
-                    <span>充电桩列表</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {appMenuItems.map((item) => (
+                <SidebarMenuItem key={item.to}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith(item.to)}
+                    className="h-9 data-active:bg-sidebar-border/55!"
+                  >
+                    <Link to={item.to}>
+                      <ListIcon />
+                      <span>{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

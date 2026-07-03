@@ -48,9 +48,12 @@ describe("web architecture", () => {
     const rootRouteSource = readSource("app", "routes", "RootRoute.tsx");
     const appShellSource = readSource("app", "ui", "AppShell.tsx");
     const appSidebarSource = readSource("app", "ui", "AppSidebar.tsx");
+    const navigationSource = readSource("app", "navigation.ts");
 
     expect(rootRouteSource).toContain("AppShell");
     expect(rootRouteSource).toContain("Outlet");
+    expect(rootRouteSource).toContain("getDocumentTitleForPath");
+    expect(rootRouteSource).toContain("document.title");
     expect(rootRouteSource).not.toContain("<header");
     expect(rootRouteSource).not.toContain("<nav");
 
@@ -58,12 +61,14 @@ describe("web architecture", () => {
     expect(appShellSource).toContain("SidebarInset");
     expect(appShellSource).toContain("SidebarTrigger");
     expect(appShellSource).toContain("AppSidebar");
-    expect(appShellSource).toContain("充电桩列表");
+    expect(appShellSource).toContain("getMenuItemForPath");
     expect(appShellSource).toContain("md:flex");
 
+    expect(navigationSource).toContain("appMenuItems");
+    expect(navigationSource).toContain("充电桩列表");
+    expect(navigationSource).toContain("SparkBee");
     expect(appSidebarSource).toContain("SidebarMenuButton");
-    expect(appSidebarSource).toContain("to=\"/charging-points\"");
-    expect(appSidebarSource).toContain("充电桩列表");
+    expect(appSidebarSource).toContain("appMenuItems");
     expect(appSidebarSource).not.toContain("运行操作");
     expect(existsSync(join(srcRoot, "components", "ui", "sidebar.tsx"))).toBe(
       true,
