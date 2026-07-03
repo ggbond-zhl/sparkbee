@@ -26,7 +26,6 @@ import { ChargingPointFormFields } from "@/features/charging-points/ui/ChargingP
 
 export function ChargingPointCreateDialog() {
   const [open, setOpen] = useState(false);
-  const [protocolSelectOpen, setProtocolSelectOpen] = useState(false);
   const queryClient = useQueryClient();
   const form = useForm<
     ChargingPointCreateFormInput,
@@ -41,7 +40,6 @@ export function ChargingPointCreateDialog() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["charging-points"] });
       form.reset(chargingPointCreateFormDefaultValues);
-      setProtocolSelectOpen(false);
       setOpen(false);
       toast.success("充电桩已新增");
     },
@@ -55,19 +53,9 @@ export function ChargingPointCreateDialog() {
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
     if (!nextOpen) {
-      setProtocolSelectOpen(false);
       form.reset(chargingPointCreateFormDefaultValues);
       createMutation.reset();
     }
-  }
-
-  function closeProtocolSelectBeforeDialog(event: { preventDefault(): void }) {
-    if (!protocolSelectOpen) {
-      return;
-    }
-
-    event.preventDefault();
-    setProtocolSelectOpen(false);
   }
 
   return (
@@ -78,14 +66,12 @@ export function ChargingPointCreateDialog() {
           新增
         </Button>
       </DialogTrigger>
-      <DialogContent
-        className="sm:max-w-xl"
-        onEscapeKeyDown={closeProtocolSelectBeforeDialog}
-        onInteractOutside={closeProtocolSelectBeforeDialog}
-      >
+      <DialogContent className="sm:max-w-xl">
         <form
           className="flex flex-col gap-4"
-          onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}
+          onSubmit={form.handleSubmit((values) =>
+            createMutation.mutate(values),
+          )}
         >
           <DialogHeader>
             <DialogTitle>新增充电桩</DialogTitle>
@@ -93,8 +79,6 @@ export function ChargingPointCreateDialog() {
           <ChargingPointFormFields
             form={form}
             idPrefix="charging-point-create"
-            protocolSelectOpen={protocolSelectOpen}
-            onProtocolSelectOpenChange={setProtocolSelectOpen}
           />
           {createError && (
             <div role="alert" className="text-sm text-destructive">

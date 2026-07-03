@@ -226,7 +226,9 @@ function ChargingPointMobileCardList({
   }
 
   if (isError) {
-    return <ListState className="text-destructive md:hidden" text="列表加载失败" />;
+    return (
+      <ListState className="text-destructive md:hidden" text="列表加载失败" />
+    );
   }
 
   if (items.length === 0) {
@@ -242,9 +244,7 @@ function ChargingPointMobileCardList({
           className="appearance-none border-0 bg-transparent p-0 text-left text-inherit outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           onClick={() => onSelect(item.id)}
         >
-          <Card
-            data-state={item.id === selectedId ? "selected" : undefined}
-          >
+          <Card data-state={item.id === selectedId ? "selected" : undefined}>
             <CardHeader>
               <CardTitle>{item.name}</CardTitle>
               {item.description && (
@@ -258,7 +258,10 @@ function ChargingPointMobileCardList({
               <dl className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
                 <dt className="text-muted-foreground">桩身份</dt>
                 <dd className="truncate font-mono text-xs">
-                  <TruncatedText className="block truncate" value={item.identity} />
+                  <TruncatedText
+                    className="block truncate"
+                    value={item.identity}
+                  />
                 </dd>
                 <dt className="text-muted-foreground">CSMS</dt>
                 <dd className="truncate">
@@ -409,10 +412,7 @@ function ChargingPointTable({
     [onSelect],
   );
   const rowSelection = useMemo<RowSelectionState>(
-    () =>
-      Object.fromEntries(
-        selectedIds.map((id) => [id, true] as const),
-      ),
+    () => Object.fromEntries(selectedIds.map((id) => [id, true] as const)),
     [selectedIds],
   );
   const handleRowSelectionChange: OnChangeFn<RowSelectionState> = (updater) => {

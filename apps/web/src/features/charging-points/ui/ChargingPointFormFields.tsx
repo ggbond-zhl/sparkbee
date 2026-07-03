@@ -29,15 +29,11 @@ interface ChargingPointFormFieldsProps {
     ChargingPointCreateFormValues
   >;
   idPrefix: string;
-  protocolSelectOpen: boolean;
-  onProtocolSelectOpenChange(open: boolean): void;
 }
 
 export function ChargingPointFormFields({
   form,
   idPrefix,
-  onProtocolSelectOpenChange,
-  protocolSelectOpen,
 }: ChargingPointFormFieldsProps) {
   const fieldErrors = form.formState.errors;
 
@@ -69,12 +65,7 @@ export function ChargingPointFormFields({
           control={form.control}
           name="protocol"
           render={({ field }) => (
-            <Select
-              open={protocolSelectOpen}
-              value={field.value}
-              onOpenChange={onProtocolSelectOpenChange}
-              onValueChange={field.onChange}
-            >
+            <Select value={field.value} onValueChange={field.onChange}>
               <SelectTrigger
                 id={`${idPrefix}-protocol`}
                 ref={field.ref}

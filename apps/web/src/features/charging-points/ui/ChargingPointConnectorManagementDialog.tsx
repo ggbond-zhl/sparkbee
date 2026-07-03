@@ -1,6 +1,9 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ChargingPointSummaryResponse, ConnectorResponse } from "@spark-bee/contracts";
+import type {
+  ChargingPointSummaryResponse,
+  ConnectorResponse,
+} from "@spark-bee/contracts";
 import { PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -18,11 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -45,12 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   createConnector,
   deleteConnector,
@@ -78,8 +72,10 @@ function connectorToFormValues(
     type: connector.type,
     format: connector.format,
     powerType: connector.powerType,
-    maxVoltage: connector.maxVoltage === null ? "" : String(connector.maxVoltage),
-    maxCurrent: connector.maxCurrent === null ? "" : String(connector.maxCurrent),
+    maxVoltage:
+      connector.maxVoltage === null ? "" : String(connector.maxVoltage),
+    maxCurrent:
+      connector.maxCurrent === null ? "" : String(connector.maxCurrent),
     maxPower: connector.maxPower === null ? "" : String(connector.maxPower),
   };
 }
@@ -87,8 +83,7 @@ function connectorToFormValues(
 function createNextConnectorFormValues(
   connectorIds: number[],
 ): ConnectorManagementFormInput {
-  const nextConnectorId =
-    Math.max(0, ...connectorIds) + 1;
+  const nextConnectorId = Math.max(0, ...connectorIds) + 1;
 
   return {
     ...connectorManagementFormDefaultValues,
@@ -109,7 +104,6 @@ export function ChargingPointConnectorManagementDialog({
   const [activeTab, setActiveTab] = useState("");
   const [draftTabs, setDraftTabs] = useState<DraftConnectorTab[]>([]);
   const [draftSequence, setDraftSequence] = useState(1);
-  const [openSelectKey, setOpenSelectKey] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const connectorsQuery = useQuery({
     queryKey: ["charging-point-connectors", item.id],
@@ -153,19 +147,8 @@ export function ChargingPointConnectorManagementDialog({
     if (!nextOpen) {
       setActiveTab("");
       setDraftTabs([]);
-      setOpenSelectKey(null);
     }
   }
-
-  function closeSelectBeforeDialog(event: { preventDefault(): void }) {
-    if (openSelectKey === null) {
-      return;
-    }
-
-    event.preventDefault();
-    setOpenSelectKey(null);
-  }
-
   function addDraftTab() {
     const connectorIds = [
       ...connectors.map((connector) => connector.connectorId),
@@ -184,11 +167,7 @@ export function ChargingPointConnectorManagementDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="sm:max-w-xl"
-        onEscapeKeyDown={closeSelectBeforeDialog}
-        onInteractOutside={closeSelectBeforeDialog}
-      >
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>枪口管理</DialogTitle>
         </DialogHeader>
@@ -203,9 +182,7 @@ export function ChargingPointConnectorManagementDialog({
           >
             <div className="flex min-w-0 items-center gap-2">
               {tabs.length > 0 && (
-                <TabsList
-                  className="min-w-0 max-w-full justify-start"
-                >
+                <TabsList className="min-w-0 max-w-full justify-start">
                   {tabs.map((tab) => (
                     <TabsTrigger key={tab.key} value={tab.key}>
                       {tab.label}
@@ -252,21 +229,24 @@ export function ChargingPointConnectorManagementDialog({
                     setActiveTab(connector.id);
                   }}
                   onDeleted={() => {
-                    const tabIndex = tabs.findIndex((item) => item.key === tab.key);
-                    const remainingTabs = tabs.filter((item) => item.key !== tab.key);
+                    const tabIndex = tabs.findIndex(
+                      (item) => item.key === tab.key,
+                    );
+                    const remainingTabs = tabs.filter(
+                      (item) => item.key !== tab.key,
+                    );
                     if (tab.kind === "draft") {
                       setDraftTabs((current) =>
                         current.filter((draft) => draft.key !== tab.key),
                       );
                       toast.success("未保存枪口已移除");
                     }
-                    setOpenSelectKey(null);
                     setActiveTab(
-                      remainingTabs[Math.min(tabIndex, remainingTabs.length - 1)]
-                        ?.key ?? "",
+                      remainingTabs[
+                        Math.min(tabIndex, remainingTabs.length - 1)
+                      ]?.key ?? "",
                     );
                   }}
-                  onSelectOpenChange={setOpenSelectKey}
                 />
               </TabsContent>
             ))}
@@ -286,7 +266,6 @@ interface ConnectorTabFormProps {
   tabKey: string;
   onCreated(connector: ConnectorResponse): void;
   onDeleted(): void;
-  onSelectOpenChange(key: string | null): void;
 }
 
 function ConnectorTabForm({
@@ -297,7 +276,6 @@ function ConnectorTabForm({
   isLastSavedConnector,
   onCreated,
   onDeleted,
-  onSelectOpenChange,
   tabKey,
 }: ConnectorTabFormProps) {
   const [formatSelectOpen, setFormatSelectOpen] = useState(false);
@@ -386,20 +364,8 @@ function ConnectorTabForm({
     deleteMutation.error instanceof Error ? deleteMutation.error.message : null;
   const formErrors = form.formState.errors;
 
-  function handleFormatSelectOpenChange(nextOpen: boolean) {
-    setFormatSelectOpen(nextOpen);
-    onSelectOpenChange(nextOpen ? `${tabKey}:format` : null);
-  }
-
-  function handlePowerTypeSelectOpenChange(nextOpen: boolean) {
-    setPowerTypeSelectOpen(nextOpen);
-    onSelectOpenChange(nextOpen ? `${tabKey}:powerType` : null);
-  }
-
   return (
-    <form
-      onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
-    >
+    <form onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
       <Card>
         <CardContent>
           <FieldGroup className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -435,7 +401,7 @@ function ConnectorTabForm({
                   <Select
                     open={formatSelectOpen}
                     value={field.value}
-                    onOpenChange={handleFormatSelectOpenChange}
+                    onOpenChange={setFormatSelectOpen}
                     onValueChange={field.onChange}
                   >
                     <SelectTrigger
@@ -468,7 +434,7 @@ function ConnectorTabForm({
                   <Select
                     open={powerTypeSelectOpen}
                     value={field.value}
-                    onOpenChange={handlePowerTypeSelectOpenChange}
+                    onOpenChange={setPowerTypeSelectOpen}
                     onValueChange={field.onChange}
                   >
                     <SelectTrigger
@@ -493,7 +459,9 @@ function ConnectorTabForm({
               <FieldError errors={[formErrors.powerType]} />
             </Field>
             <Field data-invalid={Boolean(formErrors.maxVoltage)}>
-              <FieldLabel htmlFor={`${idPrefix}-max-voltage`}>电压 V</FieldLabel>
+              <FieldLabel htmlFor={`${idPrefix}-max-voltage`}>
+                电压 V
+              </FieldLabel>
               <Input
                 id={`${idPrefix}-max-voltage`}
                 aria-invalid={Boolean(formErrors.maxVoltage)}
@@ -505,7 +473,9 @@ function ConnectorTabForm({
               <FieldError errors={[formErrors.maxVoltage]} />
             </Field>
             <Field data-invalid={Boolean(formErrors.maxCurrent)}>
-              <FieldLabel htmlFor={`${idPrefix}-max-current`}>电流 A</FieldLabel>
+              <FieldLabel htmlFor={`${idPrefix}-max-current`}>
+                电流 A
+              </FieldLabel>
               <Input
                 id={`${idPrefix}-max-current`}
                 aria-invalid={Boolean(formErrors.maxCurrent)}
@@ -556,7 +526,9 @@ function ConnectorTabForm({
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
-                    disabled={deleteMutation.isPending || saveMutation.isPending}
+                    disabled={
+                      deleteMutation.isPending || saveMutation.isPending
+                    }
                     type="button"
                     variant="destructive"
                   >

@@ -1,7 +1,7 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ChargingPointSummaryResponse } from "@spark-bee/contracts";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -49,7 +49,6 @@ export function ChargingPointEditDialog({
   onOpenChange,
   open,
 }: ChargingPointEditDialogProps) {
-  const [protocolSelectOpen, setProtocolSelectOpen] = useState(false);
   const queryClient = useQueryClient();
   const formValues = useMemo(() => createEditFormValues(item), [item]);
   const form = useForm<
@@ -65,7 +64,6 @@ export function ChargingPointEditDialog({
       updateChargingPoint(item.id, values),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["charging-points"] });
-      setProtocolSelectOpen(false);
       onOpenChange(false);
       toast.success("充电桩已保存");
     },
@@ -79,31 +77,19 @@ export function ChargingPointEditDialog({
   function handleOpenChange(nextOpen: boolean) {
     onOpenChange(nextOpen);
     if (!nextOpen) {
-      setProtocolSelectOpen(false);
       form.reset(formValues);
       updateMutation.reset();
     }
   }
 
-  function closeProtocolSelectBeforeDialog(event: { preventDefault(): void }) {
-    if (!protocolSelectOpen) {
-      return;
-    }
-
-    event.preventDefault();
-    setProtocolSelectOpen(false);
-  }
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="sm:max-w-xl"
-        onEscapeKeyDown={closeProtocolSelectBeforeDialog}
-        onInteractOutside={closeProtocolSelectBeforeDialog}
-      >
+      <DialogContent className="sm:max-w-xl">
         <form
           className="flex flex-col gap-4"
-          onSubmit={form.handleSubmit((values) => updateMutation.mutate(values))}
+          onSubmit={form.handleSubmit((values) =>
+            updateMutation.mutate(values),
+          )}
         >
           <DialogHeader>
             <DialogTitle>编辑充电桩</DialogTitle>
@@ -111,8 +97,6 @@ export function ChargingPointEditDialog({
           <ChargingPointFormFields
             form={form}
             idPrefix="charging-point-edit"
-            protocolSelectOpen={protocolSelectOpen}
-            onProtocolSelectOpenChange={setProtocolSelectOpen}
           />
           {updateError && (
             <div role="alert" className="text-sm text-destructive">
