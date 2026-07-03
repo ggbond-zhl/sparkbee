@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   appMenuItems,
   getDocumentTitleForPath,
+  getPageTitleForPath,
 } from "../../src/app/navigation";
 
 describe("app navigation", () => {
@@ -12,6 +13,13 @@ describe("app navigation", () => {
     ]);
     expect(getDocumentTitleForPath("/charging-points")).toBe(
       "充电桩列表 - SparkBee",
+    );
+  });
+
+  test("uses page titles as document titles for non-menu pages", () => {
+    expect(getPageTitleForPath("/charging-points/cp-1")).toBe("充电桩详情");
+    expect(getDocumentTitleForPath("/charging-points/cp-1")).toBe(
+      "充电桩详情 - SparkBee",
     );
   });
 

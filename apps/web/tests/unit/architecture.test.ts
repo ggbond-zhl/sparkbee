@@ -61,7 +61,7 @@ describe("web architecture", () => {
     expect(appShellSource).toContain("SidebarInset");
     expect(appShellSource).toContain("SidebarTrigger");
     expect(appShellSource).toContain("AppSidebar");
-    expect(appShellSource).toContain("getMenuItemForPath");
+    expect(appShellSource).toContain("getPageTitleForPath");
     expect(appShellSource).toContain("md:flex");
 
     expect(navigationSource).toContain("appMenuItems");
@@ -77,8 +77,14 @@ describe("web architecture", () => {
 
   test("charging point feature keeps route, ui, model, and api concerns separate", () => {
     const featureRoot = join(srcRoot, "features", "charging-points");
+    const routerPath = join(srcRoot, "app", "router.tsx");
     const routePath = join(featureRoot, "routes", "ChargingPointsRoute.tsx");
     const pagePath = join(featureRoot, "ui", "ChargingPointListPage.tsx");
+    const detailPagePath = join(
+      featureRoot,
+      "ui",
+      "ChargingPointDetailPage.tsx",
+    );
     const createDialogPath = join(featureRoot, "ui", "ChargingPointCreateDialog.tsx");
     const editDialogPath = join(featureRoot, "ui", "ChargingPointEditDialog.tsx");
     const connectorDialogPath = join(
@@ -93,8 +99,12 @@ describe("web architecture", () => {
     const createFormPath = join(featureRoot, "model", "chargingPointCreateForm.ts");
     const storePath = join(featureRoot, "model", "chargingPointListStore.ts");
     const dataTablePath = join(srcRoot, "components", "data-table", "DataTable.tsx");
+    const routerSource = readFileSync(routerPath, "utf8");
     const routeSource = readFileSync(routePath, "utf8");
     const pageSource = readFileSync(pagePath, "utf8");
+    const detailPageSource = existsSync(detailPagePath)
+      ? readFileSync(detailPagePath, "utf8")
+      : "";
     const createDialogSource = readFileSync(createDialogPath, "utf8");
     const editDialogSource = readFileSync(editDialogPath, "utf8");
     const connectorDialogSource = readFileSync(connectorDialogPath, "utf8");
@@ -110,6 +120,7 @@ describe("web architecture", () => {
 
     expect(existsSync(routePath)).toBe(true);
     expect(existsSync(pagePath)).toBe(true);
+    expect(existsSync(detailPagePath)).toBe(true);
     expect(existsSync(createDialogPath)).toBe(true);
     expect(existsSync(editDialogPath)).toBe(true);
     expect(existsSync(connectorDialogPath)).toBe(true);
@@ -122,6 +133,8 @@ describe("web architecture", () => {
     expect(existsSync(dataTablePath)).toBe(true);
 
     expect(routeSource).toContain("ChargingPointListPage");
+    expect(routerSource).toContain("/charging-points/$chargingPointId");
+    expect(routerSource).toContain("ChargingPointDetailRoute");
     expect(routeSource).not.toContain("useQuery");
     expect(routeSource).not.toContain("useForm");
     expect(routeSource).not.toContain("fetch(");
@@ -137,6 +150,8 @@ describe("web architecture", () => {
     expect(pageSource).toContain("md:hidden");
     expect(pageSource).toContain("hidden flex-col gap-3 md:flex");
     expect(pageSource).toContain("DataTable");
+    expect(pageSource).toContain('to="/charging-points/$chargingPointId"');
+    expect(pageSource).toContain("chargingPointId");
     expect(pageSource).toContain("ColumnDef");
     expect(pageSource).not.toContain("TableHeader");
     expect(pageSource).toContain("Card");
@@ -193,6 +208,11 @@ describe("web architecture", () => {
     expect(connectorDialogSource).toContain("确认删除枪口");
     expect(connectorDialogSource).toContain("setQueryData");
     expect(connectorDialogSource).not.toContain("Table");
+    expect(detailPageSource).toContain("充电桩详情");
+    expect(detailPageSource).toContain("详情能力正在准备中");
+    expect(detailPageSource).toContain("返回列表");
+    expect(detailPageSource).not.toContain("useQuery");
+    expect(detailPageSource).not.toContain("fetch(");
     expect(formFieldsSource).toContain("协议版本");
     expect(formFieldsSource).toContain("SelectTrigger");
     expect(formFieldsSource).toContain("SelectItem");

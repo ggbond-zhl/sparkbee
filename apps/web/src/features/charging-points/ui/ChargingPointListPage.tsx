@@ -1,4 +1,5 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
+import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   ColumnDef,
@@ -104,11 +105,7 @@ export function ChargingPointListPage() {
   const setKeyword = useChargingPointListStore((state) => state.setKeyword);
   const setPage = useChargingPointListStore((state) => state.setPage);
   const setPageSize = useChargingPointListStore((state) => state.setPageSize);
-  const selectedId = useChargingPointListStore((state) => state.selectedId);
   const selectedIds = useChargingPointListStore((state) => state.selectedIds);
-  const selectChargingPoint = useChargingPointListStore(
-    (state) => state.selectChargingPoint,
-  );
   const setSelectedIds = useChargingPointListStore(
     (state) => state.setSelectedIds,
   );
@@ -163,10 +160,8 @@ export function ChargingPointListPage() {
         items={items}
         onPageChange={setPage}
         onPageSizeChange={handlePageSizeChange}
-        onSelect={selectChargingPoint}
         page={page}
         pageSize={pageSize}
-        selectedId={selectedId}
         total={total}
       />
       <ChargingPointTable
@@ -176,13 +171,11 @@ export function ChargingPointListPage() {
         onPageChange={setPage}
         onPageSizeChange={handlePageSizeChange}
         onSearch={form.handleSubmit(handleListSearch)}
-        onSelect={selectChargingPoint}
         onSelectedIdsChange={setSelectedIds}
         page={page}
         pageSize={pageSize}
         searchInput={form.register("keyword")}
         selectedIds={selectedIds}
-        selectedId={selectedId}
         total={total}
       />
     </section>
@@ -195,10 +188,8 @@ interface ChargingPointListViewProps {
   items: ChargingPointListItem[];
   onPageChange(page: number): void;
   onPageSizeChange(pageSize: PageSize): void;
-  onSelect(id: string): void;
   page: number;
   pageSize: PageSize;
-  selectedId: string | null;
   total: number;
 }
 
@@ -215,10 +206,8 @@ function ChargingPointMobileCardList({
   items,
   onPageChange,
   onPageSizeChange,
-  onSelect,
   page,
   pageSize,
-  selectedId,
   total,
 }: ChargingPointListViewProps) {
   if (isLoading) {
@@ -238,13 +227,13 @@ function ChargingPointMobileCardList({
   return (
     <div className="flex flex-col gap-3 md:hidden">
       {items.map((item) => (
-        <button
+        <Link
           key={item.id}
-          type="button"
           className="appearance-none border-0 bg-transparent p-0 text-left text-inherit outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          onClick={() => onSelect(item.id)}
+          params={{ chargingPointId: item.id }}
+          to="/charging-points/$chargingPointId"
         >
-          <Card data-state={item.id === selectedId ? "selected" : undefined}>
+          <Card>
             <CardHeader>
               <CardTitle>{item.name}</CardTitle>
               {item.description && (
@@ -280,7 +269,7 @@ function ChargingPointMobileCardList({
               </dl>
             </CardContent>
           </Card>
-        </button>
+        </Link>
       ))}
       <MobilePagination
         onPageChange={onPageChange}
@@ -301,12 +290,10 @@ function ChargingPointTable({
   onPageSizeChange,
   onSelectedIdsChange,
   onSearch,
-  onSelect,
   page,
   pageSize,
   searchInput,
   selectedIds,
-  selectedId,
   total,
 }: ChargingPointTableProps) {
   const columns = useMemo<ColumnDef<ChargingPointListItem>[]>(
@@ -343,10 +330,10 @@ function ChargingPointTable({
         accessorKey: "name",
         header: "名称",
         cell: ({ row }) => (
-          <button
-            type="button"
+          <Link
             className="flex max-w-56 appearance-none flex-col gap-0.5 rounded-md border-0 bg-transparent p-0 text-left text-inherit outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            onClick={() => onSelect(row.original.id)}
+            params={{ chargingPointId: row.original.id }}
+            to="/charging-points/$chargingPointId"
           >
             <TruncatedText
               className="block max-w-full truncate font-medium"
@@ -358,7 +345,7 @@ function ChargingPointTable({
                 value={row.original.description}
               />
             )}
-          </button>
+          </Link>
         ),
       },
       {
@@ -409,7 +396,7 @@ function ChargingPointTable({
         enableSorting: false,
       },
     ],
-    [onSelect],
+    [],
   );
   const rowSelection = useMemo<RowSelectionState>(
     () => Object.fromEntries(selectedIds.map((id) => [id, true] as const)),
@@ -460,9 +447,6 @@ function ChargingPointTable({
         emptyClassName={isError ? "text-destructive" : undefined}
         emptyText={emptyText}
         getRowId={(item) => item.id}
-        getRowState={(row) =>
-          row.original.id === selectedId ? "selected" : undefined
-        }
         onPageChange={onPageChange}
         onPageSizeChange={(nextPageSize) =>
           onPageSizeChange(nextPageSize as PageSize)

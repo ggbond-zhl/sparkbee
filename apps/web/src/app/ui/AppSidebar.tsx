@@ -19,7 +19,7 @@ export function AppSidebar() {
   });
 
   return (
-    <Sidebar collapsible="offcanvas">
+    <Sidebar collapsible="offcanvas" className="border-sidebar-border/40">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>

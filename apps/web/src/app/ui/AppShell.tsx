@@ -1,7 +1,7 @@
 import { useRouterState } from "@tanstack/react-router";
 import type { PropsWithChildren } from "react";
 
-import { getMenuItemForPath } from "@/app/navigation";
+import { getPageTitleForPath } from "@/app/navigation";
 import { AppSidebar } from "@/app/ui/AppSidebar";
 import {
   SidebarInset,
@@ -11,8 +11,8 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function AppShell({ children }: PropsWithChildren) {
-  const currentMenuItem = useRouterState({
-    select: (state) => getMenuItemForPath(state.location.pathname),
+  const currentPageTitle = useRouterState({
+    select: (state) => getPageTitleForPath(state.location.pathname),
   });
 
   return (
@@ -20,10 +20,10 @@ export function AppShell({ children }: PropsWithChildren) {
       <SidebarProvider open onOpenChange={() => undefined}>
         <AppSidebar />
         <SidebarInset>
-          <header className="hidden h-12 shrink-0 items-center justify-center border-b px-2 md:flex">
-            <span>{currentMenuItem?.label ?? "SparkBee"}</span>
+          <header className="hidden h-12 shrink-0 items-center justify-center border-b border-border/40 px-2 md:flex">
+            <span>{currentPageTitle ?? "SparkBee"}</span>
           </header>
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:hidden">
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/40 px-2 md:hidden">
             <SidebarTrigger />
             <img
               src="/logo.svg"

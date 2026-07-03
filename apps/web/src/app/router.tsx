@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 
 import { RootRoute } from "@/app/routes/RootRoute";
+import { ChargingPointDetailRoute } from "@/features/charging-points/routes/ChargingPointDetailRoute";
 import { ChargingPointsRoute } from "@/features/charging-points/routes/ChargingPointsRoute";
 
 const rootRoute = createRootRoute({
@@ -26,7 +27,17 @@ const chargingPointsRoute = createRoute({
   component: ChargingPointsRoute,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, chargingPointsRoute]);
+const chargingPointDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/charging-points/$chargingPointId",
+  component: ChargingPointDetailRoute,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  chargingPointsRoute,
+  chargingPointDetailRoute,
+]);
 
 export const router = createRouter({ routeTree });
 
