@@ -25,7 +25,7 @@ _Avoid_: 桩身份、charge point identity、连接路径
 _Avoid_: 协议类型、OCPP 类型、连接协议
 
 **枪口**:
-用户在 V1 前端直接管理的充电连接点。V1 不要求用户理解 EVSE，内部可以映射到协议核心的 EVSE/connector 模型。
+用户在 V1 前端直接管理的充电连接点。枪口编号必须大于 0；0 代表充电桩本身，不代表某个枪口。V1 不要求用户理解 EVSE，内部可以映射到协议核心的 EVSE/connector 模型。
 _Avoid_: connector、EVSE、插座
 
 **插枪**:

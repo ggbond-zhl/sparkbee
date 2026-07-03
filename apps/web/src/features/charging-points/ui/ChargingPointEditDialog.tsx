@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ChargingPointSummaryResponse } from "@spark-bee/contracts";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -66,6 +67,10 @@ export function ChargingPointEditDialog({
       await queryClient.invalidateQueries({ queryKey: ["charging-points"] });
       setProtocolSelectOpen(false);
       onOpenChange(false);
+      toast.success("充电桩已保存");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "充电桩更新失败");
     },
   });
   const updateError =
@@ -92,6 +97,7 @@ export function ChargingPointEditDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
+        className="sm:max-w-xl"
         onEscapeKeyDown={closeProtocolSelectBeforeDialog}
         onInteractOutside={closeProtocolSelectBeforeDialog}
       >

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +43,10 @@ export function ChargingPointCreateDialog() {
       form.reset(chargingPointCreateFormDefaultValues);
       setProtocolSelectOpen(false);
       setOpen(false);
+      toast.success("充电桩已新增");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "充电桩创建失败");
     },
   });
   const createError =
@@ -74,6 +79,7 @@ export function ChargingPointCreateDialog() {
         </Button>
       </DialogTrigger>
       <DialogContent
+        className="sm:max-w-xl"
         onEscapeKeyDown={closeProtocolSelectBeforeDialog}
         onInteractOutside={closeProtocolSelectBeforeDialog}
       >

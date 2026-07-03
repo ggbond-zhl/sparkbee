@@ -11,6 +11,7 @@ import {
   type PageSize,
 } from "@spark-bee/contracts";
 import {
+  CableIcon,
   ChevronDownIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -20,6 +21,7 @@ import {
 import { useMemo, useState } from "react";
 import type { UseFormRegisterReturn } from "react-hook-form";
 import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -72,6 +74,7 @@ import {
 import { chargingPointListQueryOptions } from "@/features/charging-points/model/chargingPointQueries";
 import { useChargingPointListStore } from "@/features/charging-points/model/chargingPointListStore";
 import { ChargingPointCreateDialog } from "@/features/charging-points/ui/ChargingPointCreateDialog";
+import { ChargingPointConnectorManagementDialog } from "@/features/charging-points/ui/ChargingPointConnectorManagementDialog";
 import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingPointEditDialog";
 
 type ChargingPointListItem = ListChargingPointsResponse["items"][number];
@@ -553,6 +556,7 @@ function PageSizeMenu({
 
 function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
   const [editOpen, setEditOpen] = useState(false);
+  const [connectorManagementOpen, setConnectorManagementOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const queryClient = useQueryClient();
   const removeDeletedId = useChargingPointListStore(
@@ -564,6 +568,10 @@ function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
       removeDeletedId(item.id);
       await queryClient.invalidateQueries({ queryKey: ["charging-points"] });
       setConfirmOpen(false);
+      toast.success("充电桩已删除");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "充电桩删除失败");
     },
   });
   const deleteError =
@@ -593,6 +601,14 @@ function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
               >
                 <PencilIcon />
                 编辑
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setConnectorManagementOpen(true);
+                }}
+              >
+                <CableIcon />
+                枪口管理
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -647,6 +663,11 @@ function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
         item={item}
         open={editOpen}
         onOpenChange={setEditOpen}
+      />
+      <ChargingPointConnectorManagementDialog
+        item={item}
+        open={connectorManagementOpen}
+        onOpenChange={setConnectorManagementOpen}
       />
     </>
   );
