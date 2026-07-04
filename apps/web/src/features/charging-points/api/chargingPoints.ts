@@ -1,5 +1,7 @@
 import {
   chargingPointDetailResponseSchema,
+  chargingPointConnectorActionResponseSchema,
+  type ChargingPointConnectorActionResponse,
   type ChargingPointDetailResponse,
   connectorResponseSchema,
   type ConnectorResponse,
@@ -8,9 +10,23 @@ import {
   listChargingPointsResponseSchema,
   type ListChargingPointsResponse,
   type PageSize,
+  runtimeOperationResponseSchema,
+  type RuntimeOperationResponse,
+  runtimeSnapshotResponseSchema,
+  type RuntimeSnapshotResponse,
+  runtimeStartTransactionRequestSchema,
+  runtimeStartTransactionResponseSchema,
+  type RuntimeStartTransactionRequest,
+  type RuntimeStartTransactionResponse,
+  runtimeStopTransactionRequestSchema,
+  runtimeStopTransactionResponseSchema,
+  type RuntimeStopTransactionRequest,
+  type RuntimeStopTransactionResponse,
   type UpdateChargingPointRequest,
   type UpdateConnectorRequest,
 } from "@spark-bee/contracts";
+
+import type { ChargingPointEventStreamMessage } from "@/features/charging-points/model/chargingPointRuntimeEvents";
 
 export interface ListChargingPointsInput {
   keyword?: string;
@@ -56,6 +72,17 @@ export async function createChargingPoint(
   return chargingPointDetailResponseSchema.parse(await response.json());
 }
 
+export async function getChargingPoint(
+  id: string,
+): Promise<ChargingPointDetailResponse> {
+  const response = await fetch(`/api/charging-points/${id}`);
+  if (!response.ok) {
+    throw new Error("桩实例详情加载失败");
+  }
+
+  return chargingPointDetailResponseSchema.parse(await response.json());
+}
+
 export async function updateChargingPoint(
   id: string,
   input: UpdateChargingPointRequest,
@@ -83,6 +110,171 @@ export async function deleteChargingPoint(id: string): Promise<void> {
   if (!response.ok) {
     throw new Error("充电桩删除失败");
   }
+}
+
+export async function getChargingPointRuntimeStatus(
+  id: string,
+): Promise<RuntimeOperationResponse> {
+  const response = await fetch(`/api/charging-points/${id}/status`);
+  if (!response.ok) {
+    throw new Error("桩实例运行状态加载失败");
+  }
+
+  return runtimeOperationResponseSchema.parse(await response.json());
+}
+
+export async function getChargingPointRuntimeSnapshot(
+  id: string,
+): Promise<RuntimeSnapshotResponse> {
+  const response = await fetch(`/api/charging-points/${id}/runtime-snapshot`);
+  if (!response.ok) {
+    throw new Error("桩实例运行状态快照加载失败");
+  }
+
+  return runtimeSnapshotResponseSchema.parse(await response.json());
+}
+
+async function applyChargingPointRuntimeOperation(
+  id: string,
+  operation: "start" | "stop",
+): Promise<RuntimeOperationResponse> {
+  const response = await fetch(`/api/charging-points/${id}/${operation}`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    throw new Error(operation === "start" ? "桩实例启动失败" : "桩实例停止失败");
+  }
+
+  return runtimeOperationResponseSchema.parse(await response.json());
+}
+
+export function startChargingPoint(id: string): Promise<RuntimeOperationResponse> {
+  return applyChargingPointRuntimeOperation(id, "start");
+}
+
+export function stopChargingPoint(id: string): Promise<RuntimeOperationResponse> {
+  return applyChargingPointRuntimeOperation(id, "stop");
+}
+
+async function applyConnectorRuntimeAction(
+  chargingPointId: string,
+  connectorId: string,
+  action: "plug" | "unplug",
+): Promise<ChargingPointConnectorActionResponse> {
+  const response = await fetch(
+    `/api/charging-points/${chargingPointId}/connectors/${connectorId}/${action}`,
+    { method: "POST" },
+  );
+  if (!response.ok) {
+    throw new Error(action === "plug" ? "插枪失败" : "拔枪失败");
+  }
+
+  return chargingPointConnectorActionResponseSchema.parse(await response.json());
+}
+
+export function plugConnector(
+  chargingPointId: string,
+  connectorId: string,
+): Promise<ChargingPointConnectorActionResponse> {
+  return applyConnectorRuntimeAction(chargingPointId, connectorId, "plug");
+}
+
+export function unplugConnector(
+  chargingPointId: string,
+  connectorId: string,
+): Promise<ChargingPointConnectorActionResponse> {
+  return applyConnectorRuntimeAction(chargingPointId, connectorId, "unplug");
+}
+
+export async function startConnectorTransaction(
+  chargingPointId: string,
+  connectorId: string,
+  input: RuntimeStartTransactionRequest,
+): Promise<RuntimeStartTransactionResponse> {
+  const response = await fetch(
+    `/api/charging-points/${chargingPointId}/connectors/${connectorId}/start-transaction`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(runtimeStartTransactionRequestSchema.parse(input)),
+    },
+  );
+  if (!response.ok) {
+    throw new Error("启动充电失败");
+  }
+
+  return runtimeStartTransactionResponseSchema.parse(await response.json());
+}
+
+export async function stopConnectorTransaction(
+  chargingPointId: string,
+  connectorId: string,
+  input: RuntimeStopTransactionRequest,
+): Promise<RuntimeStopTransactionResponse> {
+  const response = await fetch(
+    `/api/charging-points/${chargingPointId}/connectors/${connectorId}/stop-transaction`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(runtimeStopTransactionRequestSchema.parse(input)),
+    },
+  );
+  if (!response.ok) {
+    throw new Error("停止充电失败");
+  }
+
+  return runtimeStopTransactionResponseSchema.parse(await response.json());
+}
+
+const chargingPointEventStreamTypes = [
+  "snapshot",
+  "chargingPoint.lifecycle",
+  "session.status",
+  "chargingPoint.status",
+  "evse.status",
+  "connector.status",
+  "authorization.status",
+  "transaction.status",
+  "transaction.meterValue",
+  "protocol.message",
+] as const satisfies ChargingPointEventStreamMessage["event"][];
+
+export interface ChargingPointEventSubscriptionHandlers {
+  onEvent(message: ChargingPointEventStreamMessage): void;
+  onError?(event: Event): void;
+}
+
+export function subscribeChargingPointEvents(
+  id: string,
+  handlers: ChargingPointEventSubscriptionHandlers,
+): () => void {
+  const source = new EventSource(`/api/charging-points/${id}/events`);
+  const listeners = chargingPointEventStreamTypes.map((eventType) => {
+    const listener = (event: MessageEvent<string>) => {
+      handlers.onEvent({
+        event: eventType,
+        data: JSON.parse(event.data),
+      } as ChargingPointEventStreamMessage);
+    };
+    source.addEventListener(eventType, listener);
+
+    return { eventType, listener };
+  });
+
+  source.onerror = (event) => {
+    handlers.onError?.(event);
+  };
+
+  return () => {
+    for (const { eventType, listener } of listeners) {
+      source.removeEventListener(eventType, listener);
+    }
+    source.close();
+  };
 }
 
 export async function listConnectors(

@@ -8,6 +8,7 @@ import {
   runtimeAuthorizeRequestSchema,
   runtimeAuthorizeResponseSchema,
   runtimeOperationResponseSchema,
+  runtimeSnapshotResponseSchema,
   runtimeStartTransactionRequestSchema,
   runtimeStartTransactionResponseSchema,
   runtimeStopTransactionRequestSchema,
@@ -107,6 +108,61 @@ describe("chargingPoint contract schemas", () => {
     });
     expect(runtimeOperationResponseSchema.shape.status.description).toBe(
       "当前服务进程中的运行状态。",
+    );
+  });
+
+  test("describes runtime snapshot response in Chinese", () => {
+    expect(
+      runtimeSnapshotResponseSchema.parse({
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        runtimeStatus: {
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          status: "running",
+        },
+        sessionStatus: {
+          currentStatus: "online",
+          occurredAt: "2026-07-04T09:00:00.000Z",
+          connectionUrl: "ws://localhost:9000/ocpp/CP001",
+        },
+        chargingPointStatus: {
+          currentStatus: "available",
+          occurredAt: "2026-07-04T09:00:01.000Z",
+        },
+        evseStatuses: [
+          {
+            evseId: 1,
+            currentStatus: "available",
+            occurredAt: "2026-07-04T09:00:02.000Z",
+          },
+        ],
+        connectorStatuses: [
+          {
+            evseId: 1,
+            connectorId: 1,
+            currentStatus: "occupied",
+            occurredAt: "2026-07-04T09:00:03.000Z",
+          },
+        ],
+        transactionStatuses: [
+          {
+            transactionId: "tx-1",
+            evseId: 1,
+            connectorId: 1,
+            currentStatus: "active",
+            meterWh: 1200,
+            sampledAt: "2026-07-04T09:00:04.000Z",
+            occurredAt: "2026-07-04T09:00:04.000Z",
+          },
+        ],
+        lastHeartbeatAt: "2026-07-04T09:00:05.000Z",
+        recentIssue: null,
+      }),
+    ).toMatchObject({
+      sessionStatus: { currentStatus: "online" },
+      connectorStatuses: [{ currentStatus: "occupied" }],
+    });
+    expect(runtimeSnapshotResponseSchema.shape.sessionStatus.description).toBe(
+      "桩实例当前会话状态；没有运行态事件时为 null。",
     );
   });
 

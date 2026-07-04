@@ -3,8 +3,18 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   createConnector,
   deleteConnector,
+  getChargingPoint,
+  getChargingPointRuntimeSnapshot,
+  getChargingPointRuntimeStatus,
   listConnectors,
   listChargingPoints,
+  plugConnector,
+  startConnectorTransaction,
+  startChargingPoint,
+  subscribeChargingPointEvents,
+  stopConnectorTransaction,
+  stopChargingPoint,
+  unplugConnector,
   updateChargingPoint,
   updateConnector,
 } from "../../src/features/charging-points/api/chargingPoints";
@@ -72,6 +82,323 @@ describe("chargingPoints API client", () => {
         body: JSON.stringify({ name: "更新后的桩" }),
       },
     );
+  });
+
+  test("gets charging point detail by id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "00000000-0000-4000-8000-000000000001",
+          name: "调试桩",
+          description: null,
+          identity: "CP_001",
+          protocol: "OCPP16J",
+          centralSystemUrl: "ws://localhost:9000/ocpp",
+          vendor: "SparkBee",
+          model: "Simulator",
+          firmwareVersion: null,
+          serialNumber: null,
+          connectors: [],
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getChargingPoint("00000000-0000-4000-8000-000000000001");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/charging-points/00000000-0000-4000-8000-000000000001",
+    );
+  });
+
+  test("gets runtime status by charging point id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          status: "running",
+          bootStatus: "Accepted",
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getChargingPointRuntimeStatus(
+      "00000000-0000-4000-8000-000000000001",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/status",
+    );
+  });
+
+  test("gets runtime snapshot by charging point id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          runtimeStatus: {
+            chargingPointId: "00000000-0000-4000-8000-000000000001",
+            status: "running",
+          },
+          sessionStatus: null,
+          chargingPointStatus: null,
+          evseStatuses: [],
+          connectorStatuses: [],
+          transactionStatuses: [],
+          lastHeartbeatAt: null,
+          recentIssue: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getChargingPointRuntimeSnapshot(
+      "00000000-0000-4000-8000-000000000001",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/runtime-snapshot",
+    );
+  });
+
+  test("starts and stops charging point runtime by id", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            chargingPointId: "00000000-0000-4000-8000-000000000001",
+            status: "starting",
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          status: "stopped",
+        }),
+        { status: 200 },
+      ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startChargingPoint("00000000-0000-4000-8000-000000000001");
+    await stopChargingPoint("00000000-0000-4000-8000-000000000001");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/start",
+      { method: "POST" },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/stop",
+      { method: "POST" },
+    );
+  });
+
+  test("applies connector runtime actions by connector id", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            chargingPointId: "00000000-0000-4000-8000-000000000001",
+            connectorId: "00000000-0000-4000-8000-000000000002",
+            evseId: 1,
+            protocolConnectorId: 1,
+            plugState: "plugged",
+            vehiclePresence: "detected",
+            connectorStatus: "occupied",
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            chargingPointId: "00000000-0000-4000-8000-000000000001",
+            connectorId: "00000000-0000-4000-8000-000000000002",
+            evseId: 1,
+            protocolConnectorId: 1,
+            plugState: "unplugged",
+            vehiclePresence: "absent",
+            connectorStatus: "available",
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await plugConnector(
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+    );
+    await unplugConnector(
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/connectors/00000000-0000-4000-8000-000000000002/plug",
+      { method: "POST" },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/connectors/00000000-0000-4000-8000-000000000002/unplug",
+      { method: "POST" },
+    );
+  });
+
+  test("starts and stops connector transactions", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            chargingPointId: "00000000-0000-4000-8000-000000000001",
+            connectorId: "00000000-0000-4000-8000-000000000002",
+            evseId: 1,
+            protocolConnectorId: 1,
+            status: "accepted",
+            transactionId: "tx-1",
+            idTag: "CARD001",
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            chargingPointId: "00000000-0000-4000-8000-000000000001",
+            connectorId: "00000000-0000-4000-8000-000000000002",
+            evseId: 1,
+            protocolConnectorId: 1,
+            status: "accepted",
+            transactionId: "tx-1",
+            meterStopWh: 1200,
+            stoppedAt: "2026-07-04T09:00:00.000Z",
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startConnectorTransaction(
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      { idTag: " CARD001 " },
+    );
+    await stopConnectorTransaction(
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      { transactionId: "tx-1" },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/connectors/00000000-0000-4000-8000-000000000002/start-transaction",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ idTag: "CARD001" }),
+      },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/connectors/00000000-0000-4000-8000-000000000002/stop-transaction",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ transactionId: "tx-1" }),
+      },
+    );
+  });
+
+  test("subscribes to charging point runtime events by id", () => {
+    const createdSources: FakeEventSource[] = [];
+    class FakeEventSource {
+      readonly listeners = new Map<string, (event: MessageEvent<string>) => void>();
+      onerror: ((event: Event) => void) | null = null;
+      closed = false;
+
+      constructor(readonly url: string) {
+        createdSources.push(this);
+      }
+
+      addEventListener(
+        type: string,
+        listener: (event: MessageEvent<string>) => void,
+      ) {
+        this.listeners.set(type, listener);
+      }
+
+      removeEventListener(type: string) {
+        this.listeners.delete(type);
+      }
+
+      close() {
+        this.closed = true;
+      }
+    }
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const onEvent = vi.fn();
+
+    const unsubscribe = subscribeChargingPointEvents(
+      "00000000-0000-4000-8000-000000000001",
+      { onEvent },
+    );
+    const source = createdSources[0];
+    source.listeners.get("snapshot")?.({
+      data: JSON.stringify({
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        runtimeStatus: {
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          status: "running",
+        },
+        sessionStatus: null,
+        chargingPointStatus: null,
+        evseStatuses: [],
+        connectorStatuses: [],
+        transactionStatuses: [],
+        lastHeartbeatAt: null,
+        recentIssue: null,
+      }),
+    } as MessageEvent<string>);
+
+    expect(source.url).toBe(
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/events",
+    );
+    expect(onEvent).toHaveBeenCalledWith({
+      event: "snapshot",
+      data: {
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        runtimeStatus: {
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          status: "running",
+        },
+        sessionStatus: null,
+        chargingPointStatus: null,
+        evseStatuses: [],
+        connectorStatuses: [],
+        transactionStatuses: [],
+        lastHeartbeatAt: null,
+        recentIssue: null,
+      },
+    });
+
+    unsubscribe();
+
+    expect(source.closed).toBe(true);
+    expect(source.listeners.size).toBe(0);
   });
 
   test("lists connectors for a charging point", async () => {

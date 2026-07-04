@@ -4,6 +4,7 @@ import type {
   chargingPointDetailResponseSchema,
   chargingPointConnectorActionResponseSchema,
   runtimeOperationResponseSchema,
+  runtimeSnapshotResponseSchema,
   runtimeAuthorizeRequestSchema,
   runtimeAuthorizeResponseSchema,
   runtimeStartTransactionRequestSchema,
@@ -26,6 +27,7 @@ export type UpdateChargingPointRequest = z.infer<typeof updateChargingPointReque
 export type ChargingPointSummaryResponse = z.infer<typeof chargingPointSummaryResponseSchema>;
 export type ChargingPointDetailResponse = z.infer<typeof chargingPointDetailResponseSchema>;
 export type RuntimeOperationResponse = z.infer<typeof runtimeOperationResponseSchema>;
+export type RuntimeSnapshotResponse = z.infer<typeof runtimeSnapshotResponseSchema>;
 export type ChargingPointConnectorActionResponse = z.infer<
   typeof chargingPointConnectorActionResponseSchema
 >;

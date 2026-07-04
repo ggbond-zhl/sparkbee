@@ -7,6 +7,7 @@ import type {
   RuntimeOperationResponse,
   RuntimeStartTransactionRequest,
   RuntimeStartTransactionResponse,
+  RuntimeSnapshotResponse,
   RuntimeStopTransactionRequest,
   RuntimeStopTransactionResponse,
 } from "@spark-bee/contracts";
@@ -124,6 +125,23 @@ export class RuntimeOperationService {
   async getStatus(id: string): Promise<RuntimeOperationResponse> {
     await this.repository.getOperationDetail(id);
     return this.toStatusResponse(id, this.registry.get(id));
+  }
+
+  async getRuntimeSnapshot(id: string): Promise<RuntimeSnapshotResponse> {
+    await this.repository.getOperationDetail(id);
+    const runtimeStatus = this.toStatusResponse(id, this.registry.get(id));
+
+    return this.eventStreamHub?.getRuntimeSnapshot(id, runtimeStatus) ?? {
+      chargingPointId: id,
+      runtimeStatus,
+      sessionStatus: null,
+      chargingPointStatus: null,
+      evseStatuses: [],
+      connectorStatuses: [],
+      transactionStatuses: [],
+      lastHeartbeatAt: null,
+      recentIssue: null,
+    };
   }
 
   async plug(

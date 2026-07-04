@@ -95,6 +95,16 @@ describe("web architecture", () => {
     const formFieldsPath = join(featureRoot, "ui", "ChargingPointFormFields.tsx");
     const apiPath = join(featureRoot, "api", "chargingPoints.ts");
     const queryPath = join(featureRoot, "model", "chargingPointQueries.ts");
+    const detailHeaderModelPath = join(
+      featureRoot,
+      "model",
+      "chargingPointDetailHeader.ts",
+    );
+    const connectorCardsModelPath = join(
+      featureRoot,
+      "model",
+      "chargingPointConnectorCards.ts",
+    );
     const formPath = join(featureRoot, "model", "chargingPointListForm.ts");
     const createFormPath = join(featureRoot, "model", "chargingPointCreateForm.ts");
     const storePath = join(featureRoot, "model", "chargingPointListStore.ts");
@@ -111,6 +121,12 @@ describe("web architecture", () => {
     const formFieldsSource = readFileSync(formFieldsPath, "utf8");
     const apiSource = readFileSync(apiPath, "utf8");
     const querySource = readFileSync(queryPath, "utf8");
+    const detailHeaderModelSource = existsSync(detailHeaderModelPath)
+      ? readFileSync(detailHeaderModelPath, "utf8")
+      : "";
+    const connectorCardsModelSource = existsSync(connectorCardsModelPath)
+      ? readFileSync(connectorCardsModelPath, "utf8")
+      : "";
     const formSource = readFileSync(formPath, "utf8");
     const createFormSource = readFileSync(createFormPath, "utf8");
     const storeSource = readFileSync(storePath, "utf8");
@@ -127,6 +143,8 @@ describe("web architecture", () => {
     expect(existsSync(formFieldsPath)).toBe(true);
     expect(existsSync(apiPath)).toBe(true);
     expect(existsSync(queryPath)).toBe(true);
+    expect(existsSync(detailHeaderModelPath)).toBe(true);
+    expect(existsSync(connectorCardsModelPath)).toBe(true);
     expect(existsSync(formPath)).toBe(true);
     expect(existsSync(createFormPath)).toBe(true);
     expect(existsSync(storePath)).toBe(true);
@@ -208,11 +226,31 @@ describe("web architecture", () => {
     expect(connectorDialogSource).toContain("确认删除枪口");
     expect(connectorDialogSource).toContain("setQueryData");
     expect(connectorDialogSource).not.toContain("Table");
-    expect(detailPageSource).toContain("充电桩详情");
-    expect(detailPageSource).toContain("详情能力正在准备中");
-    expect(detailPageSource).toContain("返回列表");
-    expect(detailPageSource).not.toContain("useQuery");
+    expect(detailPageSource).toContain("useQuery");
+    expect(detailPageSource).toContain("useMutation");
+    expect(detailPageSource).toContain("buildChargingPointDetailHeaderModel");
+    expect(detailPageSource).toContain("buildConnectorCardModels");
+    expect(detailPageSource).toContain("chargingPointDetailQueryOptions");
+    expect(detailPageSource).toContain("chargingPointRuntimeStatusQueryOptions");
+    expect(detailPageSource).toContain("startChargingPoint");
+    expect(detailPageSource).toContain("stopChargingPoint");
+    expect(detailPageSource).toContain("plugConnector");
+    expect(detailPageSource).toContain("unplugConnector");
+    expect(detailPageSource).toContain("startConnectorTransaction");
+    expect(detailPageSource).toContain("stopConnectorTransaction");
+    expect(detailPageSource).toContain("最终连接目标");
+    expect(detailPageSource).toContain("最近异常");
+    expect(detailPageSource).toContain("启动充电");
+    expect(detailPageSource).toContain("停止充电");
     expect(detailPageSource).not.toContain("fetch(");
+    expect(detailHeaderModelSource).toContain("状态未知");
+    expect(detailHeaderModelSource).toContain("暂不可启动");
+    expect(detailHeaderModelSource).toContain("Boot 待接受");
+    expect(detailHeaderModelSource).toContain("buildConnectionTarget");
+    expect(connectorCardsModelSource).toContain("buildConnectorCardModels");
+    expect(connectorCardsModelSource).toContain("插枪状态");
+    expect(connectorCardsModelSource).toContain("startCharging");
+    expect(connectorCardsModelSource).not.toContain("authorize");
     expect(formFieldsSource).toContain("协议版本");
     expect(formFieldsSource).toContain("SelectTrigger");
     expect(formFieldsSource).toContain("SelectItem");
@@ -251,6 +289,15 @@ describe("web architecture", () => {
     expect(apiSource).toContain("createChargingPoint");
     expect(apiSource).toContain("updateChargingPoint");
     expect(apiSource).toContain("deleteChargingPoint");
+    expect(apiSource).toContain("getChargingPoint");
+    expect(apiSource).toContain("getChargingPointRuntimeStatus");
+    expect(apiSource).toContain("getChargingPointRuntimeSnapshot");
+    expect(apiSource).toContain("startChargingPoint");
+    expect(apiSource).toContain("stopChargingPoint");
+    expect(apiSource).toContain("plugConnector");
+    expect(apiSource).toContain("unplugConnector");
+    expect(apiSource).toContain("startConnectorTransaction");
+    expect(apiSource).toContain("stopConnectorTransaction");
     expect(apiSource).toContain("listConnectors");
     expect(apiSource).toContain("createConnector");
     expect(apiSource).toContain("updateConnector");
@@ -259,6 +306,9 @@ describe("web architecture", () => {
     expect(apiSource).toContain("PATCH");
     expect(apiSource).toContain("DELETE");
     expect(querySource).toContain("queryOptions");
+    expect(querySource).toContain("chargingPointDetailQueryOptions");
+    expect(querySource).toContain("chargingPointRuntimeStatusQueryOptions");
+    expect(querySource).toContain("chargingPointRuntimeSnapshotQueryOptions");
     expect(formSource).toContain("z.object");
     expect(createFormSource).toContain("createChargingPointRequestSchema");
   });
@@ -302,6 +352,7 @@ describe("web architecture", () => {
     expect(routerSource).toContain("/charging-points");
     expect(routerSource).toContain("features/charging-points/routes/ChargingPointsRoute");
     expect(existsSync(join(srcRoot, "components", "ui", "button.tsx"))).toBe(true);
+    expect(existsSync(join(srcRoot, "components", "ui", "badge.tsx"))).toBe(true);
     expect(existsSync(join(srcRoot, "components", "ui", "alert-dialog.tsx"))).toBe(
       true,
     );

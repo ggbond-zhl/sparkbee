@@ -5,6 +5,7 @@ import {
   runtimeAuthorizeRequestSchema,
   runtimeAuthorizeResponseSchema,
   runtimeOperationResponseSchema,
+  runtimeSnapshotResponseSchema,
   runtimeStartTransactionRequestSchema,
   runtimeStartTransactionResponseSchema,
   runtimeStopTransactionRequestSchema,
@@ -53,6 +54,11 @@ const connectorActionParamSchema = chargingPointIdParamSchema.extend({
 const operationSuccessResponse = (description: string) => ({
   description,
   content: jsonContent(runtimeOperationResponseSchema),
+});
+
+const runtimeSnapshotSuccessResponse = (description: string) => ({
+  description,
+  content: jsonContent(runtimeSnapshotResponseSchema),
 });
 
 const connectorActionSuccessResponse = (description: string) => ({
@@ -136,6 +142,23 @@ const getChargingPointStatusRoute = createRoute({
   },
   responses: {
     200: operationSuccessResponse("桩实例当前运行状态。"),
+    400: validationErrorResponse,
+    404: notFoundResponse,
+  },
+});
+
+const getChargingPointRuntimeSnapshotRoute = createRoute({
+  method: "get",
+  path: "/{id}/runtime-snapshot",
+  tags: ["RuntimeOperation"],
+  summary: "查询桩实例运行状态快照",
+  description:
+    "查询当前服务进程中的桩实例运行状态快照，用于页面刷新后恢复当前运行态；没有 Actor 时返回 stopped 和空运行投影。",
+  request: {
+    params: chargingPointIdParamSchema,
+  },
+  responses: {
+    200: runtimeSnapshotSuccessResponse("桩实例当前运行状态快照。"),
     400: validationErrorResponse,
     404: notFoundResponse,
   },
@@ -339,6 +362,11 @@ export function createRuntimeOperationRoute(
     return context.json(await service.getStatus(id), 200);
   });
 
+  route.openapi(getChargingPointRuntimeSnapshotRoute, async (context) => {
+    const { id } = context.req.valid("param");
+    return context.json(await service.getRuntimeSnapshot(id), 200);
+  });
+
   route.openapi(plugConnectorRoute, async (context) => {
     const { id, connectorId } = context.req.valid("param");
     return context.json(await service.plug(id, connectorId), 200);
@@ -369,7 +397,7 @@ export function createRuntimeOperationRoute(
 
   route.openapi(getChargingPointEventsRoute, async (context) => {
     const { id } = context.req.valid("param");
-    const snapshot = await service.getStatus(id);
+    const snapshot = await service.getRuntimeSnapshot(id);
     let unsubscribe: () => void = () => undefined;
     const stream = new ReadableStream({
       start(controller) {

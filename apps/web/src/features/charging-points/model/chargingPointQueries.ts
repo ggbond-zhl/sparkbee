@@ -1,6 +1,9 @@
 import { keepPreviousData, queryOptions } from "@tanstack/react-query";
 
 import {
+  getChargingPoint,
+  getChargingPointRuntimeSnapshot,
+  getChargingPointRuntimeStatus,
   listChargingPoints,
   type ListChargingPointsInput,
 } from "@/features/charging-points/api/chargingPoints";
@@ -21,5 +24,38 @@ export function chargingPointListQueryOptions(input: ListChargingPointsInput) {
     queryKey: chargingPointListQueryKey(input),
     queryFn: () => listChargingPoints(input),
     placeholderData: keepPreviousData,
+  });
+}
+
+export function chargingPointDetailQueryKey(id: string) {
+  return ["charging-points", id] as const;
+}
+
+export function chargingPointDetailQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: chargingPointDetailQueryKey(id),
+    queryFn: () => getChargingPoint(id),
+  });
+}
+
+export function chargingPointRuntimeStatusQueryKey(id: string) {
+  return ["charging-points", id, "runtime-status"] as const;
+}
+
+export function chargingPointRuntimeStatusQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: chargingPointRuntimeStatusQueryKey(id),
+    queryFn: () => getChargingPointRuntimeStatus(id),
+  });
+}
+
+export function chargingPointRuntimeSnapshotQueryKey(id: string) {
+  return ["charging-points", id, "runtime-snapshot"] as const;
+}
+
+export function chargingPointRuntimeSnapshotQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: chargingPointRuntimeSnapshotQueryKey(id),
+    queryFn: () => getChargingPointRuntimeSnapshot(id),
   });
 }

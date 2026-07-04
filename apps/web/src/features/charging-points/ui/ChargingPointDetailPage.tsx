@@ -1,32 +1,705 @@
-import { Link } from "@tanstack/react-router";
-import { ArrowLeftIcon } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useParams } from "@tanstack/react-router";
+import type { RuntimeOperationResponse } from "@spark-bee/contracts";
+import {
+  CopyIcon,
+  PlayIcon,
+  PlugZapIcon,
+  SquareIcon,
+  UnplugIcon,
+} from "lucide-react";
+import { useCallback, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
+  CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  plugConnector,
+  startConnectorTransaction,
+  startChargingPoint,
+  stopConnectorTransaction,
+  stopChargingPoint,
+  unplugConnector,
+} from "@/features/charging-points/api/chargingPoints";
+import {
+  buildConnectorCardModels,
+  type ConnectorCardAction,
+  type ConnectorCardModel,
+} from "@/features/charging-points/model/chargingPointConnectorCards";
+import {
+  buildChargingPointDetailHeaderModel,
+  type ChargingPointDetailHeaderModel,
+  type RuntimeStatusQueryState,
+} from "@/features/charging-points/model/chargingPointDetailHeader";
+import {
+  chargingPointDetailQueryOptions,
+  chargingPointRuntimeStatusQueryKey,
+  chargingPointRuntimeStatusQueryOptions,
+} from "@/features/charging-points/model/chargingPointQueries";
+import { useChargingPointRuntimeEvents } from "@/features/charging-points/model/useChargingPointRuntimeEvents";
+import { cn } from "@/lib/utils";
 
 export function ChargingPointDetailPage() {
+  const { chargingPointId } = useParams({
+    from: "/charging-points/$chargingPointId",
+  });
+  const queryClient = useQueryClient();
+  const detailQuery = useQuery(chargingPointDetailQueryOptions(chargingPointId));
+  const runtimeStatusQuery = useQuery(
+    chargingPointRuntimeStatusQueryOptions(chargingPointId),
+  );
+  const syncRuntimeStatus = useCallback((runtimeStatus: RuntimeOperationResponse) => {
+    queryClient.setQueryData<RuntimeOperationResponse>(
+      chargingPointRuntimeStatusQueryKey(chargingPointId),
+      (previous) => previous === undefined
+        ? runtimeStatus
+        : {
+            ...previous,
+            ...runtimeStatus,
+          },
+    );
+  }, [chargingPointId, queryClient]);
+  const runtimeEventState = useChargingPointRuntimeEvents(chargingPointId, {
+    enabled: detailQuery.isSuccess,
+    onRuntimeStatus: syncRuntimeStatus,
+  });
+  const startMutation = useMutation({
+    mutationFn: () => startChargingPoint(chargingPointId),
+    onSuccess: (runtimeStatus) => {
+      queryClient.setQueryData(
+        chargingPointRuntimeStatusQueryKey(chargingPointId),
+        runtimeStatus,
+      );
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "桩实例启动失败");
+    },
+  });
+  const stopMutation = useMutation({
+    mutationFn: () => stopChargingPoint(chargingPointId),
+    onSuccess: (runtimeStatus) => {
+      queryClient.setQueryData(
+        chargingPointRuntimeStatusQueryKey(chargingPointId),
+        runtimeStatus,
+      );
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "桩实例停止失败");
+    },
+  });
+  const plugMutation = useMutation({
+    mutationFn: (connectorId: string) => plugConnector(chargingPointId, connectorId),
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "插枪失败");
+    },
+  });
+  const unplugMutation = useMutation({
+    mutationFn: (connectorId: string) => unplugConnector(chargingPointId, connectorId),
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "拔枪失败");
+    },
+  });
+  const startTransactionMutation = useMutation({
+    mutationFn: ({ connectorId, idTag }: { connectorId: string; idTag: string }) =>
+      startConnectorTransaction(chargingPointId, connectorId, { idTag }),
+    onSuccess: (result) => {
+      if (result.status === "accepted") {
+        toast.success("充电已启动");
+        return;
+      }
+
+      toast.error(result.reason);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "启动充电失败");
+    },
+  });
+  const stopTransactionMutation = useMutation({
+    mutationFn: ({
+      connectorId,
+      transactionId,
+    }: {
+      connectorId: string;
+      transactionId: string;
+    }) => stopConnectorTransaction(chargingPointId, connectorId, { transactionId }),
+    onSuccess: (result) => {
+      if (result.status === "accepted") {
+        toast.success("充电已停止");
+        return;
+      }
+
+      toast.error(result.errorMessage);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "停止充电失败");
+    },
+  });
+
+  if (detailQuery.isLoading) {
+    return <DetailState text="桩实例详情加载中" />;
+  }
+
+  if (detailQuery.isError || detailQuery.data === undefined) {
+    return <DetailState className="text-destructive" text="桩实例详情加载失败" />;
+  }
+
+  const headerModel = buildChargingPointDetailHeaderModel({
+    detail: detailQuery.data,
+    runtimeStatus: runtimeStatusQuery.data,
+    statusQueryState: toRuntimeStatusQueryState(runtimeStatusQuery),
+    lastHeartbeatAt: null,
+    runtimeEventState,
+  });
+  const connectorCardModels = buildConnectorCardModels({
+    connectors: detailQuery.data.connectors,
+    runtimeStatus: runtimeStatusQuery.data,
+    runtimeEventState,
+  });
+  const runtimeMutationPending = startMutation.isPending || stopMutation.isPending;
+  const connectorMutationPending =
+    plugMutation.isPending ||
+    unplugMutation.isPending ||
+    startTransactionMutation.isPending ||
+    stopTransactionMutation.isPending;
+
   return (
-    <section className="flex min-h-[calc(100svh-7rem)] items-center justify-center">
-      <Card className="w-full max-w-lg">
-        <CardHeader>
-          <CardTitle>充电桩详情</CardTitle>
-          <CardDescription>详情能力正在准备中</CardDescription>
+    <section className="flex flex-col gap-4">
+      <Card>
+        <CardHeader className="gap-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-lg">{detailQuery.data.name}</CardTitle>
+              <StatusBadge item={headerModel.mainStatus} />
+              <StatusBadge item={headerModel.sessionStatus} />
+              <StatusBadge item={headerModel.chargingPointStatus} />
+              <span className="text-xs text-muted-foreground">
+                {headerModel.lastHeartbeatLabel}
+              </span>
+            </div>
+            {detailQuery.data.description && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <CardDescription className="max-w-3xl truncate">
+                    {detailQuery.data.description}
+                  </CardDescription>
+                </TooltipTrigger>
+                <TooltipContent>{detailQuery.data.description}</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+          <CardAction className="flex flex-col items-end gap-2">
+            <Button
+              disabled={headerModel.primaryAction.disabled || runtimeMutationPending}
+              type="button"
+              variant={headerModel.primaryAction.kind === "stop" ? "outline" : "default"}
+              onClick={() => {
+                if (headerModel.primaryAction.kind === "start") {
+                  startMutation.mutate();
+                  return;
+                }
+
+                stopMutation.mutate();
+              }}
+            >
+              {runtimeMutationPending ? "处理中" : headerModel.primaryAction.label}
+            </Button>
+          </CardAction>
         </CardHeader>
-        <CardFooter>
-          <Button asChild variant="outline">
-            <Link to="/charging-points">
-              <ArrowLeftIcon data-icon="inline-start" />
-              返回列表
-            </Link>
-          </Button>
-        </CardFooter>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+            <ConnectionTargetField model={headerModel} />
+            <DetailMetric label="桩身份" value={detailQuery.data.identity} />
+            <DetailMetric label="协议" value={headerModel.protocolLabel} />
+            <DetailMetric
+              label="厂商 / 型号"
+              value={`${detailQuery.data.vendor} / ${detailQuery.data.model}`}
+            />
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-4">
+            <StatusMetric label="Boot" value={headerModel.bootSummary} />
+            <StatusMetric label="枪口" value={headerModel.connectorSummary} />
+            <StatusMetric label="交易" value={headerModel.transactionSummary} />
+            <StatusMetric
+              label="最近异常"
+              tone={headerModel.recentIssue?.tone}
+              value={headerModel.recentIssue?.label ?? "无"}
+            />
+          </div>
+
+          {headerModel.primaryAction.disabledReason && (
+            <p className="text-sm text-muted-foreground">
+              {headerModel.primaryAction.disabledReason}
+            </p>
+          )}
+        </CardContent>
       </Card>
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {connectorCardModels.map((model) => (
+          <ConnectorRuntimeCard
+            key={model.connectorId}
+            disabled={connectorMutationPending}
+            model={model}
+            onPlug={() => plugMutation.mutate(model.connectorId)}
+            onStartCharging={(idTag) =>
+              startTransactionMutation.mutate({
+                connectorId: model.connectorId,
+                idTag,
+              })}
+            onStopCharging={(transactionId) =>
+              stopTransactionMutation.mutate({
+                connectorId: model.connectorId,
+                transactionId,
+              })}
+            onUnplug={() => unplugMutation.mutate(model.connectorId)}
+          />
+        ))}
+      </section>
     </section>
+  );
+}
+
+function toRuntimeStatusQueryState(query: {
+  isError: boolean;
+  isLoading: boolean;
+}): RuntimeStatusQueryState {
+  if (query.isLoading) {
+    return "loading";
+  }
+
+  return query.isError ? "error" : "success";
+}
+
+function ConnectionTargetField({
+  model,
+}: {
+  model: ChargingPointDetailHeaderModel;
+}) {
+  async function handleCopyConnectionTarget() {
+    await navigator.clipboard.writeText(model.connectionTarget);
+    toast.success("连接目标已复制");
+  }
+
+  return (
+    <dl className="min-w-0 rounded-lg border border-border/40 px-3 py-2">
+      <dt className="text-xs text-muted-foreground">最终连接目标</dt>
+      <dd className="mt-1 flex min-w-0 items-center gap-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="min-w-0 flex-1 truncate font-mono text-xs">
+              {model.connectionTarget}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="break-all">{model.connectionTarget}</TooltipContent>
+        </Tooltip>
+        <Button
+          aria-label="复制最终连接目标"
+          size="icon-xs"
+          type="button"
+          variant="ghost"
+          onClick={handleCopyConnectionTarget}
+        >
+          <CopyIcon />
+        </Button>
+      </dd>
+    </dl>
+  );
+}
+
+function DetailMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <dl className="min-w-0 rounded-lg border border-border/40 px-3 py-2">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <dd className="mt-1 truncate text-sm">{value}</dd>
+        </TooltipTrigger>
+        <TooltipContent className="break-all">{value}</TooltipContent>
+      </Tooltip>
+    </dl>
+  );
+}
+
+function StatusMetric({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone?: "neutral" | "success" | "waiting" | "warning" | "destructive";
+  value: string;
+}) {
+  return (
+    <dl
+      className={cn(
+        "min-w-0 rounded-lg border border-transparent bg-muted/40 px-3 py-2",
+        tone === "success" && "border-emerald-500/20 bg-emerald-500/10",
+        tone === "waiting" && "border-sky-500/20 bg-sky-500/10",
+        tone === "warning" && "border-amber-500/25 bg-amber-500/10",
+        tone === "destructive" && "border-destructive/25 bg-destructive/10",
+      )}
+    >
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 truncate text-sm font-medium">{value}</dd>
+    </dl>
+  );
+}
+
+function ConnectorRuntimeCard({
+  disabled,
+  model,
+  onPlug,
+  onStartCharging,
+  onStopCharging,
+  onUnplug,
+}: {
+  disabled: boolean;
+  model: ConnectorCardModel;
+  onPlug(): void;
+  onStartCharging(idTag: string): void;
+  onStopCharging(transactionId: string): void;
+  onUnplug(): void;
+}) {
+  return (
+    <Card className="min-w-0">
+      <CardHeader className="gap-1.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <CardTitle className="truncate text-base">{model.title}</CardTitle>
+            <Badge
+              className={toBadgeToneClassName(model.statusBadge.tone)}
+              variant={toBadgeVariant(model.statusBadge.tone)}
+            >
+              {model.statusBadge.label}
+            </Badge>
+          </div>
+          <CardDescription className="mt-1 truncate">
+            {model.description}
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-2">
+          {model.fields.map((field) => (
+            <ConnectorField key={field.label} field={field} />
+          ))}
+        </div>
+        {model.issue && (
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2 text-sm",
+              model.issue.tone === "warning" &&
+                "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+              model.issue.tone === "destructive" &&
+                "border-destructive/25 bg-destructive/10 text-destructive",
+            )}
+          >
+            {model.issue.label}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {model.actions.map((action) => (
+            <ConnectorActionButton
+              key={action.kind}
+              action={action}
+              disabled={disabled}
+              onPlug={onPlug}
+              onStartCharging={onStartCharging}
+              onStopCharging={onStopCharging}
+              onUnplug={onUnplug}
+            />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConnectorField({
+  field,
+}: {
+  field: ConnectorCardModel["fields"][number];
+}) {
+  return (
+    <dl className="min-w-0 rounded-lg bg-muted/40 px-3 py-2">
+      <dt className="text-xs text-muted-foreground">{field.label}</dt>
+      <dd
+        className={cn(
+          "mt-1 truncate text-sm font-medium",
+          field.tone === "success" && "text-emerald-700 dark:text-emerald-300",
+          field.tone === "waiting" && "text-sky-700 dark:text-sky-300",
+          field.tone === "warning" && "text-amber-700 dark:text-amber-300",
+          field.tone === "destructive" && "text-destructive",
+        )}
+      >
+        {field.value}
+      </dd>
+    </dl>
+  );
+}
+
+function ConnectorActionButton({
+  action,
+  disabled,
+  onPlug,
+  onStartCharging,
+  onStopCharging,
+  onUnplug,
+}: {
+  action: ConnectorCardAction;
+  disabled: boolean;
+  onPlug(): void;
+  onStartCharging(idTag: string): void;
+  onStopCharging(transactionId: string): void;
+  onUnplug(): void;
+}) {
+  if (action.kind === "plug") {
+    return (
+      <Button disabled={disabled} size="sm" type="button" onClick={onPlug}>
+        <PlugZapIcon />
+        {action.label}
+      </Button>
+    );
+  }
+
+  if (action.kind === "unplug") {
+    return (
+      <Button
+        disabled={disabled}
+        size="sm"
+        type="button"
+        variant="outline"
+        onClick={onUnplug}
+      >
+        <UnplugIcon />
+        {action.label}
+      </Button>
+    );
+  }
+
+  if (action.kind === "startCharging") {
+    return (
+      <StartChargingDialog
+        disabled={disabled}
+        label={action.label}
+        onSubmit={onStartCharging}
+      />
+    );
+  }
+
+  return (
+    <StopChargingDialog
+      action={action}
+      disabled={disabled}
+      onConfirm={onStopCharging}
+    />
+  );
+}
+
+function StartChargingDialog({
+  disabled,
+  label,
+  onSubmit,
+}: {
+  disabled: boolean;
+  label: string;
+  onSubmit(idTag: string): void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [idTag, setIdTag] = useState("CARD001");
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedIdTag = idTag.trim();
+    if (trimmedIdTag.length === 0) {
+      toast.error("请输入 idTag");
+      return;
+    }
+
+    onSubmit(trimmedIdTag);
+    setOpen(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button disabled={disabled} size="sm" type="button">
+          <PlayIcon />
+          {label}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <form className="grid gap-4" onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>启动充电</DialogTitle>
+            <DialogDescription>
+              使用 idTag 发起 StartTransaction，鉴权结果由 CSMS 决定。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="start-charging-id-tag">idTag</Label>
+            <Input
+              id="start-charging-id-tag"
+              maxLength={20}
+              value={idTag}
+              onChange={(event) => setIdTag(event.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button disabled={disabled} type="submit">
+              <PlayIcon />
+              启动充电
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StopChargingDialog({
+  action,
+  disabled,
+  onConfirm,
+}: {
+  action: ConnectorCardAction;
+  disabled: boolean;
+  onConfirm(transactionId: string): void;
+}) {
+  const transactionId = action.transactionId;
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button disabled={disabled || transactionId === undefined} size="sm" type="button">
+          <SquareIcon />
+          {action.label}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent size="sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>停止充电</AlertDialogTitle>
+          <AlertDialogDescription>
+            将发送 StopTransaction，停止原因和停止表值使用默认逻辑。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (transactionId !== undefined) {
+                onConfirm(transactionId);
+              }
+            }}
+          >
+            <SquareIcon />
+            停止充电
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function StatusBadge({
+  item,
+}: {
+  item: ChargingPointDetailHeaderModel["mainStatus"];
+}) {
+  const badge = (
+    <Badge
+      className={toBadgeToneClassName(item.tone)}
+      variant={toBadgeVariant(item.tone)}
+    >
+      {item.label}
+    </Badge>
+  );
+
+  if (!item.description) {
+    return badge;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent>{item.description}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function toBadgeVariant(
+  tone: "neutral" | "success" | "waiting" | "warning" | "destructive",
+): "default" | "secondary" | "destructive" | "outline" {
+  if (tone === "destructive") {
+    return "destructive";
+  }
+
+  if (tone === "success") {
+    return "default";
+  }
+
+  if (tone === "neutral") {
+    return "outline";
+  }
+
+  return "secondary";
+}
+
+function toBadgeToneClassName(
+  tone: "neutral" | "success" | "waiting" | "warning" | "destructive",
+) {
+  if (tone === "success") {
+    return "border-emerald-600/20 bg-emerald-600 text-white [a]:hover:bg-emerald-700 dark:bg-emerald-500 dark:text-emerald-950";
+  }
+
+  return undefined;
+}
+
+function DetailState({
+  className,
+  text,
+}: {
+  className?: string;
+  text: string;
+}) {
+  return (
+    <Card className={className}>
+      <CardContent>{text}</CardContent>
+    </Card>
   );
 }

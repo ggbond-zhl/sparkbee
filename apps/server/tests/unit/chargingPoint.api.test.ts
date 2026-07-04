@@ -8,6 +8,7 @@ import {
   listChargingPointsResponseSchema,
   runtimeAuthorizeResponseSchema,
   runtimeOperationResponseSchema,
+  runtimeSnapshotResponseSchema,
   runtimeStartTransactionResponseSchema,
   runtimeStopTransactionResponseSchema,
 } from "@spark-bee/contracts";
@@ -67,6 +68,12 @@ describe("chargingPoint management API", () => {
     expect(document.paths["/api/charging-points/{id}/status"].get.tags).toEqual([
       "RuntimeOperation",
     ]);
+    expect(
+      document.paths["/api/charging-points/{id}/runtime-snapshot"].get.summary,
+    ).toBe("查询桩实例运行状态快照");
+    expect(
+      document.paths["/api/charging-points/{id}/runtime-snapshot"].get.tags,
+    ).toEqual(["RuntimeOperation"]);
     expect(document.paths["/api/charging-points/{id}/events"].get.summary).toBe(
       "订阅桩事件流",
     );
@@ -133,6 +140,7 @@ describe("chargingPoint management API", () => {
     expect(serializedDocument).toContain("CSMS 基础 WebSocket 地址");
     expect(serializedDocument).toContain("枪口在所属桩实例内的 connectorId");
     expect(serializedDocument).toContain("当前服务进程中的运行状态");
+    expect(serializedDocument).toContain("刷新后恢复当前运行态");
     expect(serializedDocument).toContain("车辆接入枪口模拟动作");
     expect(serializedDocument).toContain("用于 OCPP Authorize 的 idTag");
     expect(serializedDocument).toContain("不要求事先调用鉴权接口");
@@ -525,6 +533,27 @@ describe("chargingPoint management API", () => {
     });
   });
 
+  test("returns an empty runtime snapshot when the chargingPoint is stopped", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+
+    const response = await app.request(
+      `/api/charging-points/${chargingPoint.id}/runtime-snapshot`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(runtimeSnapshotResponseSchema.parse(await response.json())).toEqual(
+      expectedRuntimeSnapshot(chargingPoint.id, "stopped"),
+    );
+  });
+
   test("streams a snapshot for an existing stopped chargingPoint", async () => {
     const database = await createTestDatabase();
     const app = createApp({ database });
@@ -542,10 +571,168 @@ describe("chargingPoint management API", () => {
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     await expect(readNextSseEvent(response)).resolves.toEqual({
       event: "snapshot",
-      data: {
-        chargingPointId: chargingPoint.id,
-        status: "stopped",
+      data: expectedRuntimeSnapshot(chargingPoint.id, "stopped"),
+    });
+  });
+
+  test("restores the current runtime snapshot through HTTP and the SSE first event", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble();
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
       },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
+
+    actor.publish({
+      id: "event-1",
+      sequence: 1,
+      type: "session.status",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: { scope: "session" },
+      occurredAt: "2026-07-04T09:00:00.000Z",
+      previousStatus: "offline",
+      currentStatus: "online",
+      connectionUrl: "ws://localhost:9000/ocpp/CP001",
+    });
+    actor.publish({
+      id: "event-2",
+      sequence: 2,
+      type: "chargingPoint.status",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: { scope: "chargingPoint" },
+      occurredAt: "2026-07-04T09:00:01.000Z",
+      previousStatus: null,
+      currentStatus: "available",
+    });
+    actor.publish({
+      id: "event-3",
+      sequence: 3,
+      type: "connector.status",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: { scope: "connector", evseId: 1, connectorId: 1 },
+      occurredAt: "2026-07-04T09:00:02.000Z",
+      previousStatus: null,
+      currentStatus: "occupied",
+    });
+    actor.publish({
+      id: "event-4",
+      sequence: 4,
+      type: "transaction.status",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: {
+        scope: "transaction",
+        evseId: 1,
+        connectorId: 1,
+        transactionId: "tx-1",
+      },
+      occurredAt: "2026-07-04T09:00:03.000Z",
+      previousStatus: "starting",
+      currentStatus: "active",
+    });
+    actor.publish({
+      id: "event-5",
+      sequence: 5,
+      type: "transaction.meterValue",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: {
+        scope: "transaction",
+        evseId: 1,
+        connectorId: 1,
+        transactionId: "tx-1",
+      },
+      occurredAt: "2026-07-04T09:00:04.000Z",
+      meterWh: 1200,
+      sampledAt: "2026-07-04T09:00:04.000Z",
+    });
+    actor.publish({
+      id: "event-6",
+      sequence: 6,
+      type: "protocol.message",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: { scope: "protocol" },
+      occurredAt: "2026-07-04T09:00:05.000Z",
+      direction: "received",
+      action: "Heartbeat",
+      messageId: "message-1",
+      body: { currentTime: "2026-07-04T09:00:05.000Z" },
+    });
+
+    const expectedSnapshot = {
+      ...expectedRuntimeSnapshot(chargingPoint.id, "running"),
+      sessionStatus: {
+        currentStatus: "online",
+        occurredAt: "2026-07-04T09:00:00.000Z",
+        connectionUrl: "ws://localhost:9000/ocpp/CP001",
+      },
+      chargingPointStatus: {
+        currentStatus: "available",
+        occurredAt: "2026-07-04T09:00:01.000Z",
+      },
+      connectorStatuses: [
+        {
+          evseId: 1,
+          connectorId: 1,
+          currentStatus: "occupied",
+          occurredAt: "2026-07-04T09:00:02.000Z",
+        },
+      ],
+      transactionStatuses: [
+        {
+          transactionId: "tx-1",
+          evseId: 1,
+          connectorId: 1,
+          currentStatus: "active",
+          meterWh: 1200,
+          sampledAt: "2026-07-04T09:00:04.000Z",
+          occurredAt: "2026-07-04T09:00:04.000Z",
+        },
+      ],
+      lastHeartbeatAt: "2026-07-04T09:00:05.000Z",
+    };
+
+    const snapshotResponse = await app.request(
+      `/api/charging-points/${chargingPoint.id}/runtime-snapshot`,
+    );
+    expect(snapshotResponse.status).toBe(200);
+    expect(runtimeSnapshotResponseSchema.parse(await snapshotResponse.json())).toEqual(
+      expectedSnapshot,
+    );
+
+    const streamResponse = await app.request(
+      `/api/charging-points/${chargingPoint.id}/events`,
+    );
+    await expect(readNextSseEvent(streamResponse)).resolves.toEqual({
+      event: "snapshot",
+      data: expectedSnapshot,
     });
   });
 
@@ -602,10 +789,7 @@ describe("chargingPoint management API", () => {
 
     await expect(readSseEvent(reader)).resolves.toEqual({
       event: "snapshot",
-      data: {
-        chargingPointId: chargingPoint.id,
-        status: "running",
-      },
+      data: expectedRuntimeSnapshot(chargingPoint.id, "running"),
     });
 
     const actorEvent = {
@@ -664,10 +848,7 @@ describe("chargingPoint management API", () => {
 
     await expect(readSseEvent(reader)).resolves.toEqual({
       event: "snapshot",
-      data: {
-        chargingPointId: chargingPoint.id,
-        status: "stopped",
-      },
+      data: expectedRuntimeSnapshot(chargingPoint.id, "stopped"),
     });
 
     await app.request(`/api/charging-points/${chargingPoint.id}/start`, { method: "POST" });
@@ -707,10 +888,7 @@ describe("chargingPoint management API", () => {
 
     await expect(readSseEvent(reader)).resolves.toEqual({
       event: "snapshot",
-      data: {
-        chargingPointId: chargingPoint.id,
-        status: "stopped",
-      },
+      data: expectedRuntimeSnapshot(chargingPoint.id, "stopped"),
     });
 
     const deleteResponse = await app.request(`/api/charging-points/${chargingPoint.id}`, {
@@ -773,10 +951,7 @@ describe("chargingPoint management API", () => {
 
     await expect(readSseEvent(reader)).resolves.toEqual({
       event: "snapshot",
-      data: {
-        chargingPointId: chargingPoint.id,
-        status: "running",
-      },
+      data: expectedRuntimeSnapshot(chargingPoint.id, "running"),
     });
 
     await app.request(`/api/charging-points/${chargingPoint.id}/stop`, { method: "POST" });
@@ -1937,6 +2112,26 @@ function createConnectorActionResult(
     plugState,
     vehiclePresence: plugState === "plugged" ? "detected" : "absent",
     connectorStatus: plugState === "plugged" ? "occupied" : "available",
+  };
+}
+
+function expectedRuntimeSnapshot(
+  chargingPointId: string,
+  status: "stopped" | "starting" | "running",
+) {
+  return {
+    chargingPointId,
+    runtimeStatus: {
+      chargingPointId,
+      status,
+    },
+    sessionStatus: null,
+    chargingPointStatus: null,
+    evseStatuses: [],
+    connectorStatuses: [],
+    transactionStatuses: [],
+    lastHeartbeatAt: null,
+    recentIssue: null,
   };
 }
 

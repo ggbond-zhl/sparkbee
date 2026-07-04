@@ -125,12 +125,115 @@ export const runtimeOperationResponseSchema = z.object({
     .describe("Boot Pending 后建议等待的重试秒数。"),
 });
 
+export const runtimeSessionStatusSchema = z.enum([
+  "online",
+  "reconnecting",
+  "offline",
+]);
+
+export const runtimeAvailabilityStatusSchema = z.enum([
+  "available",
+  "unavailable",
+  "faulted",
+]);
+
+export const runtimeEvseStatusSchema = z.enum([
+  "available",
+  "occupied",
+  "reserved",
+  "unavailable",
+  "faulted",
+]);
+
 export const connectorRuntimeStatusSchema = z.enum([
   "available",
   "occupied",
   "unavailable",
   "faulted",
 ]);
+
+export const runtimeTransactionStatusSchema = z.enum([
+  "starting",
+  "active",
+  "suspended",
+  "ending",
+  "ended",
+  "rejected",
+  "failed",
+]);
+
+export const runtimeSnapshotResponseSchema = z.object({
+  chargingPointId: z.string().uuid().describe("桩实例的 UUID 主键。"),
+  runtimeStatus: runtimeOperationResponseSchema.describe(
+    "当前服务进程中的桩实例运行状态。",
+  ),
+  sessionStatus: z
+    .object({
+      currentStatus: runtimeSessionStatusSchema.describe("当前会话连接状态。"),
+      occurredAt: z.string().datetime().describe("会话状态最后更新时间。"),
+      connectionUrl: z.string().describe("桩实例实际连接的 CSMS WebSocket 地址。"),
+      attempt: z.number().int().positive().optional().describe("当前重连尝试次数。"),
+      reason: z
+        .enum(["intentional", "unexpected_disconnect", "reconnect_exhausted"])
+        .optional()
+        .describe("会话离线原因。"),
+    })
+    .nullable()
+    .describe("桩实例当前会话状态；没有运行态事件时为 null。"),
+  chargingPointStatus: z
+    .object({
+      currentStatus: runtimeAvailabilityStatusSchema.describe("当前桩可用性状态。"),
+      occurredAt: z.string().datetime().describe("桩可用性状态最后更新时间。"),
+    })
+    .nullable()
+    .describe("OCPP 运行时中的整桩可用性状态。"),
+  evseStatuses: z
+    .array(
+      z.object({
+        evseId: z.number().int().positive().describe("EVSE 编号。"),
+        currentStatus: runtimeEvseStatusSchema.describe("当前 EVSE 状态。"),
+        occurredAt: z.string().datetime().describe("EVSE 状态最后更新时间。"),
+      }),
+    )
+    .describe("按 EVSE 汇总的当前运行状态。"),
+  connectorStatuses: z
+    .array(
+      z.object({
+        evseId: z.number().int().positive().describe("枪口所属 EVSE 编号。"),
+        connectorId: z.number().int().positive().describe("OCPP 枪口编号。"),
+        currentStatus: connectorRuntimeStatusSchema.describe("当前枪口状态。"),
+        occurredAt: z.string().datetime().describe("枪口状态最后更新时间。"),
+      }),
+    )
+    .describe("按枪口汇总的当前运行状态。"),
+  transactionStatuses: z
+    .array(
+      z.object({
+        transactionId: z.string().describe("SparkBee 记录的交易 ID。"),
+        evseId: z.number().int().positive().describe("交易所属 EVSE 编号。"),
+        connectorId: z.number().int().positive().describe("交易所属 OCPP 枪口编号。"),
+        currentStatus: runtimeTransactionStatusSchema.describe("当前交易状态。"),
+        reason: z.string().optional().describe("交易状态原因。"),
+        meterWh: z.number().int().nonnegative().optional().describe("最近电表读数，单位 Wh。"),
+        sampledAt: z.string().datetime().optional().describe("最近电表采样时间。"),
+        occurredAt: z.string().datetime().describe("交易状态最后更新时间。"),
+      }),
+    )
+    .describe("按交易汇总的当前运行状态。"),
+  lastHeartbeatAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .describe("最近一次收到 Heartbeat 的时间。"),
+  recentIssue: z
+    .object({
+      label: z.string().describe("最近运行异常摘要。"),
+      tone: z.enum(["warning", "destructive"]).describe("异常严重程度。"),
+      occurredAt: z.string().datetime().describe("异常发生时间。"),
+    })
+    .nullable()
+    .describe("最近需要关注的运行异常。"),
+});
 
 export const chargingPointConnectorActionResponseSchema = z.object({
   chargingPointId: z.string().uuid().describe("桩实例的 UUID 主键。"),
