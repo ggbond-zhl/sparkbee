@@ -6,7 +6,6 @@ import { describe, expect, test } from "vitest";
 
 import {
   buildChargingPointDetailHeaderModel,
-  buildConnectionTarget,
 } from "../../src/features/charging-points/model/chargingPointDetailHeader";
 import {
   createChargingPointRuntimeEventState,
@@ -56,12 +55,6 @@ function buildRuntimeStatus(
 }
 
 describe("charging point detail header model", () => {
-  test("builds the same final connection target as the runtime actor", () => {
-    expect(buildConnectionTarget("ws://localhost:9000/ocpp", "CP_001")).toBe(
-      "ws://localhost:9000/ocpp/CP_001",
-    );
-  });
-
   test("marks a stopped charging point with connectors as startable", () => {
     const model = buildChargingPointDetailHeaderModel({
       detail: baseDetail,
@@ -82,6 +75,87 @@ describe("charging point detail header model", () => {
     expect(model.sessionStatus.label).toBe("会话未建立");
     expect(model.chargingPointStatus.label).toBe("桩状态未同步");
     expect(model.transactionSummary).toBe("无运行交易");
+  });
+
+  test("exposes runtime communication diagnostics", () => {
+    let runtimeEventState = createChargingPointRuntimeEventState();
+    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
+      event: "session.status",
+      data: {
+        type: "session.status",
+        chargingPointId: baseDetail.id,
+        occurredAt: "2026-07-04T09:00:00.000Z",
+        resource: { scope: "session" },
+        previousStatus: "online",
+        currentStatus: "reconnecting",
+        connectionUrl: "ws://localhost:9000/ocpp/CP_001",
+        attempt: 2,
+      },
+    });
+    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
+      event: "chargingPoint.status",
+      data: {
+        type: "chargingPoint.status",
+        chargingPointId: baseDetail.id,
+        occurredAt: "2026-07-04T09:00:01.000Z",
+        resource: { scope: "chargingPoint" },
+        previousStatus: "available",
+        currentStatus: "unavailable",
+      },
+    });
+    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
+      event: "protocol.message",
+      data: {
+        type: "protocol.message",
+        chargingPointId: baseDetail.id,
+        occurredAt: "2026-07-04T09:00:04.000Z",
+        resource: { scope: "protocol" },
+        direction: "received",
+        action: "Heartbeat",
+      },
+    });
+
+    const model = buildChargingPointDetailHeaderModel({
+      detail: {
+        ...baseDetail,
+        firmwareVersion: "1.2.3",
+        serialNumber: "SN-001",
+        createdAt: "2026-07-04T09:00:00.000Z",
+        updatedAt: "2026-07-04T10:00:00.000Z",
+      },
+      runtimeStatus: buildRuntimeStatus({
+        status: "starting",
+        bootStatus: "Pending",
+        retryAfterSec: 12,
+      }),
+      statusQueryState: "success",
+      lastHeartbeatAt: null,
+      runtimeEventState,
+    });
+
+    expect(Object.fromEntries(
+      model.runtimeDiagnostics.map((item) => [item.label, item.value]),
+    )).toEqual({
+      Boot: "待接受 · 12 秒后再次上报",
+      会话状态: "会话重连中",
+      运行连接: "ws://localhost:9000/ocpp/CP_001",
+      重连次数: "第 2 次",
+      离线原因: "无",
+      桩状态更新时间: "2026-07-04 17:00:01",
+    });
+  });
+
+  test("omits the runtime connection before a session is known", () => {
+    const model = buildChargingPointDetailHeaderModel({
+      detail: baseDetail,
+      runtimeStatus: buildRuntimeStatus({ status: "stopped" }),
+      statusQueryState: "success",
+      lastHeartbeatAt: null,
+    });
+
+    expect(model.runtimeDiagnostics.map((item) => item.label)).not.toContain(
+      "运行连接",
+    );
   });
 
   test("separates stopped from not runnable when no connectors exist", () => {

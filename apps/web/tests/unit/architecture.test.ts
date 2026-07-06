@@ -238,7 +238,14 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("unplugConnector");
     expect(detailPageSource).toContain("startConnectorTransaction");
     expect(detailPageSource).toContain("stopConnectorTransaction");
-    expect(detailPageSource).toContain("最终连接目标");
+    expect(detailPageSource).toContain("ChargingPointEditDialog");
+    expect(detailPageSource).toContain("运行诊断");
+    expect(detailPageSource).toContain('defaultValue="messages"');
+    expect(detailPageSource.indexOf('value="messages"')).toBeLessThan(
+      detailPageSource.indexOf('value="events"'),
+    );
+    expect(detailPageSource).not.toContain("最终连接目标");
+    expect(detailPageSource).not.toContain("headerModel.staticDetails");
     expect(detailPageSource).toContain("最近异常");
     expect(detailPageSource).toContain("启动充电");
     expect(detailPageSource).toContain("停止充电");
@@ -246,7 +253,7 @@ describe("web architecture", () => {
     expect(detailHeaderModelSource).toContain("状态未知");
     expect(detailHeaderModelSource).toContain("暂不可启动");
     expect(detailHeaderModelSource).toContain("Boot 待接受");
-    expect(detailHeaderModelSource).toContain("buildConnectionTarget");
+    expect(detailHeaderModelSource).not.toContain("staticDetails");
     expect(connectorCardsModelSource).toContain("buildConnectorCardModels");
     expect(connectorCardsModelSource).toContain("插枪状态");
     expect(connectorCardsModelSource).toContain("startCharging");
@@ -256,6 +263,7 @@ describe("web architecture", () => {
     expect(formFieldsSource).toContain("SelectItem");
     expect(formFieldsSource).toContain("OCPP 1.6J");
     expect(formFieldsSource).not.toContain('type="hidden" {...form.register("protocol")}');
+    expect(formFieldsSource).toContain("configurationLocked");
     expect(formFieldsSource).toContain("Textarea");
     expect(formFieldsSource).toContain("CSMS 地址");
     expect(storeSource).toContain("selectedIds");
@@ -278,6 +286,8 @@ describe("web architecture", () => {
     expect(createDialogSource).not.toContain("modal={false}");
     expect(editDialogSource).not.toContain("protocolSelectOpen");
     expect(editDialogSource).not.toContain("closeProtocolSelectBeforeDialog");
+    expect(editDialogSource).toContain("configurationLockedReason");
+    expect(editDialogSource).toContain("onSaved");
     expect(editDialogSource).not.toContain("setProtocolSelectOpen");
     expect(editDialogSource).not.toContain("onProtocolSelectOpenChange");
     expect(editDialogSource).not.toContain("modal={false}");

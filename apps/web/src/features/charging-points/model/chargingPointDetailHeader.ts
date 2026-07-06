@@ -21,10 +21,16 @@ interface HeaderPrimaryAction {
   disabledReason?: string;
 }
 
+export interface HeaderMetricItem {
+  label: string;
+  value: string;
+  tone?: HeaderTone;
+  monospace?: boolean;
+}
+
 export interface ChargingPointDetailHeaderModel {
-  connectionTarget: string;
   connectorCountLabel: string;
-  protocolLabel: string;
+  runtimeDiagnostics: HeaderMetricItem[];
   mainStatus: HeaderStatusItem;
   sessionStatus: HeaderStatusItem;
   chargingPointStatus: HeaderStatusItem;
@@ -38,13 +44,6 @@ export interface ChargingPointDetailHeaderModel {
 }
 
 export type RuntimeStatusQueryState = "loading" | "error" | "success";
-
-export function buildConnectionTarget(
-  centralSystemUrl: string,
-  identity: string,
-) {
-  return `${centralSystemUrl}/${identity}`;
-}
 
 export function buildChargingPointDetailHeaderModel({
   detail,
@@ -64,12 +63,12 @@ export function buildChargingPointDetailHeaderModel({
   const effectiveLastHeartbeatAt =
     runtimeEventState?.lastHeartbeatAt ?? lastHeartbeatAt;
   const base = {
-    connectionTarget: buildConnectionTarget(
-      detail.centralSystemUrl,
-      detail.identity,
-    ),
     connectorCountLabel,
-    protocolLabel: formatProtocol(detail.protocol),
+    runtimeDiagnostics: toRuntimeDiagnostics(
+      runtimeStatus,
+      statusQueryState,
+      runtimeEventState,
+    ),
     lastHeartbeatLabel: formatLastHeartbeat(effectiveLastHeartbeatAt),
   };
 
@@ -244,10 +243,6 @@ export function buildChargingPointDetailHeaderModel({
   };
 }
 
-function formatProtocol(protocol: ChargingPointDetailResponse["protocol"]) {
-  return protocol === "OCPP16J" ? "OCPP 1.6J" : protocol;
-}
-
 function toBootSummary(
   runtimeStatus: RuntimeOperationResponse,
   fallback: string,
@@ -263,6 +258,164 @@ function toBootSummary(
   }
 
   return fallback;
+}
+
+function toRuntimeDiagnostics(
+  runtimeStatus: RuntimeOperationResponse | undefined,
+  statusQueryState: RuntimeStatusQueryState,
+  runtimeEventState: ChargingPointRuntimeEventState | undefined,
+): HeaderMetricItem[] {
+  const sessionStatus = runtimeEventState?.sessionStatus;
+  const sessionDiagnostic = toSessionDiagnostic(
+    runtimeStatus,
+    statusQueryState,
+    runtimeEventState,
+  );
+  const chargingPointStatus = runtimeEventState?.chargingPointStatus;
+
+  const diagnostics: HeaderMetricItem[] = [
+    {
+      label: "Boot",
+      value: toBootDiagnostic(runtimeStatus, statusQueryState),
+      tone: toBootDiagnosticTone(runtimeStatus, statusQueryState),
+    },
+    {
+      label: "会话状态",
+      value: sessionDiagnostic.value,
+      tone: sessionDiagnostic.tone,
+    },
+    {
+      label: "运行连接",
+      value: sessionStatus?.connectionUrl ?? "--",
+      monospace: sessionStatus?.connectionUrl !== undefined,
+    },
+    {
+      label: "重连次数",
+      value: formatReconnectAttempt(sessionStatus),
+      tone: sessionStatus?.currentStatus === "reconnecting" ? "warning" : undefined,
+    },
+    {
+      label: "离线原因",
+      value: formatSessionOfflineDiagnostic(sessionStatus),
+      tone: sessionStatus?.reason === "reconnect_exhausted"
+        ? "destructive"
+        : sessionStatus?.reason === "unexpected_disconnect"
+          ? "warning"
+          : undefined,
+    },
+    {
+      label: "桩状态更新时间",
+      value: chargingPointStatus === undefined || chargingPointStatus === null
+        ? "--"
+        : formatDateTime(chargingPointStatus.occurredAt),
+    },
+  ];
+
+  return diagnostics.filter((item) =>
+    item.label !== "运行连接" || sessionStatus?.connectionUrl !== undefined
+  );
+}
+
+function toSessionDiagnostic(
+  runtimeStatus: RuntimeOperationResponse | undefined,
+  statusQueryState: RuntimeStatusQueryState,
+  runtimeEventState: ChargingPointRuntimeEventState | undefined,
+): Pick<HeaderMetricItem, "value" | "tone"> {
+  if (runtimeStatus === undefined) {
+    return {
+      value: statusQueryState === "loading" ? "状态获取中" : "状态未知",
+      tone: statusQueryState === "loading" ? "waiting" : "warning",
+    };
+  }
+
+  const item = toSessionStatusItem(runtimeStatus, runtimeEventState);
+
+  return {
+    value: item.label,
+    tone: item.tone,
+  };
+}
+
+function toBootDiagnostic(
+  runtimeStatus: RuntimeOperationResponse | undefined,
+  statusQueryState: RuntimeStatusQueryState,
+) {
+  if (statusQueryState === "loading") {
+    return "等待运行状态";
+  }
+
+  if (runtimeStatus === undefined) {
+    return "状态未知";
+  }
+
+  if (runtimeStatus.bootStatus === "Accepted") {
+    return "已接受";
+  }
+
+  if (runtimeStatus.bootStatus === "Pending") {
+    return runtimeStatus.retryAfterSec === undefined
+      ? "待接受"
+      : `待接受 · ${runtimeStatus.retryAfterSec} 秒后再次上报`;
+  }
+
+  if (runtimeStatus.status === "stopped") {
+    return "未启动";
+  }
+
+  return runtimeStatus.status === "starting"
+    ? "等待 BootNotification"
+    : "状态待同步";
+}
+
+function toBootDiagnosticTone(
+  runtimeStatus: RuntimeOperationResponse | undefined,
+  statusQueryState: RuntimeStatusQueryState,
+): HeaderTone {
+  if (statusQueryState === "loading") {
+    return "waiting";
+  }
+
+  if (runtimeStatus === undefined) {
+    return "warning";
+  }
+
+  if (runtimeStatus.bootStatus === "Accepted") {
+    return "success";
+  }
+
+  if (runtimeStatus.bootStatus === "Pending" || runtimeStatus.status === "starting") {
+    return "waiting";
+  }
+
+  return "neutral";
+}
+
+function formatReconnectAttempt(
+  sessionStatus: ChargingPointRuntimeEventState["sessionStatus"] | undefined,
+) {
+  if (sessionStatus === undefined || sessionStatus === null) {
+    return "--";
+  }
+
+  if (sessionStatus.currentStatus !== "reconnecting") {
+    return "无";
+  }
+
+  return sessionStatus.attempt === undefined ? "重连中" : `第 ${sessionStatus.attempt} 次`;
+}
+
+function formatSessionOfflineDiagnostic(
+  sessionStatus: ChargingPointRuntimeEventState["sessionStatus"] | undefined,
+) {
+  if (sessionStatus === undefined || sessionStatus === null) {
+    return "--";
+  }
+
+  if (sessionStatus.currentStatus !== "offline") {
+    return "无";
+  }
+
+  return formatOfflineReason(sessionStatus.reason) ?? "未说明";
 }
 
 function toSessionStatusItem(
@@ -459,4 +612,21 @@ function formatLastHeartbeat(lastHeartbeatAt: Date | null) {
   return `最后心跳 ${lastHeartbeatAt.toLocaleTimeString("zh-CN", {
     hour12: false,
   })}`;
+}
+
+function formatDateTime(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${
+    padDatePart(date.getDate())
+  } ${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${
+    padDatePart(date.getSeconds())
+  }`;
+}
+
+function padDatePart(value: number) {
+  return String(value).padStart(2, "0");
 }

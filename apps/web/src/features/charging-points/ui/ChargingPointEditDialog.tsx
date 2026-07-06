@@ -1,6 +1,9 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { ChargingPointSummaryResponse } from "@spark-bee/contracts";
+import type {
+  ChargingPointDetailResponse,
+  ChargingPointSummaryResponse,
+} from "@spark-bee/contracts";
 import { useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -10,6 +13,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -22,14 +26,31 @@ import {
 } from "@/features/charging-points/model/chargingPointCreateForm";
 import { ChargingPointFormFields } from "@/features/charging-points/ui/ChargingPointFormFields";
 
+type EditableChargingPoint = Pick<
+  ChargingPointSummaryResponse,
+  | "id"
+  | "name"
+  | "description"
+  | "identity"
+  | "protocol"
+  | "centralSystemUrl"
+  | "vendor"
+  | "model"
+  | "firmwareVersion"
+  | "serialNumber"
+>;
+
 interface ChargingPointEditDialogProps {
-  item: ChargingPointSummaryResponse;
+  configurationLocked?: boolean;
+  configurationLockedReason?: string;
+  item: EditableChargingPoint;
   open: boolean;
+  onSaved?(item: ChargingPointDetailResponse): void | Promise<void>;
   onOpenChange(open: boolean): void;
 }
 
 function createEditFormValues(
-  item: ChargingPointSummaryResponse,
+  item: EditableChargingPoint,
 ): ChargingPointCreateFormInput {
   return {
     name: item.name,
@@ -45,7 +66,10 @@ function createEditFormValues(
 }
 
 export function ChargingPointEditDialog({
+  configurationLocked = false,
+  configurationLockedReason,
   item,
+  onSaved,
   onOpenChange,
   open,
 }: ChargingPointEditDialogProps) {
@@ -62,8 +86,9 @@ export function ChargingPointEditDialog({
   const updateMutation = useMutation({
     mutationFn: (values: ChargingPointCreateFormValues) =>
       updateChargingPoint(item.id, values),
-    onSuccess: async () => {
+    onSuccess: async (updatedItem) => {
       await queryClient.invalidateQueries({ queryKey: ["charging-points"] });
+      await onSaved?.(updatedItem);
       onOpenChange(false);
       toast.success("充电桩已保存");
     },
@@ -93,8 +118,14 @@ export function ChargingPointEditDialog({
         >
           <DialogHeader>
             <DialogTitle>编辑充电桩</DialogTitle>
+            {configurationLockedReason && (
+              <DialogDescription>
+                {configurationLockedReason}
+              </DialogDescription>
+            )}
           </DialogHeader>
           <ChargingPointFormFields
+            configurationLocked={configurationLocked}
             form={form}
             idPrefix="charging-point-edit"
           />

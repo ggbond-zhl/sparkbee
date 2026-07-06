@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import type { RuntimeOperationResponse } from "@spark-bee/contracts";
 import {
-  CopyIcon,
+  PencilIcon,
   PlayIcon,
   PlugZapIcon,
   SquareIcon,
@@ -70,6 +70,7 @@ import {
 import {
   buildChargingPointDetailHeaderModel,
   type ChargingPointDetailHeaderModel,
+  type HeaderMetricItem,
   type RuntimeStatusQueryState,
 } from "@/features/charging-points/model/chargingPointDetailHeader";
 import type {
@@ -78,21 +79,26 @@ import type {
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
 import {
   chargingPointDetailQueryOptions,
+  chargingPointDetailQueryKey,
   chargingPointRuntimeStatusQueryKey,
   chargingPointRuntimeStatusQueryOptions,
 } from "@/features/charging-points/model/chargingPointQueries";
 import { useChargingPointRuntimeEvents } from "@/features/charging-points/model/useChargingPointRuntimeEvents";
+import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingPointEditDialog";
 import { cn } from "@/lib/utils";
 
 export function ChargingPointDetailPage() {
   const { chargingPointId } = useParams({
     from: "/charging-points/$chargingPointId",
   });
+  const [editOpen, setEditOpen] = useState(false);
   const queryClient = useQueryClient();
   const detailQuery = useQuery(chargingPointDetailQueryOptions(chargingPointId));
+  const detailQueryKey = chargingPointDetailQueryKey(chargingPointId);
   const runtimeStatusQuery = useQuery(
     chargingPointRuntimeStatusQueryOptions(chargingPointId),
   );
+  const runtimeStatusQueryState = toRuntimeStatusQueryState(runtimeStatusQuery);
   const syncRuntimeStatus = useCallback((runtimeStatus: RuntimeOperationResponse) => {
     queryClient.setQueryData<RuntimeOperationResponse>(
       chargingPointRuntimeStatusQueryKey(chargingPointId),
@@ -191,7 +197,7 @@ export function ChargingPointDetailPage() {
   const headerModel = buildChargingPointDetailHeaderModel({
     detail: detailQuery.data,
     runtimeStatus: runtimeStatusQuery.data,
-    statusQueryState: toRuntimeStatusQueryState(runtimeStatusQuery),
+    statusQueryState: runtimeStatusQueryState,
     lastHeartbeatAt: null,
     runtimeEventState,
   });
@@ -206,6 +212,14 @@ export function ChargingPointDetailPage() {
     unplugMutation.isPending ||
     startTransactionMutation.isPending ||
     stopTransactionMutation.isPending;
+  const configurationLocked =
+    runtimeStatusQueryState !== "success" ||
+    runtimeStatusQuery.data?.status !== "stopped";
+  const configurationLockedReason = configurationLocked
+    ? runtimeStatusQueryState === "success"
+      ? "桩实例未停止时仅可修改名称和说明；连接配置需停止后修改。"
+      : "运行状态未确认，仅可修改名称和说明；连接配置需停止后修改。"
+    : undefined;
 
   return (
     <section className="flex flex-col gap-4">
@@ -221,22 +235,20 @@ export function ChargingPointDetailPage() {
                 {headerModel.lastHeartbeatLabel}
               </span>
             </div>
-            {detailQuery.data.description && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <CardDescription className="max-w-3xl truncate">
-                    {detailQuery.data.description}
-                  </CardDescription>
-                </TooltipTrigger>
-                <TooltipContent>{detailQuery.data.description}</TooltipContent>
-              </Tooltip>
-            )}
           </div>
-          <CardAction className="flex flex-col items-end gap-2">
+          <CardAction className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditOpen(true)}
+            >
+              <PencilIcon data-icon="inline-start" />
+              编辑
+            </Button>
             <Button
               disabled={headerModel.primaryAction.disabled || runtimeMutationPending}
               type="button"
-              variant={headerModel.primaryAction.kind === "stop" ? "outline" : "default"}
+              variant={headerModel.primaryAction.kind === "stop" ? "destructive" : "default"}
               onClick={() => {
                 if (headerModel.primaryAction.kind === "start") {
                   startMutation.mutate();
@@ -251,18 +263,7 @@ export function ChargingPointDetailPage() {
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
-            <ConnectionTargetField model={headerModel} />
-            <DetailMetric label="桩身份" value={detailQuery.data.identity} />
-            <DetailMetric label="协议" value={headerModel.protocolLabel} />
-            <DetailMetric
-              label="厂商 / 型号"
-              value={`${detailQuery.data.vendor} / ${detailQuery.data.model}`}
-            />
-          </div>
-
-          <div className="grid gap-2 md:grid-cols-4">
-            <StatusMetric label="Boot" value={headerModel.bootSummary} />
+          <div className="grid gap-2 md:grid-cols-3">
             <StatusMetric label="枪口" value={headerModel.connectorSummary} />
             <StatusMetric label="交易" value={headerModel.transactionSummary} />
             <StatusMetric
@@ -271,6 +272,8 @@ export function ChargingPointDetailPage() {
               value={headerModel.recentIssue?.label ?? "无"}
             />
           </div>
+
+          <RuntimeDiagnosticsPanel items={headerModel.runtimeDiagnostics} />
 
           {headerModel.primaryAction.disabledReason && (
             <p className="text-sm text-muted-foreground">
@@ -304,6 +307,17 @@ export function ChargingPointDetailPage() {
         events={eventFeedState.events}
         protocolMessages={eventFeedState.protocolMessages}
       />
+      <ChargingPointEditDialog
+        configurationLocked={configurationLocked}
+        configurationLockedReason={configurationLockedReason}
+        item={detailQuery.data}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSaved={async (updatedItem) => {
+          queryClient.setQueryData(detailQueryKey, updatedItem);
+          await queryClient.invalidateQueries({ queryKey: detailQueryKey });
+        }}
+      />
     </section>
   );
 }
@@ -319,53 +333,53 @@ function toRuntimeStatusQueryState(query: {
   return query.isError ? "error" : "success";
 }
 
-function ConnectionTargetField({
-  model,
-}: {
-  model: ChargingPointDetailHeaderModel;
-}) {
-  async function handleCopyConnectionTarget() {
-    await navigator.clipboard.writeText(model.connectionTarget);
-    toast.success("连接目标已复制");
-  }
-
+function DetailMetric({
+  label,
+  monospace,
+  tone,
+  value,
+}: HeaderMetricItem) {
   return (
-    <dl className="min-w-0 rounded-lg border border-border/40 px-3 py-2">
-      <dt className="text-xs text-muted-foreground">最终连接目标</dt>
-      <dd className="mt-1 flex min-w-0 items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="min-w-0 flex-1 truncate font-mono text-xs">
-              {model.connectionTarget}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent className="break-all">{model.connectionTarget}</TooltipContent>
-        </Tooltip>
-        <Button
-          aria-label="复制最终连接目标"
-          size="icon-xs"
-          type="button"
-          variant="ghost"
-          onClick={handleCopyConnectionTarget}
-        >
-          <CopyIcon />
-        </Button>
-      </dd>
-    </dl>
-  );
-}
-
-function DetailMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <dl className="min-w-0 rounded-lg border border-border/40 px-3 py-2">
+    <dl
+      className={cn(
+        "min-w-0 rounded-lg border border-border/40 px-3 py-2",
+        tone === "success" && "border-emerald-500/20 bg-emerald-500/10",
+        tone === "waiting" && "border-sky-500/20 bg-sky-500/10",
+        tone === "warning" && "border-amber-500/25 bg-amber-500/10",
+        tone === "destructive" && "border-destructive/25 bg-destructive/10",
+      )}
+    >
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <Tooltip>
         <TooltipTrigger asChild>
-          <dd className="mt-1 truncate text-sm">{value}</dd>
+          <dd
+            className={cn(
+              "mt-1 truncate text-sm",
+              monospace && "font-mono text-xs",
+            )}
+          >
+            {value}
+          </dd>
         </TooltipTrigger>
         <TooltipContent className="break-all">{value}</TooltipContent>
       </Tooltip>
     </dl>
+  );
+}
+
+function RuntimeDiagnosticsPanel({ items }: { items: HeaderMetricItem[] }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-medium">运行诊断</h3>
+        <span className="text-xs text-muted-foreground">通信状态</span>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {items.map((item) => (
+          <DetailMetric key={item.label} {...item} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -496,21 +510,21 @@ function RuntimeObservationTabs({
 }) {
   return (
     <section className="rounded-lg border border-border/60 bg-card p-3">
-      <Tabs defaultValue="events">
+      <Tabs defaultValue="messages">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <TabsList>
-            <TabsTrigger value="events">事件 {events.length}</TabsTrigger>
             <TabsTrigger value="messages">报文 {protocolMessages.length}</TabsTrigger>
+            <TabsTrigger value="events">事件 {events.length}</TabsTrigger>
           </TabsList>
           <span className="text-xs text-muted-foreground">
             当前页面打开后收到的最近 200 条
           </span>
         </div>
-        <TabsContent className="mt-3" value="events">
-          <RuntimeEventLogList entries={events} />
-        </TabsContent>
         <TabsContent className="mt-3" value="messages">
           <ProtocolMessageLogList entries={protocolMessages} />
+        </TabsContent>
+        <TabsContent className="mt-3" value="events">
+          <RuntimeEventLogList entries={events} />
         </TabsContent>
       </Tabs>
     </section>
