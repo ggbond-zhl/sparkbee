@@ -1,11 +1,101 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  createChargingPointRuntimeEventFeedState,
   createChargingPointRuntimeEventState,
+  reduceChargingPointRuntimeEventFeedState,
   reduceChargingPointRuntimeEventState,
 } from "../../src/features/charging-points/model/chargingPointRuntimeEvents";
 
 describe("charging point runtime events", () => {
+  test("keeps runtime events and protocol messages in separate feeds", () => {
+    let feedState = createChargingPointRuntimeEventFeedState();
+
+    feedState = reduceChargingPointRuntimeEventFeedState(feedState, {
+      event: "snapshot",
+      data: {
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        runtimeStatus: {
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          status: "running",
+        },
+        sessionStatus: null,
+        chargingPointStatus: null,
+        evseStatuses: [],
+        connectorStatuses: [],
+        transactionStatuses: [],
+        lastHeartbeatAt: null,
+        recentIssue: null,
+      },
+    });
+    feedState = reduceChargingPointRuntimeEventFeedState(feedState, {
+      event: "connector.status",
+      data: {
+        type: "connector.status",
+        chargingPointId: "cp-1",
+        occurredAt: "2026-07-04T09:00:01.000Z",
+        resource: { scope: "connector", evseId: 1, connectorId: 1 },
+        previousStatus: "available",
+        currentStatus: "occupied",
+      },
+    });
+    feedState = reduceChargingPointRuntimeEventFeedState(feedState, {
+      event: "protocol.message",
+      data: {
+        type: "protocol.message",
+        chargingPointId: "cp-1",
+        occurredAt: "2026-07-04T09:00:02.000Z",
+        resource: { scope: "protocol" },
+        direction: "received",
+        action: "Heartbeat",
+        messageId: "msg-1",
+        body: { currentTime: "2026-07-04T09:00:02.000Z" },
+      },
+    });
+
+    expect(feedState.events).toHaveLength(1);
+    expect(feedState.events[0]).toMatchObject({
+      eventType: "connector.status",
+      resource: "枪口 1/1",
+      summary: "枪口 1/1: 占用",
+    });
+    expect(feedState.protocolMessages).toHaveLength(1);
+    expect(feedState.protocolMessages[0]).toMatchObject({
+      direction: "received",
+      action: "Heartbeat",
+      messageId: "msg-1",
+      summary: "收到 Heartbeat",
+      detail: { currentTime: "2026-07-04T09:00:02.000Z" },
+    });
+  });
+
+  test("keeps newest runtime feed records first and limits each feed to 200", () => {
+    let feedState = createChargingPointRuntimeEventFeedState();
+
+    for (let index = 0; index < 201; index += 1) {
+      feedState = reduceChargingPointRuntimeEventFeedState(feedState, {
+        event: "transaction.meterValue",
+        data: {
+          type: "transaction.meterValue",
+          chargingPointId: "cp-1",
+          occurredAt: `2026-07-04T09:00:${String(index % 60).padStart(2, "0")}.000Z`,
+          resource: {
+            scope: "transaction",
+            evseId: 1,
+            connectorId: 1,
+            transactionId: `tx-${index}`,
+          },
+          meterWh: index + 0.1234,
+          sampledAt: "2026-07-04T09:00:00.000Z",
+        },
+      });
+    }
+
+    expect(feedState.events).toHaveLength(200);
+    expect(feedState.events[0]?.summary).toBe("交易 tx-200: 200.123 Wh");
+    expect(feedState.events.at(-1)?.summary).toBe("交易 tx-1: 1.123 Wh");
+  });
+
   test("initializes state from a runtime snapshot", () => {
     const state = reduceChargingPointRuntimeEventState(
       createChargingPointRuntimeEventState(),

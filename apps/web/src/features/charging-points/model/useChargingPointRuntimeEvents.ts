@@ -3,8 +3,11 @@ import { useEffect, useState } from "react";
 
 import { subscribeChargingPointEvents } from "@/features/charging-points/api/chargingPoints";
 import {
+  createChargingPointRuntimeEventFeedState,
   createChargingPointRuntimeEventState,
+  reduceChargingPointRuntimeEventFeedState,
   reduceChargingPointRuntimeEventState,
+  type ChargingPointRuntimeEventFeedState,
   type ChargingPointRuntimeEventState,
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
 
@@ -13,16 +16,27 @@ export interface UseChargingPointRuntimeEventsOptions {
   onRuntimeStatus?(runtimeStatus: RuntimeOperationResponse): void;
 }
 
+export interface UseChargingPointRuntimeEventsResult {
+  runtimeEventState: ChargingPointRuntimeEventState;
+  eventFeedState: ChargingPointRuntimeEventFeedState;
+}
+
 export function useChargingPointRuntimeEvents(
   chargingPointId: string,
   options: UseChargingPointRuntimeEventsOptions = {},
-): ChargingPointRuntimeEventState {
+): UseChargingPointRuntimeEventsResult {
   const enabled = options.enabled ?? true;
   const onRuntimeStatus = options.onRuntimeStatus;
-  const [state, setState] = useState(createChargingPointRuntimeEventState);
+  const [runtimeEventState, setRuntimeEventState] = useState(
+    createChargingPointRuntimeEventState,
+  );
+  const [eventFeedState, setEventFeedState] = useState(
+    createChargingPointRuntimeEventFeedState,
+  );
 
   useEffect(() => {
-    setState(createChargingPointRuntimeEventState());
+    setRuntimeEventState(createChargingPointRuntimeEventState());
+    setEventFeedState(createChargingPointRuntimeEventFeedState());
     if (!enabled) {
       return undefined;
     }
@@ -40,12 +54,18 @@ export function useChargingPointRuntimeEvents(
           });
         }
 
-        setState((currentState) =>
+        setRuntimeEventState((currentState) =>
           reduceChargingPointRuntimeEventState(currentState, message)
+        );
+        setEventFeedState((currentState) =>
+          reduceChargingPointRuntimeEventFeedState(currentState, message)
         );
       },
     });
   }, [chargingPointId, enabled, onRuntimeStatus]);
 
-  return state;
+  return {
+    runtimeEventState,
+    eventFeedState,
+  };
 }

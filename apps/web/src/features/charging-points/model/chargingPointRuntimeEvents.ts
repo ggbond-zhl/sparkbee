@@ -221,6 +221,30 @@ export interface ChargingPointRuntimeEventState {
   recentIssue: ChargingPointRuntimeIssue | null;
 }
 
+export interface RuntimeEventLogEntry {
+  id: string;
+  occurredAt: string;
+  eventType: Exclude<ChargingPointEventStreamMessage["event"], "snapshot" | "protocol.message">;
+  resource: string;
+  summary: string;
+  detail: unknown;
+}
+
+export interface ProtocolMessageLogEntry {
+  id: string;
+  occurredAt: string;
+  direction: "sent" | "received";
+  action: string;
+  messageId: string;
+  summary: string;
+  detail: unknown;
+}
+
+export interface ChargingPointRuntimeEventFeedState {
+  events: RuntimeEventLogEntry[];
+  protocolMessages: ProtocolMessageLogEntry[];
+}
+
 export function createChargingPointRuntimeEventState(): ChargingPointRuntimeEventState {
   return {
     sessionStatus: null,
@@ -230,6 +254,13 @@ export function createChargingPointRuntimeEventState(): ChargingPointRuntimeEven
     transactionStatuses: {},
     lastHeartbeatAt: null,
     recentIssue: null,
+  };
+}
+
+export function createChargingPointRuntimeEventFeedState(): ChargingPointRuntimeEventFeedState {
+  return {
+    events: [],
+    protocolMessages: [],
   };
 }
 
@@ -259,6 +290,30 @@ export function reduceChargingPointRuntimeEventState(
     case "protocol.message":
       return reduceProtocolMessageEvent(state, message.data);
   }
+}
+
+export function reduceChargingPointRuntimeEventFeedState(
+  state: ChargingPointRuntimeEventFeedState,
+  message: ChargingPointEventStreamMessage,
+): ChargingPointRuntimeEventFeedState {
+  if (message.event === "snapshot") {
+    return state;
+  }
+
+  if (message.event === "protocol.message") {
+    return {
+      ...state,
+      protocolMessages: prependAndLimit(
+        state.protocolMessages,
+        toProtocolMessageLogEntry(message.data),
+      ),
+    };
+  }
+
+  return {
+    ...state,
+    events: prependAndLimit(state.events, toRuntimeEventLogEntry(message)),
+  };
 }
 
 function createChargingPointRuntimeEventStateFromSnapshot(
@@ -595,6 +650,216 @@ function formatSessionStatus(status: ChargingPointSessionStatus) {
   }
 
   return "会话离线";
+}
+
+function toRuntimeEventLogEntry(
+  message: Exclude<
+    ChargingPointEventStreamMessage,
+    { event: "snapshot" } | { event: "protocol.message" }
+  >,
+): RuntimeEventLogEntry {
+  return {
+    id: createLogEntryId(message.event, message.data),
+    occurredAt: message.data.occurredAt,
+    eventType: message.event,
+    resource: formatResource(message.data.resource),
+    summary: formatRuntimeEventSummary(message),
+    detail: message.data,
+  };
+}
+
+function toProtocolMessageLogEntry(event: ProtocolMessageEvent): ProtocolMessageLogEntry {
+  const action = event.action ?? "--";
+  const messageId = event.messageId ?? "--";
+
+  return {
+    id: createLogEntryId("protocol.message", event),
+    occurredAt: event.occurredAt,
+    direction: event.direction,
+    action,
+    messageId,
+    summary: `${event.direction === "received" ? "收到" : "发送"} ${action}`,
+    detail: event.body ?? event,
+  };
+}
+
+function formatRuntimeEventSummary(
+  message: Exclude<
+    ChargingPointEventStreamMessage,
+    { event: "snapshot" } | { event: "protocol.message" }
+  >,
+) {
+  switch (message.event) {
+    case "chargingPoint.lifecycle":
+      return `运行状态: ${formatActorStatus(message.data.currentStatus)}`;
+    case "session.status":
+      return formatSessionStatus(message.data.currentStatus);
+    case "chargingPoint.status":
+      return `桩状态: ${formatAvailabilityStatus(message.data.currentStatus)}`;
+    case "evse.status":
+      return `EVSE ${message.data.resource.evseId}: ${
+        formatEVSEStatus(message.data.currentStatus)
+      }`;
+    case "connector.status":
+      return `枪口 ${
+        connectorKey(message.data.resource.evseId, message.data.resource.connectorId)
+      }: ${
+        formatConnectorStatus(message.data.currentStatus)
+      }`;
+    case "authorization.status":
+      return `idTag ${message.data.resource.idTag}: ${
+        formatAuthorizationStatus(message.data.status)
+      }`;
+    case "transaction.status":
+      return `交易 ${message.data.resource.transactionId ?? "--"}: ${
+        formatTransactionStatus(message.data.currentStatus)
+      }`;
+    case "transaction.meterValue":
+      return `交易 ${message.data.resource.transactionId}: ${
+        message.data.meterWh.toFixed(3)
+      } Wh`;
+  }
+}
+
+function formatResource(resource: ChargingPointActorEvent["resource"]) {
+  if (resource.scope === "chargingPoint") {
+    return "整桩";
+  }
+
+  if (resource.scope === "session") {
+    return "会话";
+  }
+
+  if (resource.scope === "evse") {
+    return `EVSE ${resource.evseId}`;
+  }
+
+  if (resource.scope === "connector") {
+    return `枪口 ${connectorKey(resource.evseId, resource.connectorId)}`;
+  }
+
+  if (resource.scope === "authorization") {
+    return resource.connectorId === undefined || resource.evseId === undefined
+      ? `鉴权 ${resource.idTag}`
+      : `枪口 ${connectorKey(resource.evseId, resource.connectorId)}`;
+  }
+
+  if (resource.scope === "transaction") {
+    return resource.transactionId === undefined
+      ? `枪口 ${connectorKey(resource.evseId, resource.connectorId)}`
+      : `交易 ${resource.transactionId}`;
+  }
+
+  return "协议";
+}
+
+function formatActorStatus(status: ChargingPointActorStatus) {
+  if (status === "starting") {
+    return "启动中";
+  }
+
+  if (status === "running") {
+    return "运行中";
+  }
+
+  return "已停止";
+}
+
+function formatAvailabilityStatus(status: ChargingPointAvailabilityStatus) {
+  if (status === "available") {
+    return "可用";
+  }
+
+  if (status === "unavailable") {
+    return "不可用";
+  }
+
+  return "故障";
+}
+
+function formatEVSEStatus(status: EVSERuntimeStatus) {
+  if (status === "reserved") {
+    return "已预约";
+  }
+
+  return formatConnectorStatus(status);
+}
+
+function formatConnectorStatus(status: ConnectorRuntimeStatus | Exclude<EVSERuntimeStatus, "reserved">) {
+  if (status === "available") {
+    return "可用";
+  }
+
+  if (status === "occupied") {
+    return "占用";
+  }
+
+  if (status === "unavailable") {
+    return "不可用";
+  }
+
+  return "故障";
+}
+
+function formatAuthorizationStatus(status: AuthorizationRuntimeStatus) {
+  if (status === "accepted") {
+    return "已接受";
+  }
+
+  if (status === "blocked") {
+    return "已阻止";
+  }
+
+  if (status === "expired") {
+    return "已过期";
+  }
+
+  if (status === "invalid") {
+    return "无效";
+  }
+
+  return "并发交易冲突";
+}
+
+function formatTransactionStatus(status: TransactionRuntimeStatus) {
+  if (status === "starting") {
+    return "启动中";
+  }
+
+  if (status === "active") {
+    return "进行中";
+  }
+
+  if (status === "suspended") {
+    return "已挂起";
+  }
+
+  if (status === "ending") {
+    return "停止中";
+  }
+
+  if (status === "ended") {
+    return "已结束";
+  }
+
+  if (status === "rejected") {
+    return "已拒绝";
+  }
+
+  return "失败";
+}
+
+function prependAndLimit<TItem>(items: TItem[], item: TItem) {
+  return [item, ...items].slice(0, 200);
+}
+
+function createLogEntryId(
+  eventType: ChargingPointEventStreamMessage["event"],
+  event: { occurredAt?: string; messageId?: string },
+) {
+  return `${eventType}:${event.occurredAt ?? ""}:${event.messageId ?? ""}:${
+    JSON.stringify(event).length
+  }`;
 }
 
 function connectorKey(evseId: number, connectorId: number) {

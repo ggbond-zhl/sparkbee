@@ -44,6 +44,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -66,6 +72,10 @@ import {
   type ChargingPointDetailHeaderModel,
   type RuntimeStatusQueryState,
 } from "@/features/charging-points/model/chargingPointDetailHeader";
+import type {
+  ProtocolMessageLogEntry,
+  RuntimeEventLogEntry,
+} from "@/features/charging-points/model/chargingPointRuntimeEvents";
 import {
   chargingPointDetailQueryOptions,
   chargingPointRuntimeStatusQueryKey,
@@ -94,7 +104,7 @@ export function ChargingPointDetailPage() {
           },
     );
   }, [chargingPointId, queryClient]);
-  const runtimeEventState = useChargingPointRuntimeEvents(chargingPointId, {
+  const { eventFeedState, runtimeEventState } = useChargingPointRuntimeEvents(chargingPointId, {
     enabled: detailQuery.isSuccess,
     onRuntimeStatus: syncRuntimeStatus,
   });
@@ -269,7 +279,7 @@ export function ChargingPointDetailPage() {
           )}
         </CardContent>
       </Card>
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <section className="grid gap-3">
         {connectorCardModels.map((model) => (
           <ConnectorRuntimeCard
             key={model.connectorId}
@@ -290,6 +300,10 @@ export function ChargingPointDetailPage() {
           />
         ))}
       </section>
+      <RuntimeObservationTabs
+        events={eventFeedState.events}
+        protocolMessages={eventFeedState.protocolMessages}
+      />
     </section>
   );
 }
@@ -414,7 +428,7 @@ function ConnectorRuntimeCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {model.fields.map((field) => (
             <ConnectorField key={field.label} field={field} />
           ))}
@@ -471,6 +485,130 @@ function ConnectorField({
       </dd>
     </dl>
   );
+}
+
+function RuntimeObservationTabs({
+  events,
+  protocolMessages,
+}: {
+  events: RuntimeEventLogEntry[];
+  protocolMessages: ProtocolMessageLogEntry[];
+}) {
+  return (
+    <section className="rounded-lg border border-border/60 bg-card p-3">
+      <Tabs defaultValue="events">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="events">事件 {events.length}</TabsTrigger>
+            <TabsTrigger value="messages">报文 {protocolMessages.length}</TabsTrigger>
+          </TabsList>
+          <span className="text-xs text-muted-foreground">
+            当前页面打开后收到的最近 200 条
+          </span>
+        </div>
+        <TabsContent className="mt-3" value="events">
+          <RuntimeEventLogList entries={events} />
+        </TabsContent>
+        <TabsContent className="mt-3" value="messages">
+          <ProtocolMessageLogList entries={protocolMessages} />
+        </TabsContent>
+      </Tabs>
+    </section>
+  );
+}
+
+function RuntimeEventLogList({ entries }: { entries: RuntimeEventLogEntry[] }) {
+  if (entries.length === 0) {
+    return <RuntimeLogEmptyState text="暂无事件" />;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border/40">
+      {entries.map((entry) => (
+        <details
+          key={entry.id}
+          className="group border-b border-border/40 last:border-b-0"
+        >
+          <summary className="grid cursor-pointer grid-cols-[5.5rem_minmax(8rem,0.9fr)_minmax(6rem,0.7fr)_minmax(0,1.6fr)] gap-3 px-3 py-2 text-sm hover:bg-muted/40">
+            <span className="text-xs text-muted-foreground">
+              {formatLogTime(entry.occurredAt)}
+            </span>
+            <span className="truncate font-mono text-xs text-muted-foreground">
+              {entry.eventType}
+            </span>
+            <span className="truncate text-muted-foreground">{entry.resource}</span>
+            <span className="truncate font-medium">{entry.summary}</span>
+          </summary>
+          <RuntimeLogJsonBlock value={entry.detail} />
+        </details>
+      ))}
+    </div>
+  );
+}
+
+function ProtocolMessageLogList({
+  entries,
+}: {
+  entries: ProtocolMessageLogEntry[];
+}) {
+  if (entries.length === 0) {
+    return <RuntimeLogEmptyState text="暂无报文" />;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border/40">
+      {entries.map((entry) => (
+        <details
+          key={entry.id}
+          className="group border-b border-border/40 last:border-b-0"
+        >
+          <summary className="grid cursor-pointer grid-cols-[5.5rem_4rem_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(0,1.2fr)] gap-3 px-3 py-2 text-sm hover:bg-muted/40">
+            <span className="text-xs text-muted-foreground">
+              {formatLogTime(entry.occurredAt)}
+            </span>
+            <Badge
+              className={cn(
+                "w-fit",
+                entry.direction === "received" &&
+                  "border-sky-600/20 bg-sky-600 text-white dark:bg-sky-500 dark:text-sky-950",
+              )}
+              variant={entry.direction === "received" ? "default" : "outline"}
+            >
+              {entry.direction === "received" ? "收到" : "发送"}
+            </Badge>
+            <span className="truncate font-medium">{entry.action}</span>
+            <span className="truncate font-mono text-xs text-muted-foreground">
+              {entry.messageId}
+            </span>
+            <span className="truncate text-muted-foreground">{entry.summary}</span>
+          </summary>
+          <RuntimeLogJsonBlock value={entry.detail} />
+        </details>
+      ))}
+    </div>
+  );
+}
+
+function RuntimeLogJsonBlock({ value }: { value: unknown }) {
+  return (
+    <pre className="max-h-80 overflow-auto border-t border-border/40 bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+      {JSON.stringify(value, null, 2)}
+    </pre>
+  );
+}
+
+function RuntimeLogEmptyState({ text }: { text: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border/60 px-3 py-8 text-center text-sm text-muted-foreground">
+      {text}
+    </div>
+  );
+}
+
+function formatLogTime(occurredAt: string) {
+  return new Date(occurredAt).toLocaleTimeString("zh-CN", {
+    hour12: false,
+  });
 }
 
 function ConnectorActionButton({
