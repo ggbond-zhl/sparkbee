@@ -7,6 +7,7 @@ import {
   createChargingPointRuntimeEventState,
   reduceChargingPointRuntimeEventFeedState,
   reduceChargingPointRuntimeEventState,
+  type ChargingPointEventStreamMessage,
   type ChargingPointRuntimeEventFeedState,
   type ChargingPointRuntimeEventState,
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
@@ -43,15 +44,9 @@ export function useChargingPointRuntimeEvents(
 
     return subscribeChargingPointEvents(chargingPointId, {
       onEvent: (message) => {
-        if (message.event === "snapshot") {
-          onRuntimeStatus?.(message.data.runtimeStatus);
-        }
-
-        if (message.event === "chargingPoint.lifecycle") {
-          onRuntimeStatus?.({
-            chargingPointId: message.data.chargingPointId,
-            status: message.data.currentStatus,
-          });
+        const runtimeStatus = toRuntimeStatusFromStreamMessage(message);
+        if (runtimeStatus !== null) {
+          onRuntimeStatus?.(runtimeStatus);
         }
 
         setRuntimeEventState((currentState) =>
@@ -67,5 +62,41 @@ export function useChargingPointRuntimeEvents(
   return {
     runtimeEventState,
     eventFeedState,
+  };
+}
+
+export function toRuntimeStatusFromStreamMessage(
+  message: ChargingPointEventStreamMessage,
+): RuntimeOperationResponse | null {
+  if (message.event === "snapshot") {
+    return message.data.runtimeStatus;
+  }
+
+  if (message.event !== "chargingPoint.lifecycle") {
+    return null;
+  }
+
+  if (message.data.currentStatus === "running") {
+    return {
+      chargingPointId: message.data.chargingPointId,
+      status: "running",
+      bootStatus: "Accepted",
+      retryAfterSec: undefined,
+    };
+  }
+
+  if (message.data.currentStatus === "starting") {
+    return {
+      chargingPointId: message.data.chargingPointId,
+      status: "starting",
+      bootStatus: "Pending",
+    };
+  }
+
+  return {
+    chargingPointId: message.data.chargingPointId,
+    status: "stopped",
+    bootStatus: undefined,
+    retryAfterSec: undefined,
   };
 }

@@ -297,6 +297,22 @@ export class RuntimeOperationService {
     chargingPointId: string,
     actor: ChargingPointActor | undefined,
   ): RuntimeOperationResponse {
+    if (actor?.status === "running") {
+      return {
+        chargingPointId,
+        status: actor.status,
+        bootStatus: "Accepted",
+      };
+    }
+
+    if (actor?.status === "starting") {
+      return {
+        chargingPointId,
+        status: actor.status,
+        bootStatus: "Pending",
+      };
+    }
+
     return {
       chargingPointId,
       status: actor?.status ?? "stopped",

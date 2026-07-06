@@ -102,12 +102,7 @@ export function ChargingPointDetailPage() {
   const syncRuntimeStatus = useCallback((runtimeStatus: RuntimeOperationResponse) => {
     queryClient.setQueryData<RuntimeOperationResponse>(
       chargingPointRuntimeStatusQueryKey(chargingPointId),
-      (previous) => previous === undefined
-        ? runtimeStatus
-        : {
-            ...previous,
-            ...runtimeStatus,
-          },
+      runtimeStatus,
     );
   }, [chargingPointId, queryClient]);
   const { eventFeedState, runtimeEventState } = useChargingPointRuntimeEvents(chargingPointId, {

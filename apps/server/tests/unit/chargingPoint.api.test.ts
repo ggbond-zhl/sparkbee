@@ -533,6 +533,49 @@ describe("chargingPoint management API", () => {
     });
   });
 
+  test("keeps accepted Boot status when querying a running chargingPoint", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble();
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "Type2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/status`);
+
+    expect(response.status).toBe(200);
+    expect(runtimeOperationResponseSchema.parse(await response.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      status: "running",
+      bootStatus: "Accepted",
+    });
+  });
+
   test("returns an empty runtime snapshot when the chargingPoint is stopped", async () => {
     const database = await createTestDatabase();
     const app = createApp({ database });
@@ -1055,6 +1098,7 @@ describe("chargingPoint management API", () => {
     expect(runtimeOperationResponseSchema.parse(await secondResponse.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "running",
+      bootStatus: "Accepted",
     });
     expect(actor.startCalls).toBe(1);
   });
@@ -2119,12 +2163,18 @@ function expectedRuntimeSnapshot(
   chargingPointId: string,
   status: "stopped" | "starting" | "running",
 ) {
+  const runtimeStatus =
+    status === "stopped"
+      ? { chargingPointId, status }
+      : {
+          chargingPointId,
+          status,
+          bootStatus: status === "running" ? "Accepted" : "Pending",
+        };
+
   return {
     chargingPointId,
-    runtimeStatus: {
-      chargingPointId,
-      status,
-    },
+    runtimeStatus,
     sessionStatus: null,
     chargingPointStatus: null,
     evseStatuses: [],

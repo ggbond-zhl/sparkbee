@@ -6,6 +6,7 @@ import {
   reduceChargingPointRuntimeEventFeedState,
   reduceChargingPointRuntimeEventState,
 } from "../../src/features/charging-points/model/chargingPointRuntimeEvents";
+import { toRuntimeStatusFromStreamMessage } from "../../src/features/charging-points/model/useChargingPointRuntimeEvents";
 
 describe("charging point runtime events", () => {
   test("keeps runtime events and protocol messages in separate feeds", () => {
@@ -154,6 +155,27 @@ describe("charging point runtime events", () => {
     expect(state.connectorStatuses["1/1"]?.currentStatus).toBe("occupied");
     expect(state.transactionStatuses["tx-1"]?.meterWh).toBe(1200);
     expect(state.lastHeartbeatAt?.toISOString()).toBe("2026-07-04T09:00:05.000Z");
+  });
+
+  test("maps lifecycle running events to accepted Boot status", () => {
+    const runtimeStatus = toRuntimeStatusFromStreamMessage({
+      event: "chargingPoint.lifecycle",
+      data: {
+        type: "chargingPoint.lifecycle",
+        chargingPointId: "cp-1",
+        occurredAt: "2026-07-04T09:00:10.000Z",
+        resource: { scope: "chargingPoint" },
+        previousStatus: "starting",
+        currentStatus: "running",
+      },
+    });
+
+    expect(runtimeStatus).toEqual({
+      chargingPointId: "cp-1",
+      status: "running",
+      bootStatus: "Accepted",
+      retryAfterSec: undefined,
+    });
   });
 
   test("tracks session, point, connector, transaction and heartbeat states", () => {
