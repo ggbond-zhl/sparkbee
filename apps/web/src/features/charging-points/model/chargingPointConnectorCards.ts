@@ -30,6 +30,7 @@ export interface ConnectorCardAction {
 }
 
 export interface ConnectorCardModel {
+  connector: ConnectorResponse;
   connectorId: string;
   title: string;
   description: string;
@@ -96,6 +97,7 @@ function buildConnectorCardModel({
   const issue = toConnectorIssue(connector, connectorStatus, transaction);
 
   return {
+    connector,
     connectorId: connector.id,
     title: `枪口 ${connector.connectorId}`,
     description: `EVSE ${connector.evseId} · ${connector.type} · ${formatPowerType(connector.powerType)}`,

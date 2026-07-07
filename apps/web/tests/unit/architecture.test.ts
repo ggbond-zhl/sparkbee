@@ -92,6 +92,16 @@ describe("web architecture", () => {
       "ui",
       "ChargingPointConnectorManagementDialog.tsx",
     );
+    const connectorEditDialogPath = join(
+      featureRoot,
+      "ui",
+      "ChargingPointConnectorEditDialog.tsx",
+    );
+    const connectorFormFieldsPath = join(
+      featureRoot,
+      "ui",
+      "ChargingPointConnectorFormFields.tsx",
+    );
     const formFieldsPath = join(featureRoot, "ui", "ChargingPointFormFields.tsx");
     const apiPath = join(featureRoot, "api", "chargingPoints.ts");
     const queryPath = join(featureRoot, "model", "chargingPointQueries.ts");
@@ -118,6 +128,12 @@ describe("web architecture", () => {
     const createDialogSource = readFileSync(createDialogPath, "utf8");
     const editDialogSource = readFileSync(editDialogPath, "utf8");
     const connectorDialogSource = readFileSync(connectorDialogPath, "utf8");
+    const connectorEditDialogSource = existsSync(connectorEditDialogPath)
+      ? readFileSync(connectorEditDialogPath, "utf8")
+      : "";
+    const connectorFormFieldsSource = existsSync(connectorFormFieldsPath)
+      ? readFileSync(connectorFormFieldsPath, "utf8")
+      : "";
     const formFieldsSource = readFileSync(formFieldsPath, "utf8");
     const apiSource = readFileSync(apiPath, "utf8");
     const querySource = readFileSync(queryPath, "utf8");
@@ -140,6 +156,8 @@ describe("web architecture", () => {
     expect(existsSync(createDialogPath)).toBe(true);
     expect(existsSync(editDialogPath)).toBe(true);
     expect(existsSync(connectorDialogPath)).toBe(true);
+    expect(existsSync(connectorEditDialogPath)).toBe(true);
+    expect(existsSync(connectorFormFieldsPath)).toBe(true);
     expect(existsSync(formFieldsPath)).toBe(true);
     expect(existsSync(apiPath)).toBe(true);
     expect(existsSync(queryPath)).toBe(true);
@@ -218,6 +236,7 @@ describe("web architecture", () => {
     expect(connectorDialogSource).toContain("SaveIcon");
     expect(connectorDialogSource).toContain("Trash2Icon");
     expect(connectorDialogSource).toContain("ConnectorTabForm");
+    expect(connectorDialogSource).toContain("ChargingPointConnectorFormFields");
     expect(connectorDialogSource).toContain("createConnector");
     expect(connectorDialogSource).toContain("updateConnector");
     expect(connectorDialogSource).toContain("deleteConnector");
@@ -226,6 +245,16 @@ describe("web architecture", () => {
     expect(connectorDialogSource).toContain("确认删除枪口");
     expect(connectorDialogSource).toContain("setQueryData");
     expect(connectorDialogSource).not.toContain("Table");
+    expect(connectorEditDialogSource).toContain("编辑枪口");
+    expect(connectorEditDialogSource).toContain("connectorToFormValues");
+    expect(connectorEditDialogSource).toContain("ChargingPointConnectorFormFields");
+    expect(connectorEditDialogSource).toContain("updateConnector");
+    expect(connectorEditDialogSource).toContain("onSaved");
+    expect(connectorEditDialogSource).not.toContain("deleteConnector");
+    expect(connectorEditDialogSource).not.toContain("Trash2Icon");
+    expect(connectorEditDialogSource).not.toContain("AlertDialog");
+    expect(connectorFormFieldsSource).toContain("FieldGroup");
+    expect(connectorFormFieldsSource).toContain("data-dialog-select-content");
     expect(detailPageSource).toContain("useQuery");
     expect(detailPageSource).toContain("useMutation");
     expect(detailPageSource).toContain("buildChargingPointDetailHeaderModel");
@@ -239,6 +268,12 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("startConnectorTransaction");
     expect(detailPageSource).toContain("stopConnectorTransaction");
     expect(detailPageSource).toContain("ChargingPointEditDialog");
+    expect(detailPageSource).toContain("ChargingPointConnectorEditDialog");
+    expect(detailPageSource).toContain("connectorEditTarget");
+    expect(detailPageSource).toContain("onEdit={() => setConnectorEditTarget(model.connector)}");
+    expect(detailPageSource).toContain("setQueryData<ChargingPointDetailResponse>");
+    expect(detailPageSource).toContain("connectors: current.connectors.map");
+    expect(detailPageSource).toContain("请先停止桩实例再编辑枪口配置。");
     expect(detailPageSource).toContain("运行诊断");
     expect(detailPageSource).not.toContain("<StatusBadge item={headerModel.sessionStatus}");
     expect(detailPageSource).not.toContain("最终连接");
@@ -337,11 +372,11 @@ describe("web architecture", () => {
       "ui",
       "ChargingPointFormFields.tsx",
     );
-    const connectorDialogSource = readSource(
+    const connectorFormFieldsSource = readSource(
       "features",
       "charging-points",
       "ui",
-      "ChargingPointConnectorManagementDialog.tsx",
+      "ChargingPointConnectorFormFields.tsx",
     );
 
     expect(dialogSource).toContain("isClickInsideSelectContent");
@@ -356,9 +391,9 @@ describe("web architecture", () => {
     expect(formFieldsSource).toContain("data-dialog-select-content");
     expect(formFieldsSource).toContain('position="popper"');
     expect(formFieldsSource).toContain('className="z-[100]"');
-    expect(connectorDialogSource).toContain("data-dialog-select-content");
-    expect(connectorDialogSource).toContain('position="popper"');
-    expect(connectorDialogSource).toContain('className="z-[100]"');
+    expect(connectorFormFieldsSource).toContain("data-dialog-select-content");
+    expect(connectorFormFieldsSource).toContain('position="popper"');
+    expect(connectorFormFieldsSource).toContain('className="z-[100]"');
   });
 
   test("router uses code-defined routes and shared ui stays outside features", () => {

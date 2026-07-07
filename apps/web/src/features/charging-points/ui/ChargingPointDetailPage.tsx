@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import type { RuntimeOperationResponse } from "@spark-bee/contracts";
+import type {
+  ChargingPointDetailResponse,
+  ConnectorResponse,
+  RuntimeOperationResponse,
+} from "@spark-bee/contracts";
 import {
   PencilIcon,
   PlayIcon,
@@ -84,6 +88,7 @@ import {
   chargingPointRuntimeStatusQueryOptions,
 } from "@/features/charging-points/model/chargingPointQueries";
 import { useChargingPointRuntimeEvents } from "@/features/charging-points/model/useChargingPointRuntimeEvents";
+import { ChargingPointConnectorEditDialog } from "@/features/charging-points/ui/ChargingPointConnectorEditDialog";
 import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingPointEditDialog";
 import { cn } from "@/lib/utils";
 
@@ -92,6 +97,8 @@ export function ChargingPointDetailPage() {
     from: "/charging-points/$chargingPointId",
   });
   const [editOpen, setEditOpen] = useState(false);
+  const [connectorEditTarget, setConnectorEditTarget] =
+    useState<ConnectorResponse | null>(null);
   const queryClient = useQueryClient();
   const detailQuery = useQuery(chargingPointDetailQueryOptions(chargingPointId));
   const detailQueryKey = chargingPointDetailQueryKey(chargingPointId);
@@ -215,6 +222,11 @@ export function ChargingPointDetailPage() {
       ? "桩实例未停止时仅可修改名称和说明；连接配置需停止后修改。"
       : "运行状态未确认，仅可修改名称和说明；连接配置需停止后修改。"
     : undefined;
+  const connectorEditLockedReason = configurationLocked
+    ? runtimeStatusQueryState === "success"
+      ? "请先停止桩实例再编辑枪口配置。"
+      : "运行状态未确认，暂不可编辑枪口配置。"
+    : undefined;
 
   return (
     <section className="flex flex-col gap-4">
@@ -289,8 +301,11 @@ export function ChargingPointDetailPage() {
         {connectorCardModels.map((model) => (
           <ConnectorRuntimeCard
             key={model.connectorId}
+            configurationLocked={configurationLocked}
+            configurationLockedReason={connectorEditLockedReason}
             disabled={connectorMutationPending}
             model={model}
+            onEdit={() => setConnectorEditTarget(model.connector)}
             onPlug={() => plugMutation.mutate(model.connectorId)}
             onStartCharging={(idTag) =>
               startTransactionMutation.mutate({
@@ -321,6 +336,38 @@ export function ChargingPointDetailPage() {
           await queryClient.invalidateQueries({ queryKey: detailQueryKey });
         }}
       />
+      {connectorEditTarget && (
+        <ChargingPointConnectorEditDialog
+          chargingPointId={chargingPointId}
+          configurationLocked={configurationLocked}
+          configurationLockedReason={connectorEditLockedReason}
+          connector={connectorEditTarget}
+          open={connectorEditTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setConnectorEditTarget(null);
+            }
+          }}
+          onSaved={async (savedConnector) => {
+            queryClient.setQueryData<ChargingPointDetailResponse>(
+              detailQueryKey,
+              (current) => {
+                if (current === undefined) {
+                  return current;
+                }
+
+                return {
+                  ...current,
+                  connectors: current.connectors.map((connector) =>
+                    connector.id === savedConnector.id ? savedConnector : connector,
+                  ),
+                };
+              },
+            );
+            await queryClient.invalidateQueries({ queryKey: detailQueryKey });
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -412,15 +459,21 @@ function StatusMetric({
 }
 
 function ConnectorRuntimeCard({
+  configurationLocked,
+  configurationLockedReason,
   disabled,
   model,
+  onEdit,
   onPlug,
   onStartCharging,
   onStopCharging,
   onUnplug,
 }: {
+  configurationLocked: boolean;
+  configurationLockedReason?: string;
   disabled: boolean;
   model: ConnectorCardModel;
+  onEdit(): void;
   onPlug(): void;
   onStartCharging(idTag: string): void;
   onStopCharging(transactionId: string): void;
@@ -429,19 +482,27 @@ function ConnectorRuntimeCard({
   return (
     <Card className="min-w-0">
       <CardHeader className="gap-1.5">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <CardTitle className="truncate text-base">{model.title}</CardTitle>
-            <Badge
-              className={toBadgeToneClassName(model.statusBadge.tone)}
-              variant={toBadgeVariant(model.statusBadge.tone)}
-            >
-              {model.statusBadge.label}
-            </Badge>
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <CardTitle className="truncate text-base">{model.title}</CardTitle>
+              <Badge
+                className={toBadgeToneClassName(model.statusBadge.tone)}
+                variant={toBadgeVariant(model.statusBadge.tone)}
+              >
+                {model.statusBadge.label}
+              </Badge>
+            </div>
+            <CardDescription className="mt-1 truncate">
+              {model.description}
+            </CardDescription>
           </div>
-          <CardDescription className="mt-1 truncate">
-            {model.description}
-          </CardDescription>
+          <ConnectorEditButton
+            configurationLocked={configurationLocked}
+            configurationLockedReason={configurationLockedReason}
+            label={`编辑${model.title}`}
+            onEdit={onEdit}
+          />
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -531,6 +592,40 @@ function RuntimeObservationTabs({
         </TabsContent>
       </Tabs>
     </section>
+  );
+}
+
+function ConnectorEditButton({
+  configurationLocked,
+  configurationLockedReason,
+  label,
+  onEdit,
+}: {
+  configurationLocked: boolean;
+  configurationLockedReason?: string;
+  label: string;
+  onEdit(): void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <Button
+            aria-label={label}
+            disabled={configurationLocked}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+            onClick={onEdit}
+          >
+            <PencilIcon />
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {configurationLockedReason ?? "编辑枪口"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

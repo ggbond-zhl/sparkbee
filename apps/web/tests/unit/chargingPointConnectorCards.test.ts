@@ -69,6 +69,7 @@ describe("charging point connector cards", () => {
     });
 
     expect(model?.statusBadge.label).toBe("可用");
+    expect(model?.connector).toBe(connector);
     expect(model?.fields).toEqual([
       { label: "枪口状态", value: "可用", tone: "success" },
       { label: "插枪状态", value: "未插枪", tone: "success" },
