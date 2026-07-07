@@ -30,6 +30,7 @@ export interface HeaderMetricItem {
 
 export interface ChargingPointDetailHeaderModel {
   connectorCountLabel: string;
+  finalConnectionUrl: string | null;
   runtimeDiagnostics: HeaderMetricItem[];
   mainStatus: HeaderStatusItem;
   sessionStatus: HeaderStatusItem;
@@ -64,6 +65,7 @@ export function buildChargingPointDetailHeaderModel({
     runtimeEventState?.lastHeartbeatAt ?? lastHeartbeatAt;
   const base = {
     connectorCountLabel,
+    finalConnectionUrl: toFinalConnectionUrl(runtimeEventState),
     runtimeDiagnostics: toRuntimeDiagnostics(
       runtimeStatus,
       statusQueryState,
@@ -265,13 +267,12 @@ function toRuntimeDiagnostics(
   statusQueryState: RuntimeStatusQueryState,
   runtimeEventState: ChargingPointRuntimeEventState | undefined,
 ): HeaderMetricItem[] {
-  const sessionStatus = runtimeEventState?.sessionStatus;
   const sessionDiagnostic = toSessionDiagnostic(
     runtimeStatus,
     statusQueryState,
     runtimeEventState,
   );
-  const chargingPointStatus = runtimeEventState?.chargingPointStatus;
+  const recentIssue = toRecentIssue(runtimeEventState);
 
   const diagnostics: HeaderMetricItem[] = [
     {
@@ -285,35 +286,21 @@ function toRuntimeDiagnostics(
       tone: sessionDiagnostic.tone,
     },
     {
-      label: "运行连接",
-      value: sessionStatus?.connectionUrl ?? "--",
-      monospace: sessionStatus?.connectionUrl !== undefined,
-    },
-    {
-      label: "重连次数",
-      value: formatReconnectAttempt(sessionStatus),
-      tone: sessionStatus?.currentStatus === "reconnecting" ? "warning" : undefined,
-    },
-    {
-      label: "离线原因",
-      value: formatSessionOfflineDiagnostic(sessionStatus),
-      tone: sessionStatus?.reason === "reconnect_exhausted"
-        ? "destructive"
-        : sessionStatus?.reason === "unexpected_disconnect"
-          ? "warning"
-          : undefined,
-    },
-    {
-      label: "桩状态更新时间",
-      value: chargingPointStatus === undefined || chargingPointStatus === null
-        ? "--"
-        : formatDateTime(chargingPointStatus.occurredAt),
+      label: "最近异常",
+      value: recentIssue?.label ?? "无",
+      tone: recentIssue?.tone,
     },
   ];
+  return diagnostics;
+}
 
-  return diagnostics.filter((item) =>
-    item.label !== "运行连接" || sessionStatus?.connectionUrl !== undefined
-  );
+function toFinalConnectionUrl(
+  runtimeEventState: ChargingPointRuntimeEventState | undefined,
+) {
+  const connectionUrl = runtimeEventState?.sessionStatus?.connectionUrl;
+  return connectionUrl === undefined || connectionUrl.length === 0
+    ? null
+    : connectionUrl;
 }
 
 function toSessionDiagnostic(
@@ -331,7 +318,10 @@ function toSessionDiagnostic(
   const item = toSessionStatusItem(runtimeStatus, runtimeEventState);
 
   return {
-    value: item.label,
+    value: formatSessionDiagnosticValue(
+      item.label,
+      runtimeEventState?.sessionStatus,
+    ),
     tone: item.tone,
   };
 }
@@ -390,32 +380,32 @@ function toBootDiagnosticTone(
   return "neutral";
 }
 
-function formatReconnectAttempt(
+function formatSessionDiagnosticValue(
+  label: string,
   sessionStatus: ChargingPointRuntimeEventState["sessionStatus"] | undefined,
 ) {
-  if (sessionStatus === undefined || sessionStatus === null) {
-    return "--";
-  }
-
-  if (sessionStatus.currentStatus !== "reconnecting") {
-    return "无";
-  }
-
-  return sessionStatus.attempt === undefined ? "重连中" : `第 ${sessionStatus.attempt} 次`;
+  const detail = formatSessionDiagnosticDetail(sessionStatus);
+  return detail === undefined ? label : `${label} · ${detail}`;
 }
 
-function formatSessionOfflineDiagnostic(
+function formatSessionDiagnosticDetail(
   sessionStatus: ChargingPointRuntimeEventState["sessionStatus"] | undefined,
 ) {
   if (sessionStatus === undefined || sessionStatus === null) {
-    return "--";
+    return undefined;
   }
 
-  if (sessionStatus.currentStatus !== "offline") {
-    return "无";
+  if (sessionStatus.currentStatus === "reconnecting") {
+    return sessionStatus.attempt === undefined
+      ? undefined
+      : `第 ${sessionStatus.attempt} 次`;
   }
 
-  return formatOfflineReason(sessionStatus.reason) ?? "未说明";
+  if (sessionStatus.currentStatus === "offline") {
+    return formatOfflineReason(sessionStatus.reason) ?? "未说明";
+  }
+
+  return undefined;
 }
 
 function toSessionStatusItem(
@@ -612,21 +602,4 @@ function formatLastHeartbeat(lastHeartbeatAt: Date | null) {
   return `最后心跳 ${lastHeartbeatAt.toLocaleTimeString("zh-CN", {
     hour12: false,
   })}`;
-}
-
-function formatDateTime(value: Date | string) {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "--";
-  }
-
-  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${
-    padDatePart(date.getDate())
-  } ${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${
-    padDatePart(date.getSeconds())
-  }`;
-}
-
-function padDatePart(value: number) {
-  return String(value).padStart(2, "0");
 }

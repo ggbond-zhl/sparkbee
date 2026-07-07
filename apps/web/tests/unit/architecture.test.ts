@@ -240,13 +240,19 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("stopConnectorTransaction");
     expect(detailPageSource).toContain("ChargingPointEditDialog");
     expect(detailPageSource).toContain("运行诊断");
+    expect(detailPageSource).not.toContain("<StatusBadge item={headerModel.sessionStatus}");
+    expect(detailPageSource).not.toContain("最终连接");
+    expect(detailPageSource).toContain("headerModel.finalConnectionUrl");
+    expect(detailPageSource).toContain("col-span-full");
+    expect(detailPageSource).toContain("gap-x-3 gap-y-1");
+    expect(detailPageSource).toContain("md:grid-cols-3");
     expect(detailPageSource).toContain('defaultValue="messages"');
     expect(detailPageSource.indexOf('value="messages"')).toBeLessThan(
       detailPageSource.indexOf('value="events"'),
     );
     expect(detailPageSource).not.toContain("最终连接目标");
     expect(detailPageSource).not.toContain("headerModel.staticDetails");
-    expect(detailPageSource).toContain("最近异常");
+    expect(detailHeaderModelSource).toContain("最近异常");
     expect(detailPageSource).toContain("启动充电");
     expect(detailPageSource).toContain("停止充电");
     expect(detailPageSource).not.toContain("fetch(");

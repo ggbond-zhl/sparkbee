@@ -133,19 +133,75 @@ describe("charging point detail header model", () => {
       runtimeEventState,
     });
 
-    expect(Object.fromEntries(
-      model.runtimeDiagnostics.map((item) => [item.label, item.value]),
-    )).toEqual({
-      Boot: "待接受 · 12 秒后再次上报",
-      会话状态: "会话重连中",
-      运行连接: "ws://localhost:9000/ocpp/CP_001",
-      重连次数: "第 2 次",
-      离线原因: "无",
-      桩状态更新时间: "2026-07-04 17:00:01",
+    const diagnosticsByLabel = Object.fromEntries(
+      model.runtimeDiagnostics.map((item) => [item.label, item]),
+    );
+
+    expect(Object.keys(diagnosticsByLabel)).toEqual([
+      "Boot",
+      "会话状态",
+      "最近异常",
+    ]);
+    expect(diagnosticsByLabel.Boot).toMatchObject({
+      value: "待接受 · 12 秒后再次上报",
     });
+    expect(diagnosticsByLabel.会话状态).toMatchObject({
+      value: "会话重连中 · 第 2 次",
+    });
+    expect(diagnosticsByLabel.最近异常).toMatchObject({
+      value: "无",
+    });
+    expect(model.finalConnectionUrl).toBe("ws://localhost:9000/ocpp/CP_001");
   });
 
-  test("omits the runtime connection before a session is known", () => {
+  test("puts the offline reason in the session diagnostic", () => {
+    const runtimeEventState = reduceChargingPointRuntimeEventState(
+      createChargingPointRuntimeEventState(),
+      {
+        event: "session.status",
+        data: {
+          type: "session.status",
+          chargingPointId: baseDetail.id,
+          occurredAt: "2026-07-04T09:00:00.000Z",
+          resource: { scope: "session" },
+          previousStatus: "reconnecting",
+          currentStatus: "offline",
+          connectionUrl: "ws://localhost:9000/ocpp/CP_001",
+          reason: "unexpected_disconnect",
+        },
+      },
+    );
+
+    const model = buildChargingPointDetailHeaderModel({
+      detail: baseDetail,
+      runtimeStatus: buildRuntimeStatus({
+        status: "running",
+        bootStatus: "Accepted",
+      }),
+      statusQueryState: "success",
+      lastHeartbeatAt: null,
+      runtimeEventState,
+    });
+
+    const sessionDiagnostic = model.runtimeDiagnostics.find(
+      (item) => item.label === "会话状态",
+    );
+
+    expect(sessionDiagnostic).toMatchObject({
+      value: "会话离线 · 底层连接意外断开",
+    });
+    expect(model.runtimeDiagnostics.find(
+      (item) => item.label === "最近异常",
+    )).toMatchObject({
+      value: "会话意外断开",
+      tone: "warning",
+    });
+    expect(model.runtimeDiagnostics.map((item) => item.label)).not.toContain(
+      "离线原因",
+    );
+  });
+
+  test("omits the final connection before a session is known", () => {
     const model = buildChargingPointDetailHeaderModel({
       detail: baseDetail,
       runtimeStatus: buildRuntimeStatus({ status: "stopped" }),
@@ -153,6 +209,7 @@ describe("charging point detail header model", () => {
       lastHeartbeatAt: null,
     });
 
+    expect(model.finalConnectionUrl).toBeNull();
     expect(model.runtimeDiagnostics.map((item) => item.label)).not.toContain(
       "运行连接",
     );

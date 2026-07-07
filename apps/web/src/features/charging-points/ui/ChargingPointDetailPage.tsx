@@ -219,12 +219,11 @@ export function ChargingPointDetailPage() {
   return (
     <section className="flex flex-col gap-4">
       <Card>
-        <CardHeader className="gap-3">
+        <CardHeader className="gap-x-3 gap-y-1">
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle className="text-lg">{detailQuery.data.name}</CardTitle>
               <StatusBadge item={headerModel.mainStatus} />
-              <StatusBadge item={headerModel.sessionStatus} />
               <StatusBadge item={headerModel.chargingPointStatus} />
               <span className="text-xs text-muted-foreground">
                 {headerModel.lastHeartbeatLabel}
@@ -256,16 +255,25 @@ export function ChargingPointDetailPage() {
               {runtimeMutationPending ? "处理中" : headerModel.primaryAction.label}
             </Button>
           </CardAction>
+          {headerModel.finalConnectionUrl && (
+            <div className="col-span-full min-w-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="truncate text-xs text-muted-foreground">
+                    <span className="font-mono">{headerModel.finalConnectionUrl}</span>
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent className="break-all">
+                  {headerModel.finalConnectionUrl}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-2 md:grid-cols-3">
+          <div className="grid gap-2 md:grid-cols-2">
             <StatusMetric label="枪口" value={headerModel.connectorSummary} />
             <StatusMetric label="交易" value={headerModel.transactionSummary} />
-            <StatusMetric
-              label="最近异常"
-              tone={headerModel.recentIssue?.tone}
-              value={headerModel.recentIssue?.label ?? "无"}
-            />
           </div>
 
           <RuntimeDiagnosticsPanel items={headerModel.runtimeDiagnostics} />
@@ -369,7 +377,7 @@ function RuntimeDiagnosticsPanel({ items }: { items: HeaderMetricItem[] }) {
         <h3 className="text-sm font-medium">运行诊断</h3>
         <span className="text-xs text-muted-foreground">通信状态</span>
       </div>
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-2 md:grid-cols-3">
         {items.map((item) => (
           <DetailMetric key={item.label} {...item} />
         ))}
