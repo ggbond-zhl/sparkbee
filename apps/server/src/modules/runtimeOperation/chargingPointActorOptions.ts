@@ -65,6 +65,5 @@ function toConnector(connector: ConnectorResponse) {
     powerType: connector.powerType,
     maxVoltage: connector.maxVoltage ?? undefined,
     maxCurrent: connector.maxCurrent ?? undefined,
-    maxPower: connector.maxPower ?? undefined,
   };
 }

@@ -226,4 +226,40 @@ describe("charging point connector cards", () => {
     });
     expect(model?.actions).toEqual([]);
   });
+
+  test("keeps rejected transaction attempts out of current connector state", () => {
+    let state = reduceConnectorStatus(
+      createChargingPointRuntimeEventState(),
+      "occupied",
+    );
+    state = reduceChargingPointRuntimeEventState(state, {
+      event: "transaction.status",
+      data: {
+        type: "transaction.status",
+        chargingPointId,
+        occurredAt: "2026-07-04T09:00:01.000Z",
+        resource: {
+          scope: "transaction",
+          evseId: 1,
+          connectorId: 1,
+        },
+        previousStatus: null,
+        currentStatus: "rejected",
+        reason: "未找到有效授权",
+      },
+    });
+
+    const [model] = buildConnectorCardModels({
+      connectors: [connector],
+      runtimeStatus: runtimeStatus("running"),
+      runtimeEventState: state,
+    });
+
+    expect(model?.fields[2]).toEqual({
+      label: "交易状态",
+      value: "无交易",
+      tone: "neutral",
+    });
+    expect(model?.issue).toBeNull();
+  });
 });

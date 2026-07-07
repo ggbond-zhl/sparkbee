@@ -6,6 +6,8 @@ import type {
   RuntimeOperationResponse,
 } from "@spark-bee/contracts";
 import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
   PencilIcon,
   PlayIcon,
   PlugZapIcon,
@@ -678,16 +680,7 @@ function ProtocolMessageLogList({
             <span className="text-xs text-muted-foreground">
               {formatLogTime(entry.occurredAt)}
             </span>
-            <Badge
-              className={cn(
-                "w-fit",
-                entry.direction === "received" &&
-                  "border-sky-600/20 bg-sky-600 text-white dark:bg-sky-500 dark:text-sky-950",
-              )}
-              variant={entry.direction === "received" ? "default" : "outline"}
-            >
-              {entry.direction === "received" ? "收到" : "发送"}
-            </Badge>
+            <ProtocolDirectionBadge direction={entry.direction} />
             <span className="truncate font-medium">{entry.action}</span>
             <span className="truncate font-mono text-xs text-muted-foreground">
               {entry.messageId}
@@ -698,6 +691,29 @@ function ProtocolMessageLogList({
         </details>
       ))}
     </div>
+  );
+}
+
+function ProtocolDirectionBadge({
+  direction,
+}: {
+  direction: ProtocolMessageLogEntry["direction"];
+}) {
+  const DirectionIcon = direction === "received" ? ArrowLeftIcon : ArrowRightIcon;
+
+  return (
+    <Badge
+      className={cn(
+        "w-fit",
+        direction === "received"
+          ? "border-sky-600/20 bg-sky-600 text-white dark:bg-sky-500 dark:text-sky-950"
+          : "border-emerald-600/20 bg-emerald-600 text-white dark:bg-emerald-500 dark:text-emerald-950",
+      )}
+      variant="default"
+    >
+      <DirectionIcon data-icon="inline-start" />
+      {direction === "received" ? "收到" : "发送"}
+    </Badge>
   );
 }
 

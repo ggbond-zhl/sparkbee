@@ -261,7 +261,9 @@ function selectConnectorTransaction(
 ): TransactionRuntimeSnapshot | null {
   const transactions = Object.values(runtimeEventState.transactionStatuses)
     .filter((transaction) =>
-      transaction.evseId === evseId && transaction.connectorId === connectorId
+      transaction.evseId === evseId &&
+      transaction.connectorId === connectorId &&
+      transaction.currentStatus !== "rejected"
     );
   const activeTransaction = transactions.find(isActiveTransaction);
   if (activeTransaction !== undefined) {

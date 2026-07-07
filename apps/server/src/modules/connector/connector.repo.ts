@@ -25,11 +25,14 @@ export class ConnectorRepository {
     const [row] = await this.db
       .insert(connectors)
       .values({
-        ...input,
         chargingPointId,
-        maxVoltage: input.maxVoltage ?? null,
-        maxCurrent: input.maxCurrent ?? null,
-        maxPower: input.maxPower ?? null,
+        evseId: input.evseId,
+        connectorId: input.connectorId,
+        type: input.type,
+        format: input.format,
+        powerType: input.powerType,
+        maxVoltage: input.maxVoltage,
+        maxCurrent: input.maxCurrent,
         sortOrder: (sortOrderRow?.maxSortOrder ?? 0) + 1,
       })
       .returning();
@@ -71,15 +74,11 @@ export class ConnectorRepository {
     };
 
     if ("maxVoltage" in input) {
-      values.maxVoltage = input.maxVoltage ?? null;
+      values.maxVoltage = input.maxVoltage;
     }
 
     if ("maxCurrent" in input) {
-      values.maxCurrent = input.maxCurrent ?? null;
-    }
-
-    if ("maxPower" in input) {
-      values.maxPower = input.maxPower ?? null;
+      values.maxCurrent = input.maxCurrent;
     }
 
     await this.ensureConnectorNumbersAvailable(

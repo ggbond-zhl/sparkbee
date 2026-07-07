@@ -10,11 +10,12 @@ const positiveIntegerInput = z
   .transform((value) => Number(value))
   .pipe(z.number().int().positive());
 
-const nullableNonNegativeIntegerInput = z
+const requiredNonNegativeIntegerInput = z
   .string()
   .trim()
-  .transform((value) => (value.length === 0 ? null : Number(value)))
-  .pipe(z.number().int().nonnegative().nullable());
+  .min(1)
+  .transform((value) => Number(value))
+  .pipe(z.number().int().nonnegative());
 
 export const connectorManagementFormSchema = z
   .object({
@@ -22,9 +23,8 @@ export const connectorManagementFormSchema = z
     type: createConnectorRequestSchema.shape.type,
     format: createConnectorRequestSchema.shape.format,
     powerType: createConnectorRequestSchema.shape.powerType,
-    maxVoltage: nullableNonNegativeIntegerInput,
-    maxCurrent: nullableNonNegativeIntegerInput,
-    maxPower: nullableNonNegativeIntegerInput,
+    maxVoltage: requiredNonNegativeIntegerInput,
+    maxCurrent: requiredNonNegativeIntegerInput,
   })
   .transform(
     (values): CreateConnectorRequest => ({
@@ -43,7 +43,6 @@ export const connectorManagementFormDefaultValues = {
   type: "Type2",
   format: "socket",
   powerType: "ac",
-  maxVoltage: "",
-  maxCurrent: "",
-  maxPower: "",
+  maxVoltage: "230",
+  maxCurrent: "32",
 } satisfies ConnectorManagementFormInput;

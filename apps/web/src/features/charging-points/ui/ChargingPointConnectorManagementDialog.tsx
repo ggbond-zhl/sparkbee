@@ -62,7 +62,6 @@ export function connectorToFormValues(
       connector.maxVoltage === null ? "" : String(connector.maxVoltage),
     maxCurrent:
       connector.maxCurrent === null ? "" : String(connector.maxCurrent),
-    maxPower: connector.maxPower === null ? "" : String(connector.maxPower),
   };
 }
 

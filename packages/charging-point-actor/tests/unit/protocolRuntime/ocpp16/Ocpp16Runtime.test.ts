@@ -846,7 +846,6 @@ describe("Ocpp16Runtime", () => {
       response("MeterValues", {}),
     ], {
       chargingPoint: createChargingPoint({
-        maxPower: 7040,
         maxCurrent: 32,
         maxVoltage: 220,
       }),
@@ -2933,7 +2932,8 @@ describe("Ocpp16Runtime", () => {
       chargingPoint: createChargingPoint({
         plugState: "plugged",
         vehiclePresence: "detected",
-        maxPower: 7200,
+        maxVoltage: 120,
+        maxCurrent: 60,
       }),
       configurationCatalog: {
         chargingPointId: "cp-1",
@@ -3601,7 +3601,7 @@ describe("Ocpp16Runtime", () => {
     expect(state.transactions[0]?.latestMeterWh).toBe(150);
   });
 
-  test("grows periodic MeterValues from connector maxPower after StartTransaction is accepted", async () => {
+  test("grows periodic MeterValues from voltage and current while ignoring deprecated maxPower", async () => {
     vi.useFakeTimers();
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
@@ -3626,7 +3626,11 @@ describe("Ocpp16Runtime", () => {
           },
         ],
       },
-      chargingPoint: createChargingPoint({ maxPower: 7200 }),
+      chargingPoint: createChargingPoint({
+        maxPower: 7200,
+        maxVoltage: 120,
+        maxCurrent: 30,
+      }),
     });
 
     await boot(protocolRuntime);
@@ -3669,7 +3673,7 @@ describe("Ocpp16Runtime", () => {
       (request.payload as {
         meterValue: Array<{ sampledValue: Array<{ value: string }> }>;
       }).meterValue[0]?.sampledValue[0]?.value
-    )).toEqual(["104", "108"]);
+    )).toEqual(["102", "104"]);
   });
 
   test("grows periodic MeterValues from connector voltage and current", async () => {
@@ -5445,7 +5449,10 @@ describe("Ocpp16Runtime", () => {
           },
         ],
       },
-      chargingPoint: createChargingPoint({ maxPower: 7200 }),
+      chargingPoint: createChargingPoint({
+        maxVoltage: 120,
+        maxCurrent: 60,
+      }),
     });
     await boot(protocolRuntime);
     seedAcceptedAuthorization(protocolRuntime);

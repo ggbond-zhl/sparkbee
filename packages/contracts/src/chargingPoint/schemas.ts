@@ -23,7 +23,7 @@ const optionalTrimmedString = z.preprocess(
   },
   z.string().min(1).nullable(),
 );
-const nonNegativeIntegerSchema = z.number().int().nonnegative().nullable();
+const requiredNonNegativeIntegerSchema = z.number().int().nonnegative();
 
 export const createChargingPointRequestSchema = z.object({
   name: trimmedRequiredString.describe("桩实例在 SparkBee 内部使用的展示名称。"),
@@ -59,9 +59,8 @@ export const createConnectorRequestSchema = z.object({
   type: trimmedRequiredString.describe("枪口类型，例如 Type2 或 CCS2。"),
   format: connectorFormatSchema.describe("枪口线缆形态。"),
   powerType: connectorPowerTypeSchema.describe("枪口供电类型。"),
-  maxVoltage: nonNegativeIntegerSchema.optional().describe("枪口额定最大电压，单位 V。"),
-  maxCurrent: nonNegativeIntegerSchema.optional().describe("枪口额定最大电流，单位 A。"),
-  maxPower: nonNegativeIntegerSchema.optional().describe("枪口额定最大功率，单位 W。"),
+  maxVoltage: requiredNonNegativeIntegerSchema.describe("枪口额定电压，单位 V。"),
+  maxCurrent: requiredNonNegativeIntegerSchema.describe("枪口额定电流，单位 A。"),
 });
 
 export const updateConnectorRequestSchema = createConnectorRequestSchema.partial();
@@ -78,9 +77,9 @@ export const connectorResponseSchema = z.object({
   type: z.string().describe("枪口类型，例如 Type2 或 CCS2。"),
   format: connectorFormatSchema.describe("枪口线缆形态。"),
   powerType: connectorPowerTypeSchema.describe("枪口供电类型。"),
-  maxVoltage: z.number().int().nonnegative().nullable().describe("枪口额定最大电压，单位 V。"),
-  maxCurrent: z.number().int().nonnegative().nullable().describe("枪口额定最大电流，单位 A。"),
-  maxPower: z.number().int().nonnegative().nullable().describe("枪口额定最大功率，单位 W。"),
+  maxVoltage: z.number().int().nonnegative().nullable().describe("枪口额定电压，单位 V。"),
+  maxCurrent: z.number().int().nonnegative().nullable().describe("枪口额定电流，单位 A。"),
+  maxPower: z.number().int().nonnegative().nullable().describe("兼容保留的旧枪口额定功率字段，单位 W。"),
   sortOrder: z.number().int().positive().describe("枪口在所属桩实例内的展示顺序。"),
   createdAt: z.string().datetime().describe("创建时间。"),
   updatedAt: z.string().datetime().describe("最后更新时间。"),

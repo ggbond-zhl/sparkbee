@@ -479,7 +479,7 @@ export function resolveConnectorMeasurements(
 ): MeterValueElectricalMeasurements {
   const voltageV = connector.maxVoltage ?? 0;
   const currentA = connector.maxCurrent ?? 0;
-  const powerW = connector.maxPower ?? voltageV * currentA;
+  const powerW = voltageV * currentA;
 
   return {
     powerW,

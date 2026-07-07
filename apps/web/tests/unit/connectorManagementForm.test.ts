@@ -9,9 +9,8 @@ describe("connector management form", () => {
       type: " Type2 ",
       format: "socket",
       powerType: "ac",
-      maxVoltage: "",
+      maxVoltage: "230",
       maxCurrent: "32",
-      maxPower: "22000",
     });
 
     expect(values).toEqual({
@@ -20,13 +19,12 @@ describe("connector management form", () => {
       type: "Type2",
       format: "socket",
       powerType: "ac",
-      maxVoltage: null,
+      maxVoltage: 230,
       maxCurrent: 32,
-      maxPower: 22000,
     });
   });
 
-  test("rejects connector id zero", () => {
+  test("rejects connector id zero and missing rated values", () => {
     expect(() =>
       connectorManagementFormSchema.parse({
         connectorId: "0",
@@ -35,7 +33,17 @@ describe("connector management form", () => {
         powerType: "ac",
         maxVoltage: "",
         maxCurrent: "",
-        maxPower: "",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      connectorManagementFormSchema.parse({
+        connectorId: "1",
+        type: "Type2",
+        format: "socket",
+        powerType: "ac",
+        maxVoltage: "",
+        maxCurrent: "32",
       }),
     ).toThrow();
   });

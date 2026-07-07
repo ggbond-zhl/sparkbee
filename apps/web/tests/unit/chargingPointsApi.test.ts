@@ -444,8 +444,8 @@ describe("chargingPoints API client", () => {
           type: "Type2",
           format: "socket",
           powerType: "ac",
-          maxVoltage: null,
-          maxCurrent: null,
+          maxVoltage: 230,
+          maxCurrent: 32,
           maxPower: null,
           sortOrder: 1,
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -462,9 +462,8 @@ describe("chargingPoints API client", () => {
       type: "Type2",
       format: "socket",
       powerType: "ac",
-      maxVoltage: null,
-      maxCurrent: null,
-      maxPower: null,
+      maxVoltage: 230,
+      maxCurrent: 32,
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -480,9 +479,8 @@ describe("chargingPoints API client", () => {
           type: "Type2",
           format: "socket",
           powerType: "ac",
-          maxVoltage: null,
-          maxCurrent: null,
-          maxPower: null,
+          maxVoltage: 230,
+          maxCurrent: 32,
         }),
       },
     );

@@ -145,7 +145,6 @@ export function ChargingPointConnectorFormFields({
           id={`${idPrefix}-max-voltage`}
           aria-invalid={Boolean(formErrors.maxVoltage)}
           inputMode="numeric"
-          placeholder="可选"
           type="number"
           {...form.register("maxVoltage")}
         />
@@ -157,23 +156,10 @@ export function ChargingPointConnectorFormFields({
           id={`${idPrefix}-max-current`}
           aria-invalid={Boolean(formErrors.maxCurrent)}
           inputMode="numeric"
-          placeholder="可选"
           type="number"
           {...form.register("maxCurrent")}
         />
         <FieldError errors={[formErrors.maxCurrent]} />
-      </Field>
-      <Field data-invalid={Boolean(formErrors.maxPower)}>
-        <FieldLabel htmlFor={`${idPrefix}-max-power`}>功率 W</FieldLabel>
-        <Input
-          id={`${idPrefix}-max-power`}
-          aria-invalid={Boolean(formErrors.maxPower)}
-          inputMode="numeric"
-          placeholder="可选"
-          type="number"
-          {...form.register("maxPower")}
-        />
-        <FieldError errors={[formErrors.maxPower]} />
       </Field>
     </FieldGroup>
   );

@@ -72,7 +72,7 @@ describe("chargingPoint contract schemas", () => {
     ).toThrow();
   });
 
-  test("accepts nullable connector rated values", () => {
+  test("requires connector rated voltage and current while ignoring deprecated maxPower", () => {
     expect(
       createConnectorRequestSchema.parse({
         evseId: 1,
@@ -80,16 +80,41 @@ describe("chargingPoint contract schemas", () => {
         type: " Type2 ",
         format: "socket",
         powerType: "ac",
-        maxVoltage: null,
+        maxVoltage: 230,
+        maxCurrent: 32,
+        maxPower: 7360,
       }),
-    ).toMatchObject({
+    ).toEqual({
       evseId: 1,
       connectorId: 1,
       type: "Type2",
       format: "socket",
       powerType: "ac",
-      maxVoltage: null,
+      maxVoltage: 230,
+      maxCurrent: 32,
     });
+
+    expect(() =>
+      createConnectorRequestSchema.parse({
+        evseId: 1,
+        connectorId: 1,
+        type: "Type2",
+        format: "socket",
+        powerType: "ac",
+        maxCurrent: 32,
+      }),
+    ).toThrow();
+    expect(() =>
+      createConnectorRequestSchema.parse({
+        evseId: 1,
+        connectorId: 1,
+        type: "Type2",
+        format: "socket",
+        powerType: "ac",
+        maxVoltage: null,
+        maxCurrent: 32,
+      }),
+    ).toThrow();
   });
 
   test("describes runtime operation response in Chinese", () => {

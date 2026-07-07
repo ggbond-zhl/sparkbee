@@ -255,6 +255,8 @@ describe("web architecture", () => {
     expect(connectorEditDialogSource).not.toContain("AlertDialog");
     expect(connectorFormFieldsSource).toContain("FieldGroup");
     expect(connectorFormFieldsSource).toContain("data-dialog-select-content");
+    expect(connectorFormFieldsSource).not.toContain("maxPower");
+    expect(connectorFormFieldsSource).not.toContain("功率 W");
     expect(detailPageSource).toContain("useQuery");
     expect(detailPageSource).toContain("useMutation");
     expect(detailPageSource).toContain("buildChargingPointDetailHeaderModel");
@@ -290,6 +292,13 @@ describe("web architecture", () => {
     expect(detailHeaderModelSource).toContain("最近异常");
     expect(detailPageSource).toContain("启动充电");
     expect(detailPageSource).toContain("停止充电");
+    expect(detailPageSource).toContain("ArrowRightIcon");
+    expect(detailPageSource).toContain("ArrowLeftIcon");
+    expect(detailPageSource).toContain(
+      "direction === \"received\" ? ArrowLeftIcon : ArrowRightIcon",
+    );
+    expect(detailPageSource).toContain("ProtocolDirectionBadge");
+    expect(detailPageSource).toContain("bg-emerald-600");
     expect(detailPageSource).not.toContain("fetch(");
     expect(detailHeaderModelSource).toContain("状态未知");
     expect(detailHeaderModelSource).toContain("暂不可启动");

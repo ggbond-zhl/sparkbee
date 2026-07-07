@@ -322,7 +322,6 @@ describe("chargingPoint management API", () => {
       powerType: "ac",
       maxVoltage: 230,
       maxCurrent: 32,
-      maxPower: 7000,
     });
     const secondConnector = await createConnector(app, chargingPoint.id, {
       evseId: 2,
@@ -330,10 +329,13 @@ describe("chargingPoint management API", () => {
       type: "CCS2",
       format: "cable",
       powerType: "dc",
+      maxVoltage: 750,
+      maxCurrent: 200,
+      maxPower: 150_000,
     });
 
-    expect(firstConnector).toMatchObject({ sortOrder: 1 });
-    expect(secondConnector).toMatchObject({ sortOrder: 2 });
+    expect(firstConnector).toMatchObject({ sortOrder: 1, maxPower: null });
+    expect(secondConnector).toMatchObject({ sortOrder: 2, maxPower: null });
 
     const listResponse = await app.request(
       `/api/charging-points/${chargingPoint.id}/connectors`,
@@ -383,6 +385,8 @@ describe("chargingPoint management API", () => {
           type: "CCS2",
           format: "cable",
           powerType: "dc",
+          maxVoltage: 750,
+          maxCurrent: 200,
           maxPower: 50_000,
           sortOrder: 99,
         }),
@@ -397,7 +401,9 @@ describe("chargingPoint management API", () => {
       type: "CCS2",
       format: "cable",
       powerType: "dc",
-      maxPower: 50_000,
+      maxVoltage: 750,
+      maxCurrent: 200,
+      maxPower: null,
       sortOrder: 1,
     });
 
@@ -440,6 +446,8 @@ describe("chargingPoint management API", () => {
         type: "CCS2",
         format: "cable",
         powerType: "dc",
+        maxVoltage: 750,
+        maxCurrent: 200,
       }),
     });
 
@@ -561,6 +569,8 @@ describe("chargingPoint management API", () => {
       type: "Type2",
       format: "socket",
       powerType: "ac",
+      maxVoltage: 230,
+      maxCurrent: 32,
     });
     await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
       method: "POST",
@@ -1946,10 +1956,15 @@ async function createConnector(
   chargingPointId: string,
   input: Record<string, unknown>,
 ) {
+  const requestInput = {
+    maxVoltage: 230,
+    maxCurrent: 32,
+    ...input,
+  };
   const response = await app.request(`/api/charging-points/${chargingPointId}/connectors`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify(requestInput),
   });
 
   expect(response.status).toBe(201);
