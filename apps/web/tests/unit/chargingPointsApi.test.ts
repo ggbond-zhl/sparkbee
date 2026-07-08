@@ -9,6 +9,7 @@ import {
   listConnectors,
   listChargingPoints,
   plugConnector,
+  authorizeAndStartConnectorTransaction,
   startConnectorTransaction,
   startChargingPoint,
   subscribeChargingPointEvents,
@@ -321,6 +322,100 @@ describe("chargingPoints API client", () => {
         body: JSON.stringify({ transactionId: "tx-1" }),
       },
     );
+  });
+
+  test("authorizes before starting connector transaction", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            chargingPointId: "00000000-0000-4000-8000-000000000001",
+            connectorId: "00000000-0000-4000-8000-000000000002",
+            evseId: 1,
+            protocolConnectorId: 1,
+            status: "accepted",
+            idTag: "CARD001",
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            chargingPointId: "00000000-0000-4000-8000-000000000001",
+            connectorId: "00000000-0000-4000-8000-000000000002",
+            evseId: 1,
+            protocolConnectorId: 1,
+            status: "accepted",
+            transactionId: "tx-1",
+            idTag: "CARD001",
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await authorizeAndStartConnectorTransaction(
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      { idTag: " CARD001 " },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/connectors/00000000-0000-4000-8000-000000000002/authorize",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ idTag: "CARD001" }),
+      },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/connectors/00000000-0000-4000-8000-000000000002/start-transaction",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ idTag: "CARD001" }),
+      },
+    );
+  });
+
+  test("does not start connector transaction when authorization is rejected", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          connectorId: "00000000-0000-4000-8000-000000000002",
+          evseId: 1,
+          protocolConnectorId: 1,
+          status: "rejected",
+          idTag: "CARD001",
+          reason: "Authorize 被中心系统拒绝",
+          authorizationStatus: "Invalid",
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await authorizeAndStartConnectorTransaction(
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      { idTag: " CARD001 " },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      status: "rejected",
+      idTag: "CARD001",
+      reason: "Authorize 被中心系统拒绝",
+      authorizationStatus: "Invalid",
+    });
   });
 
   test("subscribes to charging point runtime events by id", () => {

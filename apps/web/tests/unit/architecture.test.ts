@@ -267,7 +267,7 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("stopChargingPoint");
     expect(detailPageSource).toContain("plugConnector");
     expect(detailPageSource).toContain("unplugConnector");
-    expect(detailPageSource).toContain("startConnectorTransaction");
+    expect(detailPageSource).toContain("authorizeAndStartConnectorTransaction");
     expect(detailPageSource).toContain("stopConnectorTransaction");
     expect(detailPageSource).toContain("ChargingPointEditDialog");
     expect(detailPageSource).toContain("ChargingPointConnectorEditDialog");
@@ -298,7 +298,10 @@ describe("web architecture", () => {
       "direction === \"received\" ? ArrowLeftIcon : ArrowRightIcon",
     );
     expect(detailPageSource).toContain("ProtocolDirectionBadge");
-    expect(detailPageSource).toContain("bg-emerald-600");
+    expect(detailPageSource).toContain('"w-fit bg-transparent"');
+    expect(detailPageSource).toContain('variant="outline"');
+    expect(detailPageSource).toContain("border-sky-500 text-sky-700");
+    expect(detailPageSource).toContain("border-emerald-500 text-emerald-700");
     expect(detailPageSource).not.toContain("fetch(");
     expect(detailHeaderModelSource).toContain("状态未知");
     expect(detailHeaderModelSource).toContain("暂不可启动");
@@ -356,7 +359,9 @@ describe("web architecture", () => {
     expect(apiSource).toContain("stopChargingPoint");
     expect(apiSource).toContain("plugConnector");
     expect(apiSource).toContain("unplugConnector");
+    expect(apiSource).toContain("authorizeConnector");
     expect(apiSource).toContain("startConnectorTransaction");
+    expect(apiSource).toContain("authorizeAndStartConnectorTransaction");
     expect(apiSource).toContain("stopConnectorTransaction");
     expect(apiSource).toContain("listConnectors");
     expect(apiSource).toContain("createConnector");

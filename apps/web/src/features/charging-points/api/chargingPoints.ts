@@ -12,6 +12,10 @@ import {
   type PageSize,
   runtimeOperationResponseSchema,
   type RuntimeOperationResponse,
+  runtimeAuthorizeRequestSchema,
+  runtimeAuthorizeResponseSchema,
+  type RuntimeAuthorizeRequest,
+  type RuntimeAuthorizeResponse,
   runtimeSnapshotResponseSchema,
   type RuntimeSnapshotResponse,
   runtimeStartTransactionRequestSchema,
@@ -186,6 +190,28 @@ export function unplugConnector(
   return applyConnectorRuntimeAction(chargingPointId, connectorId, "unplug");
 }
 
+export async function authorizeConnector(
+  chargingPointId: string,
+  connectorId: string,
+  input: RuntimeAuthorizeRequest,
+): Promise<RuntimeAuthorizeResponse> {
+  const response = await fetch(
+    `/api/charging-points/${chargingPointId}/connectors/${connectorId}/authorize`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(runtimeAuthorizeRequestSchema.parse(input)),
+    },
+  );
+  if (!response.ok) {
+    throw new Error("鉴权失败");
+  }
+
+  return runtimeAuthorizeResponseSchema.parse(await response.json());
+}
+
 export async function startConnectorTransaction(
   chargingPointId: string,
   connectorId: string,
@@ -206,6 +232,43 @@ export async function startConnectorTransaction(
   }
 
   return runtimeStartTransactionResponseSchema.parse(await response.json());
+}
+
+export async function authorizeAndStartConnectorTransaction(
+  chargingPointId: string,
+  connectorId: string,
+  input: RuntimeStartTransactionRequest,
+): Promise<RuntimeStartTransactionResponse> {
+  const authorization = await authorizeConnector(chargingPointId, connectorId, {
+    idTag: input.idTag,
+  });
+
+  if (authorization.status === "accepted") {
+    return startConnectorTransaction(chargingPointId, connectorId, input);
+  }
+
+  if (authorization.status === "rejected") {
+    return runtimeStartTransactionResponseSchema.parse({
+      chargingPointId: authorization.chargingPointId,
+      connectorId: authorization.connectorId,
+      evseId: authorization.evseId,
+      protocolConnectorId: authorization.protocolConnectorId,
+      status: "rejected",
+      idTag: authorization.idTag,
+      reason: authorization.reason,
+      authorizationStatus: authorization.authorizationStatus,
+    });
+  }
+
+  return runtimeStartTransactionResponseSchema.parse({
+    chargingPointId: authorization.chargingPointId,
+    connectorId: authorization.connectorId,
+    evseId: authorization.evseId,
+    protocolConnectorId: authorization.protocolConnectorId,
+    status: "rejected",
+    idTag: authorization.idTag,
+    reason: authorization.errorMessage,
+  });
 }
 
 export async function stopConnectorTransaction(

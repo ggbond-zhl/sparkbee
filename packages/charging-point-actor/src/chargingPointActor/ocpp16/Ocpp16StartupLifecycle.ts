@@ -21,12 +21,18 @@ export interface Ocpp16StartupLifecycleOptions {
 
 export class Ocpp16StartupLifecycle {
   private bootRetryTimerId: ReturnType<typeof setTimeout> | null = null;
+  private initialConnectInProgress = false;
 
   constructor(private readonly options: Ocpp16StartupLifecycleOptions) {}
 
   async start(): Promise<ChargingPointActorStartResult> {
     try {
-      await this.options.session.connect();
+      this.initialConnectInProgress = true;
+      try {
+        await this.options.session.connect();
+      } finally {
+        this.initialConnectInProgress = false;
+      }
 
       const bootResult = await this.options.runtime.boot();
 
@@ -90,7 +96,11 @@ export class Ocpp16StartupLifecycle {
   }
 
   handleOnline(): void {
-    if (this.options.isDisposed() || this.options.getStatus() !== "starting") {
+    if (
+      this.initialConnectInProgress ||
+      this.options.isDisposed() ||
+      this.options.getStatus() !== "starting"
+    ) {
       return;
     }
 

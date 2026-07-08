@@ -54,6 +54,7 @@ class FakeSession implements ISession {
   disconnectCalls = 0;
   connectError: Error | null = null;
   stateAfterConnectError: SessionConnectionState = "offline";
+  emitOnlineDuringConnect = false;
 
   async connect(): Promise<void> {
     this.connectCalls += 1;
@@ -64,6 +65,9 @@ class FakeSession implements ISession {
 
     this.connected = true;
     this.state = "online";
+    if (this.emitOnlineDuringConnect) {
+      this.emitOnline();
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -129,6 +133,9 @@ class DeferredConnectSession extends FakeSession {
     });
     this.connected = true;
     this.state = "online";
+    if (this.emitOnlineDuringConnect) {
+      this.emitOnline();
+    }
   }
 
   completeConnect(): void {
@@ -1089,6 +1096,25 @@ describe("Ocpp16ChargingPointActor", () => {
       currentStatus: "running",
       occurredAt: "2026-01-01T00:00:00.000Z",
     }));
+  });
+
+  test("does not boot twice when the initial connection emits online", async () => {
+    const { actor, session, protocolRuntime } = createHarness();
+    session.emitOnlineDuringConnect = true;
+
+    await expect(actor.start()).resolves.toEqual({
+      chargingPointId: "cp-1",
+      chargingPointActorStatus: "running",
+      bootStatus: "Accepted",
+    });
+    await flushMicrotasks();
+
+    expect(protocolRuntime.calls).toEqual([
+      "boot",
+      "startHeartbeatLoop",
+      "reportChargingPointStatus",
+      "reportConnectorStatus:1",
+    ]);
   });
 
   test("uses synchronized protocol clock for actor events", async () => {

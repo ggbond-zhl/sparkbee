@@ -61,8 +61,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  authorizeAndStartConnectorTransaction,
   plugConnector,
-  startConnectorTransaction,
   startChargingPoint,
   stopConnectorTransaction,
   stopChargingPoint,
@@ -156,7 +156,11 @@ export function ChargingPointDetailPage() {
   });
   const startTransactionMutation = useMutation({
     mutationFn: ({ connectorId, idTag }: { connectorId: string; idTag: string }) =>
-      startConnectorTransaction(chargingPointId, connectorId, { idTag }),
+      authorizeAndStartConnectorTransaction(
+        chargingPointId,
+        connectorId,
+        { idTag },
+      ),
     onSuccess: (result) => {
       if (result.status === "accepted") {
         toast.success("充电已启动");
@@ -704,12 +708,12 @@ function ProtocolDirectionBadge({
   return (
     <Badge
       className={cn(
-        "w-fit",
+        "w-fit bg-transparent",
         direction === "received"
-          ? "border-sky-600/20 bg-sky-600 text-white dark:bg-sky-500 dark:text-sky-950"
-          : "border-emerald-600/20 bg-emerald-600 text-white dark:bg-emerald-500 dark:text-emerald-950",
+          ? "border-sky-500 text-sky-700 dark:border-sky-400 dark:text-sky-300"
+          : "border-emerald-500 text-emerald-700 dark:border-emerald-400 dark:text-emerald-300",
       )}
-      variant="default"
+      variant="outline"
     >
       <DirectionIcon data-icon="inline-start" />
       {direction === "received" ? "收到" : "发送"}
