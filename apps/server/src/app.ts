@@ -9,7 +9,7 @@ import { timeout } from "hono/timeout";
 
 import type { ServerDatabase } from "./db";
 import { ChargingPointActorRegistry } from "./lib/chargingPointActorRegistry";
-import { ChargingPointDiagnosticFileWriter } from "./lib/chargingPointDiagnosticFileWriter";
+import { ChargingPointRuntimeLogFileWriter } from "./lib/chargingPointRuntimeLogFileWriter";
 import { ChargingPointEventStreamHub } from "./lib/chargingPointEventStreamHub";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type { ChargingPointActorFactory } from "./modules/runtimeOperation/runtimeOperation.service";
@@ -20,8 +20,8 @@ export interface AppDependencies {
   environment?: string;
   timeoutMs?: number;
   chargingPointActorRegistry?: ChargingPointActorRegistry;
-  diagnosticDirectory?: string;
-  chargingPointDiagnosticFileWriter?: ChargingPointDiagnosticFileWriter;
+  runtimeLogDirectory?: string;
+  chargingPointRuntimeLogFileWriter?: ChargingPointRuntimeLogFileWriter;
   chargingPointEventStreamHub?: ChargingPointEventStreamHub;
   createChargingPointActor?: ChargingPointActorFactory;
 }
@@ -47,10 +47,10 @@ export function createApp(dependencies: AppDependencies = {}) {
       ...dependencies,
       chargingPointActorRegistry:
         dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry(),
-      chargingPointDiagnosticFileWriter:
-        dependencies.chargingPointDiagnosticFileWriter ??
-        new ChargingPointDiagnosticFileWriter(
-          dependencies.diagnosticDirectory ?? "logs/diagnostics",
+      chargingPointRuntimeLogFileWriter:
+        dependencies.chargingPointRuntimeLogFileWriter ??
+        new ChargingPointRuntimeLogFileWriter(
+          dependencies.runtimeLogDirectory ?? "logs/runtime",
         ),
       chargingPointEventStreamHub:
         dependencies.chargingPointEventStreamHub ?? new ChargingPointEventStreamHub(),

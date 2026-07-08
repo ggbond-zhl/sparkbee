@@ -1,7 +1,6 @@
 import type {
   ChargingPointConnectorActionResponse,
   ChargingPointDetailResponse,
-  ConnectorResponse,
   RuntimeAuthorizeRequest,
   RuntimeAuthorizeResponse,
   RuntimeOperationResponse,
@@ -17,18 +16,15 @@ import {
   ChargingPointActorError,
   createChargingPointActor,
   type ChargingPointActor,
-  type ChargingPointActorAuthorizeResult,
-  type ChargingPointActorConnectorActionResult,
   type ChargingPointActorOptions,
   type ChargingPointActorStartResult,
-  type ChargingPointActorStopTransactionResult,
-  type ChargingPointActorTransactionStartResult,
 } from "../../lib/chargingPointActor";
-import { ChargingPointDiagnosticFileWriter } from "../../lib/chargingPointDiagnosticFileWriter";
+import { ChargingPointRuntimeLogFileWriter } from "../../lib/chargingPointRuntimeLogFileWriter";
 import { ChargingPointActorRegistry } from "../../lib/chargingPointActorRegistry";
 import { ChargingPointEventStreamHub } from "../../lib/chargingPointEventStreamHub";
 import { AppError } from "../../utils/errors";
 import { toChargingPointActorOptions } from "./chargingPointActorOptions";
+import { RuntimeOperationCommandExecutor } from "./runtimeOperation.command";
 import { RuntimeOperationRepository } from "./runtimeOperation.repo";
 
 export type ChargingPointActorFactory = (
@@ -37,7 +33,7 @@ export type ChargingPointActorFactory = (
 
 export interface RuntimeOperationServiceDependencies {
   chargingPointActorRegistry?: ChargingPointActorRegistry;
-  chargingPointDiagnosticFileWriter?: ChargingPointDiagnosticFileWriter;
+  chargingPointRuntimeLogFileWriter?: ChargingPointRuntimeLogFileWriter;
   chargingPointEventStreamHub?: ChargingPointEventStreamHub;
   createChargingPointActor?: ChargingPointActorFactory;
 }
@@ -54,9 +50,10 @@ export function createRuntimeOperationService(
 
 export class RuntimeOperationService {
   private readonly registry: ChargingPointActorRegistry;
-  private readonly diagnosticFileWriter?: ChargingPointDiagnosticFileWriter;
+  private readonly runtimeLogFileWriter?: ChargingPointRuntimeLogFileWriter;
   private readonly eventStreamHub?: ChargingPointEventStreamHub;
   private readonly actorFactory: ChargingPointActorFactory;
+  private readonly commandExecutor: RuntimeOperationCommandExecutor;
 
   constructor(
     private readonly repository: RuntimeOperationRepository,
@@ -64,9 +61,10 @@ export class RuntimeOperationService {
   ) {
     this.registry =
       dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry();
-    this.diagnosticFileWriter = dependencies.chargingPointDiagnosticFileWriter;
+    this.runtimeLogFileWriter = dependencies.chargingPointRuntimeLogFileWriter;
     this.eventStreamHub = dependencies.chargingPointEventStreamHub;
     this.actorFactory = dependencies.createChargingPointActor ?? createChargingPointActor;
+    this.commandExecutor = new RuntimeOperationCommandExecutor(this.registry);
   }
 
   async start(id: string): Promise<RuntimeOperationResponse> {
@@ -148,14 +146,16 @@ export class RuntimeOperationService {
     chargingPointId: string,
     connectorId: string,
   ): Promise<ChargingPointConnectorActionResponse> {
-    return this.applyConnectorAction(chargingPointId, connectorId, "plug");
+    const chargingPoint = await this.repository.getOperationDetail(chargingPointId);
+    return this.commandExecutor.plug(chargingPoint, connectorId);
   }
 
   async unplug(
     chargingPointId: string,
     connectorId: string,
   ): Promise<ChargingPointConnectorActionResponse> {
-    return this.applyConnectorAction(chargingPointId, connectorId, "unplug");
+    const chargingPoint = await this.repository.getOperationDetail(chargingPointId);
+    return this.commandExecutor.unplug(chargingPoint, connectorId);
   }
 
   async authorize(
@@ -164,20 +164,7 @@ export class RuntimeOperationService {
     input: RuntimeAuthorizeRequest,
   ): Promise<RuntimeAuthorizeResponse> {
     const chargingPoint = await this.repository.getOperationDetail(chargingPointId);
-    const connector = this.requireConnector(chargingPoint, connectorId);
-    const actor = this.requireRunningActor(chargingPointId);
-
-    try {
-      const result = await actor.authorize({
-        evseId: connector.evseId,
-        connectorId: connector.connectorId,
-        idTag: input.idTag,
-      });
-
-      return this.toAuthorizeResponse(chargingPointId, connector, result, input);
-    } catch (error) {
-      throw this.mapAuthorizeError(error);
-    }
+    return this.commandExecutor.authorize(chargingPoint, connectorId, input);
   }
 
   async startTransaction(
@@ -186,22 +173,7 @@ export class RuntimeOperationService {
     input: RuntimeStartTransactionRequest,
   ): Promise<RuntimeStartTransactionResponse> {
     const chargingPoint = await this.repository.getOperationDetail(chargingPointId);
-    const connector = this.requireConnector(chargingPoint, connectorId);
-    const actor = this.requireRunningActor(chargingPointId);
-
-    try {
-      const result = await actor.startTransaction({
-        evseId: connector.evseId,
-        connectorId: connector.connectorId,
-        idTag: input.idTag,
-        meterStartWh: input.meterStartWh,
-        reservationId: input.reservationId,
-      });
-
-      return this.toStartTransactionResponse(chargingPointId, connector, result, input);
-    } catch (error) {
-      throw this.mapTransactionError(error);
-    }
+    return this.commandExecutor.startTransaction(chargingPoint, connectorId, input);
   }
 
   async stopTransaction(
@@ -210,87 +182,7 @@ export class RuntimeOperationService {
     input: RuntimeStopTransactionRequest,
   ): Promise<RuntimeStopTransactionResponse> {
     const chargingPoint = await this.repository.getOperationDetail(chargingPointId);
-    const connector = this.requireConnector(chargingPoint, connectorId);
-    const actor = this.requireRunningActor(chargingPointId);
-    const resource = actor.getTransactionResource(input.transactionId);
-    if (
-      resource === undefined ||
-      resource.evseId !== connector.evseId ||
-      resource.connectorId !== connector.connectorId
-    ) {
-      throw new AppError(
-        409,
-        "TRANSACTION_CONNECTOR_MISMATCH",
-        "Transaction does not belong to connector",
-      );
-    }
-
-    try {
-      const result = await actor.stopTransaction({
-        transactionId: input.transactionId,
-        reason: input.reason,
-        meterStopWh: input.meterStopWh,
-        idTag: input.idTag,
-      });
-
-      return this.toStopTransactionResponse(
-        chargingPointId,
-        connector,
-        result,
-        input.transactionId,
-      );
-    } catch (error) {
-      throw this.mapTransactionError(error);
-    }
-  }
-
-  private async applyConnectorAction(
-    chargingPointId: string,
-    connectorId: string,
-    action: "plug" | "unplug",
-  ): Promise<ChargingPointConnectorActionResponse> {
-    const chargingPoint = await this.repository.getOperationDetail(chargingPointId);
-    const connector = this.requireConnector(chargingPoint, connectorId);
-    const actor = this.requireRunningActor(chargingPointId);
-
-    try {
-      const result = await actor[action]({
-        evseId: connector.evseId,
-        connectorId: connector.connectorId,
-      });
-
-      return this.toConnectorActionResponse(connector.id, result);
-    } catch (error) {
-      throw this.mapConnectorActionError(error);
-    }
-  }
-
-  private requireConnector(
-    chargingPoint: ChargingPointDetailResponse,
-    connectorId: string,
-  ): ConnectorResponse {
-    const connector = chargingPoint.connectors.find((connector) =>
-      connector.id === connectorId
-    );
-
-    if (connector === undefined) {
-      throw new AppError(404, "CONNECTOR_NOT_FOUND", "Connector not found");
-    }
-
-    return connector;
-  }
-
-  private requireRunningActor(chargingPointId: string): ChargingPointActor {
-    const actor = this.registry.get(chargingPointId);
-    if (actor === undefined) {
-      throw new AppError(
-        409,
-        "CHARGING_POINT_NOT_RUNNING",
-        "Charging point is not running",
-      );
-    }
-
-    return actor;
+    return this.commandExecutor.stopTransaction(chargingPoint, connectorId, input);
   }
 
   private toStatusResponse(
@@ -337,135 +229,15 @@ export class RuntimeOperationService {
     };
   }
 
-  private toConnectorActionResponse(
-    connectorId: string,
-    result: ChargingPointActorConnectorActionResult,
-  ): ChargingPointConnectorActionResponse {
-    return {
-      chargingPointId: result.chargingPointId,
-      connectorId,
-      evseId: result.evseId,
-      protocolConnectorId: result.connectorId,
-      plugState: result.plugState,
-      vehiclePresence: result.vehiclePresence,
-      connectorStatus: result.connectorStatus,
-    };
-  }
-
-  private toAuthorizeResponse(
-    chargingPointId: string,
-    connector: ConnectorResponse,
-    result: ChargingPointActorAuthorizeResult,
-    input: RuntimeAuthorizeRequest,
-  ): RuntimeAuthorizeResponse {
-    const base = {
-      chargingPointId,
-      connectorId: connector.id,
-      evseId: connector.evseId,
-      protocolConnectorId: connector.connectorId,
-      idTag: input.idTag,
-    };
-
-    if (result.status === "accepted") {
-      return {
-        ...base,
-        status: "accepted",
-      };
-    }
-
-    if (result.status === "rejected") {
-      return {
-        ...base,
-        status: "rejected",
-        reason: result.reason,
-        authorizationStatus: result.authorizationStatus,
-      };
-    }
-
-    return {
-      ...base,
-      status: "failed",
-      errorCode: result.errorCode,
-      errorMessage: result.errorMessage,
-      shouldReconnect: result.shouldReconnect,
-    };
-  }
-
-  private toStartTransactionResponse(
-    chargingPointId: string,
-    connector: ConnectorResponse,
-    result: ChargingPointActorTransactionStartResult,
-    input: RuntimeStartTransactionRequest,
-  ): RuntimeStartTransactionResponse {
-    const base = this.toConnectorOperationBase(chargingPointId, connector);
-
-    if (result.status === "accepted") {
-      return {
-        ...base,
-        status: "accepted",
-        transactionId: result.transactionId,
-        idTag: input.idTag,
-      };
-    }
-
-    return {
-      ...base,
-      status: "rejected",
-      idTag: input.idTag,
-      reason: result.reason,
-      authorizationStatus: result.authorizationStatus,
-    };
-  }
-
-  private toStopTransactionResponse(
-    chargingPointId: string,
-    connector: ConnectorResponse,
-    result: ChargingPointActorStopTransactionResult,
-    transactionId: string,
-  ): RuntimeStopTransactionResponse {
-    const base = this.toConnectorOperationBase(chargingPointId, connector);
-
-    if (result.status === "accepted") {
-      return {
-        ...base,
-        status: "accepted",
-        transactionId: result.transactionId,
-        meterStopWh: result.meterStopWh,
-        stoppedAt: result.stoppedAt.toISOString(),
-      };
-    }
-
-    return {
-      ...base,
-      status: "failed",
-      transactionId,
-      errorCode: result.errorCode,
-      errorMessage: result.errorMessage,
-      shouldReconnect: result.shouldReconnect,
-    };
-  }
-
-  private toConnectorOperationBase(
-    chargingPointId: string,
-    connector: ConnectorResponse,
-  ) {
-    return {
-      chargingPointId,
-      connectorId: connector.id,
-      evseId: connector.evseId,
-      protocolConnectorId: connector.connectorId,
-    };
-  }
-
   private toActorOptions(chargingPoint: ChargingPointDetailResponse): ChargingPointActorOptions {
     const options = toChargingPointActorOptions(chargingPoint);
-    const diagnosticSink = this.diagnosticFileWriter?.createSink(chargingPoint.id);
+    const runtimeLogSink = this.runtimeLogFileWriter?.createSink(chargingPoint.id);
 
-    return diagnosticSink === undefined
+    return runtimeLogSink === undefined
       ? options
       : {
           ...options,
-          diagnosticSink,
+          runtimeLogSink,
         };
   }
 
@@ -490,77 +262,6 @@ export class RuntimeOperationService {
 
   private mapStopError(error: unknown): AppError {
     return new AppError(502, "CHARGING_POINT_STOP_FAILED", "Charging point stop failed");
-  }
-
-  private mapConnectorActionError(error: unknown): AppError {
-    if (
-      error instanceof ChargingPointActorError &&
-      error.code === "CHARGING_POINT_ACTOR_NOT_RUNNING"
-    ) {
-      return new AppError(
-        409,
-        "CHARGING_POINT_NOT_RUNNING",
-        "Charging point is not running",
-      );
-    }
-
-    if (
-      error instanceof ChargingPointActorError &&
-      error.code === "CHARGING_POINT_ACTOR_INVALID_OPERATION"
-    ) {
-      return new AppError(409, "CONNECTOR_OPERATION_CONFLICT", error.message);
-    }
-
-    return new AppError(
-      502,
-      "CONNECTOR_OPERATION_FAILED",
-      "Connector operation failed",
-    );
-  }
-
-  private mapAuthorizeError(error: unknown): AppError {
-    if (
-      error instanceof ChargingPointActorError &&
-      error.code === "CHARGING_POINT_ACTOR_NOT_RUNNING"
-    ) {
-      return new AppError(
-        409,
-        "CHARGING_POINT_NOT_RUNNING",
-        "Charging point is not running",
-      );
-    }
-
-    return new AppError(
-      502,
-      "AUTHORIZATION_OPERATION_FAILED",
-      "Authorization operation failed",
-    );
-  }
-
-  private mapTransactionError(error: unknown): AppError {
-    if (
-      error instanceof ChargingPointActorError &&
-      error.code === "CHARGING_POINT_ACTOR_NOT_RUNNING"
-    ) {
-      return new AppError(
-        409,
-        "CHARGING_POINT_NOT_RUNNING",
-        "Charging point is not running",
-      );
-    }
-
-    if (
-      error instanceof ChargingPointActorError &&
-      error.code === "CHARGING_POINT_ACTOR_INVALID_OPERATION"
-    ) {
-      return new AppError(409, "TRANSACTION_OPERATION_FAILED", error.message);
-    }
-
-    return new AppError(
-      502,
-      "TRANSACTION_OPERATION_FAILED",
-      "Transaction operation failed",
-    );
   }
 
   private async disposeQuietly(actor: ChargingPointActor): Promise<void> {

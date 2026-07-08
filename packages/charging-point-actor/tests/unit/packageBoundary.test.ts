@@ -167,6 +167,36 @@ describe("charging point actor package seam", () => {
     ))).toBe(true);
   });
 
+  test("ocpp16 actions use the transaction delivery module interface", () => {
+    const actionFiles = [
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/actions/transactionStart.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/actions/stopTransaction.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/actions/meterValues.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/actions/offlineTransactionReplay.ts`,
+    ];
+    const forbiddenHelperImports = [
+      "recordOnlineTransactionStart",
+      "recordOfflineTransactionStartDelivery",
+      "endTransactionDelivery",
+      "recordOfflineTransactionStopDelivery",
+      "resolveTransactionDeliveryBinding",
+      "recordMeterValueForOfflineDelivery",
+      "listPendingOfflineTransactions",
+      "markOfflineMeterValueReplayed",
+      "markOfflineStopReplayed",
+    ];
+
+    for (const relativePath of actionFiles) {
+      const source = readSource(relativePath);
+      expect(source).toContain("getOcpp16TransactionDelivery");
+      for (const helper of forbiddenHelperImports) {
+        expect(source).not.toMatch(
+          new RegExp(`import\\\\s*{[^}]*${helper}[^}]*}\\\\s*from\\\\s*["']\\.\\./Ocpp16TransactionDelivery["']`),
+        );
+      }
+    }
+  });
+
   test("old naming and binding directories stay removed", () => {
     const removedPaths = [
       `${actorPackageRoot}/src/simulator`,

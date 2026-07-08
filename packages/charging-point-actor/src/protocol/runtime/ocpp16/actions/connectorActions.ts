@@ -2,7 +2,7 @@ import {
   hasActiveTransactionOnConnector,
   requireDomainConnector,
 } from "../connectorSelection";
-import { traceOcpp16RuntimeOperation } from "../diagnostics";
+import { traceOcpp16RuntimeOperation } from "../runtimeLogs";
 import { ProtocolRuntimeError } from "../errors";
 import type { Ocpp16RuntimeContext } from "../state";
 import type {

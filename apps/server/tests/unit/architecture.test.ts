@@ -62,8 +62,8 @@ describe("server architecture", () => {
     expect(libFiles).toEqual([
       "chargingPointActor.ts",
       "chargingPointActorRegistry.ts",
-      "chargingPointDiagnosticFileWriter.ts",
       "chargingPointEventStreamHub.ts",
+      "chargingPointRuntimeLogFileWriter.ts",
     ]);
   });
 
@@ -166,6 +166,7 @@ describe("server architecture", () => {
 
     expect(operationFiles).toEqual([
       "chargingPointActorOptions.ts",
+      "runtimeOperation.command.ts",
       "runtimeOperation.repo.ts",
       "runtimeOperation.route.ts",
       "runtimeOperation.service.ts",
@@ -176,6 +177,15 @@ describe("server architecture", () => {
     expect(existsSync(join(chargingPointModule, "chargingPointActorOptions.ts"))).toBe(
       false,
     );
+
+    const serviceSource = readFileSync(
+      join(operationModule, "runtimeOperation.service.ts"),
+      "utf8",
+    );
+    expect(serviceSource).toContain("RuntimeOperationCommandExecutor");
+    expect(serviceSource).not.toContain("toAuthorizeResponse");
+    expect(serviceSource).not.toContain("toStartTransactionResponse");
+    expect(serviceSource).not.toContain("toStopTransactionResponse");
   });
 
   test("keeps Drizzle migrations under apps/server", () => {

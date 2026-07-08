@@ -22,10 +22,7 @@ import {
   resolveConnectorOcppStatus,
 } from "./connectorStatusTransition";
 import {
-  endTransactionDelivery,
-  recordOfflineTransactionStopDelivery,
-  requireTransactionConnectorRef,
-  resolveTransactionDeliveryBinding,
+  getOcpp16TransactionDelivery,
 } from "../Ocpp16TransactionDelivery";
 
 type StopTransactionRequestState = {
@@ -44,6 +41,7 @@ export async function stopTransaction(
 ): Promise<Ocpp16StopTransactionResult> {
   const at = input.stoppedAt ?? context.clock();
   const statusNotificationResults: Ocpp16StatusNotificationResult[] = [];
+  const transactionDelivery = getOcpp16TransactionDelivery(context);
   const chargingTransaction = resolveTransaction(context, input);
   if (chargingTransaction.state === "ended") {
     throw new ProtocolRuntimeError(
@@ -51,11 +49,8 @@ export async function stopTransaction(
       `充电交易 ${chargingTransaction.id} 已结束，不能重复停止`,
     );
   }
-  const connectorRef = requireTransactionConnectorRef(chargingTransaction);
-  const deliveryBinding = resolveTransactionDeliveryBinding(
-    context,
-    chargingTransaction,
-  );
+  const connectorRef = transactionDelivery.requireConnectorRef(chargingTransaction);
+  const deliveryBinding = transactionDelivery.resolveBinding(chargingTransaction);
   if (deliveryBinding.status === "offline") {
     return stopOfflineTransaction(context, {
       input,
@@ -70,7 +65,7 @@ export async function stopTransaction(
     connectorRef,
   );
   stopMeterValueLoop(context, chargingTransaction.id);
-  const delivery = endTransactionDelivery(context, {
+  const delivery = transactionDelivery.end({
     transaction: chargingTransaction,
     connectorRef,
     reason: input.reason,
@@ -153,7 +148,7 @@ function stopOfflineTransaction(
     input.connectorRef,
   );
   stopMeterValueLoop(context, input.chargingTransaction.id);
-  const delivery = recordOfflineTransactionStopDelivery(context, {
+  const delivery = getOcpp16TransactionDelivery(context).recordOfflineStop({
     transaction: input.chargingTransaction,
     connectorRef: input.connectorRef,
     reason: input.input.reason,

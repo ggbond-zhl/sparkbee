@@ -1,14 +1,14 @@
 import type { Ocpp16RuntimeContext } from "./state";
 
-type Ocpp16RuntimeDiagnosticCategory = "action" | "command";
-type Ocpp16RuntimeDiagnosticPhase =
+type Ocpp16RuntimeLogCategory = "action" | "command";
+type Ocpp16RuntimeLogPhase =
   | "started"
   | "completed"
   | "rejected"
   | "failed";
 
 type TraceOptions = {
-  category: Ocpp16RuntimeDiagnosticCategory;
+  category: Ocpp16RuntimeLogCategory;
   name: string;
   input?: unknown;
   messageId?: string;
@@ -19,16 +19,16 @@ export function traceOcpp16RuntimeOperation<TResult>(
   options: TraceOptions,
   run: () => Promise<TResult>,
 ): Promise<TResult> {
-  const operationId = context.nextDiagnosticOperationId();
+  const operationId = context.nextRuntimeLogOperationId();
   const startedAt = context.clock();
-  emitDiagnostic(context, options, {
+  emitRuntimeLog(context, options, {
     phase: "started",
     operationId,
     input: options.input,
   });
 
   return run().then((result) => {
-    emitDiagnostic(context, options, {
+    emitRuntimeLog(context, options, {
       phase: classifyResult(result),
       operationId,
       input: options.input,
@@ -37,11 +37,11 @@ export function traceOcpp16RuntimeOperation<TResult>(
     });
     return result;
   }, (cause) => {
-    emitDiagnostic(context, options, {
+    emitRuntimeLog(context, options, {
       phase: "failed",
       operationId,
       input: options.input,
-      error: toDiagnosticError(cause),
+      error: toLogError(cause),
       durationMs: elapsedMs(startedAt, context.clock()),
     });
     throw cause;
@@ -59,9 +59,9 @@ export function traceOcpp16RuntimeCommandStarted(
   operationId: string;
   startedAt: Date;
 } {
-  const operationId = context.nextDiagnosticOperationId();
+  const operationId = context.nextRuntimeLogOperationId();
   const startedAt = context.clock();
-  emitDiagnostic(context, {
+  emitRuntimeLog(context, {
     category: "command",
     name: input.name,
     messageId: input.messageId,
@@ -83,12 +83,12 @@ export function emitOcpp16RuntimeCommandResult(
     operationId: string;
     startedAt: Date;
     requestPayload: unknown;
-    phase: Exclude<Ocpp16RuntimeDiagnosticPhase, "started">;
+    phase: Exclude<Ocpp16RuntimeLogPhase, "started">;
     responsePayload?: unknown;
     error?: unknown;
   },
 ): void {
-  emitDiagnostic(context, {
+  emitRuntimeLog(context, {
     category: "command",
     name: input.name,
     messageId: input.messageId,
@@ -97,16 +97,16 @@ export function emitOcpp16RuntimeCommandResult(
     operationId: input.operationId,
     input: input.requestPayload,
     responsePayload: input.responsePayload,
-    error: input.error === undefined ? undefined : toDiagnosticError(input.error),
+    error: input.error === undefined ? undefined : toLogError(input.error),
     durationMs: elapsedMs(input.startedAt, context.clock()),
   });
 }
 
-function emitDiagnostic(
+function emitRuntimeLog(
   context: Ocpp16RuntimeContext,
   options: TraceOptions,
   input: {
-    phase: Ocpp16RuntimeDiagnosticPhase;
+    phase: Ocpp16RuntimeLogPhase;
     operationId: string;
     input?: unknown;
     result?: unknown;
@@ -116,7 +116,7 @@ function emitDiagnostic(
   },
 ): void {
   const code = toCode(options.category, input.phase);
-  context.emitDiagnostic({
+  context.emitRuntimeLog({
     level: toLevel(input.phase),
     code,
     message: toMessage(options.category, input.phase),
@@ -137,7 +137,7 @@ function emitDiagnostic(
   });
 }
 
-function classifyResult(result: unknown): Exclude<Ocpp16RuntimeDiagnosticPhase, "started"> {
+function classifyResult(result: unknown): Exclude<Ocpp16RuntimeLogPhase, "started"> {
   const outcome = getResultStatus(result);
   if (outcome === "Rejected" || outcome === "rejected") {
     return "rejected";
@@ -169,20 +169,20 @@ function elapsedMs(startedAt: Date, completedAt: Date): number {
 }
 
 function toCode(
-  category: Ocpp16RuntimeDiagnosticCategory,
-  phase: Ocpp16RuntimeDiagnosticPhase,
+  category: Ocpp16RuntimeLogCategory,
+  phase: Ocpp16RuntimeLogPhase,
 ): string {
   return `OCPP16_${category.toUpperCase()}_${phase.toUpperCase()}`;
 }
 
 function toMessage(
-  category: Ocpp16RuntimeDiagnosticCategory,
-  phase: Ocpp16RuntimeDiagnosticPhase,
+  category: Ocpp16RuntimeLogCategory,
+  phase: Ocpp16RuntimeLogPhase,
 ): string {
   return `OCPP 1.6 ${category} ${phase}`;
 }
 
-function toLevel(phase: Ocpp16RuntimeDiagnosticPhase): "info" | "warn" | "error" {
+function toLevel(phase: Ocpp16RuntimeLogPhase): "info" | "warn" | "error" {
   if (phase === "failed") {
     return "error";
   }
@@ -193,7 +193,7 @@ function toLevel(phase: Ocpp16RuntimeDiagnosticPhase): "info" | "warn" | "error"
   return "info";
 }
 
-function toDiagnosticError(cause: unknown): { name?: string; code?: string; message: string } {
+function toLogError(cause: unknown): { name?: string; code?: string; message: string } {
   if (cause instanceof Error) {
     return {
       name: cause.name,

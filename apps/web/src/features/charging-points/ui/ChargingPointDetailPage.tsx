@@ -290,7 +290,7 @@ export function ChargingPointDetailPage() {
             <StatusMetric label="交易" value={headerModel.transactionSummary} />
           </div>
 
-          <RuntimeDiagnosticsPanel items={headerModel.runtimeDiagnostics} />
+          <RuntimeSummaryPanel items={headerModel.runtimeSummaryItems} />
 
           {headerModel.primaryAction.disabledReason && (
             <p className="text-sm text-muted-foreground">
@@ -419,11 +419,11 @@ function DetailMetric({
   );
 }
 
-function RuntimeDiagnosticsPanel({ items }: { items: HeaderMetricItem[] }) {
+function RuntimeSummaryPanel({ items }: { items: HeaderMetricItem[] }) {
   return (
     <section className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">运行诊断</h3>
+        <h3 className="text-sm font-medium">运行摘要</h3>
         <span className="text-xs text-muted-foreground">通信状态</span>
       </div>
       <div className="grid gap-2 md:grid-cols-3">

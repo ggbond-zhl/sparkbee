@@ -19,7 +19,7 @@ import type {
   ProtocolMessageDirection,
   ProtocolMessageEvent,
   SessionConnectionState,
-  SessionDiagnostic,
+  SessionLogEntry,
   SessionEvents,
   SessionOptions,
 } from "./types";
@@ -40,7 +40,7 @@ type DecodedInboundMessage =
 type InboundDecodeResult =
   | { kind: "decoded"; message: DecodedInboundMessage }
   | { kind: "ignored" }
-  | { kind: "diagnostic"; diagnostic: SessionDiagnostic };
+  | { kind: "runtimeLog"; runtimeLog: SessionLogEntry };
 
 /** 对外暴露 session API，并把连接、入站和出站职责装配到内部协调器。 */
 export class ChargingPointSession implements ISession {
@@ -67,7 +67,7 @@ export class ChargingPointSession implements ISession {
         options.inboundResponseTimeoutMs ?? DEFAULT_INBOUND_RESPONSE_TIMEOUT_MS,
       messageSender,
       emitInboundRequest: (request) => this.emit("inboundRequest", request),
-      emitSessionDiagnostic: (diagnostic) => this.emitSessionDiagnostic(diagnostic),
+      emitSessionLog: (runtimeLog) => this.emitSessionLog(runtimeLog),
     });
     this.outboundRequestCoordinator = new OutboundRequestCoordinator({
       validator: options.validator,
@@ -132,8 +132,8 @@ export class ChargingPointSession implements ISession {
     switch (decodeResult.kind) {
       case "ignored":
         return;
-      case "diagnostic":
-        this.emitSessionDiagnostic(decodeResult.diagnostic);
+      case "runtimeLog":
+        this.emitSessionLog(decodeResult.runtimeLog);
         return;
       case "decoded":
         this.routeInboundMessage(decodeResult.message);
@@ -150,8 +150,8 @@ export class ChargingPointSession implements ISession {
       const decodeResult = this.codec.decode(rawMessage);
       if (!decodeResult.success) {
         return {
-          kind: "diagnostic",
-          diagnostic: this.createDecodeDiagnostic(
+          kind: "runtimeLog",
+          runtimeLog: this.createDecodeLog(
             "入站消息解码失败",
             decodeResult.error,
             rawMessage,
@@ -171,8 +171,8 @@ export class ChargingPointSession implements ISession {
       };
     } catch (cause) {
       return {
-        kind: "diagnostic",
-        diagnostic: this.createDecodeDiagnostic(
+        kind: "runtimeLog",
+        runtimeLog: this.createDecodeLog(
           "入站消息解码发生内部异常",
           cause,
           rawMessage,
@@ -244,7 +244,7 @@ export class ChargingPointSession implements ISession {
   };
 
   private readonly handleTransportError = (error: TransportError): void => {
-    this.emitSessionDiagnostic({
+    this.emitSessionLog({
       source: "transport",
       error: new SessionError(
         "TRANSPORT_RUNTIME_ERROR",
@@ -272,11 +272,11 @@ export class ChargingPointSession implements ISession {
     this.emitter.emit(event, ...(args as unknown[]));
   }
 
-  private createDecodeDiagnostic(
+  private createDecodeLog(
     message: string,
     cause: unknown,
     rawMessage: RawMessage,
-  ): SessionDiagnostic {
+  ): SessionLogEntry {
     return {
       source: "decode",
       error: new SessionError("DECODE_ERROR", message, cause),
@@ -284,7 +284,7 @@ export class ChargingPointSession implements ISession {
     };
   }
 
-  private emitSessionDiagnostic(diagnostic: SessionDiagnostic): void {
-    this.emit("sessionError", diagnostic);
+  private emitSessionLog(runtimeLog: SessionLogEntry): void {
+    this.emit("sessionError", runtimeLog);
   }
 }

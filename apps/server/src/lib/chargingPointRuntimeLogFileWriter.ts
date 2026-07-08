@@ -2,22 +2,22 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import type {
-  ChargingPointActorDiagnosticRecord,
-  ChargingPointActorDiagnosticSink,
+  ChargingPointActorRuntimeLogRecord,
+  ChargingPointActorRuntimeLogSink,
 } from "./chargingPointActor";
 
-export class ChargingPointDiagnosticFileWriter {
+export class ChargingPointRuntimeLogFileWriter {
   constructor(private readonly directory: string) {}
 
-  createSink(chargingPointId: string): ChargingPointActorDiagnosticSink {
-    return new ChargingPointDiagnosticFileSink(
+  createSink(chargingPointId: string): ChargingPointActorRuntimeLogSink {
+    return new ChargingPointRuntimeLogFileSink(
       this.directory,
       toSafeChargingPointFileStem(chargingPointId),
     );
   }
 }
 
-class ChargingPointDiagnosticFileSink implements ChargingPointActorDiagnosticSink {
+class ChargingPointRuntimeLogFileSink implements ChargingPointActorRuntimeLogSink {
   private pendingWrite: Promise<void> = Promise.resolve();
 
   constructor(
@@ -25,7 +25,7 @@ class ChargingPointDiagnosticFileSink implements ChargingPointActorDiagnosticSin
     private readonly fileStem: string,
   ) {}
 
-  write(record: ChargingPointActorDiagnosticRecord): Promise<void> {
+  write(record: ChargingPointActorRuntimeLogRecord): Promise<void> {
     this.pendingWrite = this.pendingWrite.then(
       () => this.appendRecord(record),
       () => this.appendRecord(record),
@@ -34,7 +34,7 @@ class ChargingPointDiagnosticFileSink implements ChargingPointActorDiagnosticSin
     return this.pendingWrite;
   }
 
-  private async appendRecord(record: ChargingPointActorDiagnosticRecord): Promise<void> {
+  private async appendRecord(record: ChargingPointActorRuntimeLogRecord): Promise<void> {
     await mkdir(this.directory, { recursive: true });
     await appendFile(
       join(this.directory, `${this.fileStem}.jsonl`),

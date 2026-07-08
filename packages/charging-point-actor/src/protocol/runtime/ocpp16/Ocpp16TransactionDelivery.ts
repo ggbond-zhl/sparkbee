@@ -17,7 +17,7 @@ import {
   resolveOcppTransactionId,
 } from "./resourceAccess";
 import type { Ocpp16RuntimeContext } from "./state";
-import { traceOcpp16RuntimeOperation } from "./diagnostics";
+import { traceOcpp16RuntimeOperation } from "./runtimeLogs";
 import type {
   Ocpp16MeterValueInput,
   Ocpp16MeterValuesResult,
@@ -115,6 +115,86 @@ export class Ocpp16TransactionDelivery {
 
   stopAll(): void {
     stopMeterValueLoops(this.context);
+  }
+
+  recordOnlineStart(input: Parameters<typeof recordOnlineTransactionStart>[1]) {
+    return recordOnlineTransactionStart(this.context, input);
+  }
+
+  recordOfflineStart(
+    input: Parameters<typeof recordOfflineTransactionStartDelivery>[1],
+  ) {
+    return recordOfflineTransactionStartDelivery(this.context, input);
+  }
+
+  requireConnectorRef(transaction: Transaction): TransactionConnectorRef {
+    return requireTransactionConnectorRef(transaction);
+  }
+
+  end(input: Parameters<typeof endTransactionDelivery>[1]) {
+    return endTransactionDelivery(this.context, input);
+  }
+
+  recordOfflineStop(
+    input: Parameters<typeof recordOfflineTransactionStopDelivery>[1],
+  ) {
+    return recordOfflineTransactionStopDelivery(this.context, input);
+  }
+
+  resolveBinding(transaction: Transaction): TransactionDeliveryBinding {
+    return resolveTransactionDeliveryBinding(this.context, transaction);
+  }
+
+  shouldQueue(transactionId: string): boolean {
+    return shouldQueueTransactionDelivery(this.context, transactionId);
+  }
+
+  recordOfflineMeterValue(
+    input: Parameters<typeof recordMeterValueForOfflineDelivery>[1],
+  ) {
+    return recordMeterValueForOfflineDelivery(this.context, input);
+  }
+
+  bindOfflineStart(localTransactionId: string, input: { ocppTransactionId: number }): void {
+    bindOfflineTransactionStart(this.context, localTransactionId, input);
+  }
+
+  recordOcppBinding(localTransactionId: string, input: { ocppTransactionId: number }): void {
+    recordOcppTransactionBinding(this.context, localTransactionId, input);
+  }
+
+  listPendingOfflineTransactions(): OfflineTransactionRecord[] {
+    return listPendingOfflineTransactions(this.context);
+  }
+
+  getOfflineTransactionRecord(
+    localTransactionId: string,
+  ): OfflineTransactionRecord | undefined {
+    return getOfflineTransactionRecord(this.context, localTransactionId);
+  }
+
+  markMeterValueReplayed(localTransactionId: string, index: number): void {
+    markOfflineMeterValueReplayed(this.context, localTransactionId, index);
+  }
+
+  markStopReplayed(localTransactionId: string): void {
+    markOfflineStopReplayed(this.context, localTransactionId);
+  }
+
+  isOfflineDeliveryError(cause: unknown): boolean {
+    return isOfflineDeliveryError(cause);
+  }
+
+  recordTransactionMeterValue(input: { transactionId: string; meterWh: number }): Transaction {
+    return recordTransactionMeterValue(this.context, input);
+  }
+
+  calculateNextMeterWh(input: { transaction: Transaction; intervalSec: number }): number {
+    return calculateNextMeterWh(this.context, input);
+  }
+
+  resolveTransactionMeasurements(transaction: Transaction): MeterValueElectricalMeasurements {
+    return resolveTransactionMeasurements(this.context, transaction);
   }
 }
 

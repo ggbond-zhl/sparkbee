@@ -18,10 +18,7 @@ import {
 import { toRequestErrorInfo } from "../requestErrors";
 import { parseOptionalDate } from "../responseParsers";
 import type { Ocpp16RuntimeContext } from "../state";
-import {
-  recordOfflineTransactionStartDelivery,
-  recordOnlineTransactionStart,
-} from "../Ocpp16TransactionDelivery";
+import { getOcpp16TransactionDelivery } from "../Ocpp16TransactionDelivery";
 import { startMeterValueLoop } from "./meterValues";
 import { sendStatusNotification } from "./statusNotification";
 import type {
@@ -191,7 +188,7 @@ export async function startTransaction(
     };
   }
 
-  const { transactionId } = recordOnlineTransactionStart(context, {
+  const { transactionId } = getOcpp16TransactionDelivery(context).recordOnlineStart({
     selection,
     startInput: input,
     ocppTransactionId: startTransactionResult.ocppTransactionId,
@@ -230,7 +227,7 @@ function startOfflineTransaction(
     authorizationSource: AuthorizationSource | undefined;
   },
 ): Ocpp16TransactionStartResult {
-  const { transactionId } = recordOfflineTransactionStartDelivery(context, {
+  const { transactionId } = getOcpp16TransactionDelivery(context).recordOfflineStart({
     selection: input.selection,
     startInput: input.input,
     startedAt: input.at,

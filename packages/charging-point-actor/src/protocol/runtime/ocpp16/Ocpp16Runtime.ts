@@ -255,7 +255,7 @@ export class Ocpp16Runtime {
       try {
         listener(event);
       } catch {
-        // Runtime observers are diagnostic only and must not affect protocol flow.
+        // Runtime observers are runtime-log only and must not affect protocol flow.
       }
     }
   };

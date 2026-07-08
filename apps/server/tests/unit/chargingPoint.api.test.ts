@@ -864,6 +864,13 @@ describe("chargingPoint management API", () => {
       event: "protocol.message",
       data: actorEvent,
     });
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "snapshot",
+      data: {
+        ...expectedRuntimeSnapshot(chargingPoint.id, "running"),
+        lastHeartbeatAt: null,
+      },
+    });
     await reader.cancel();
   });
 
@@ -922,6 +929,17 @@ describe("chargingPoint management API", () => {
     await expect(readSseEvent(reader)).resolves.toEqual({
       event: "session.status",
       data: actorEvent,
+    });
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "snapshot",
+      data: {
+        ...expectedRuntimeSnapshot(chargingPoint.id, "running"),
+        sessionStatus: {
+          currentStatus: "online",
+          occurredAt: "2026-06-28T00:00:00.000Z",
+          connectionUrl: "ws://localhost:9000/ocpp/CP001",
+        },
+      },
     });
     await reader.cancel();
   });
@@ -1026,6 +1044,17 @@ describe("chargingPoint management API", () => {
     await expect(readSseEvent(reader)).resolves.toEqual({
       event: "session.status",
       data: restartedEvent,
+    });
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "snapshot",
+      data: {
+        ...expectedRuntimeSnapshot(chargingPoint.id, "running"),
+        sessionStatus: {
+          currentStatus: "online",
+          occurredAt: "2026-06-28T00:00:01.000Z",
+          connectionUrl: "ws://localhost:9000/ocpp/CP001",
+        },
+      },
     });
     await reader.cancel();
   });
@@ -1733,12 +1762,12 @@ describe("chargingPoint management API", () => {
     expect(actorCentralSystemUrl).toBe("ws://localhost:9000/ocpp/CP001");
   });
 
-  test("injects a diagnostic sink when starting a chargingPoint", async () => {
+  test("injects a runtime log sink when starting a chargingPoint", async () => {
     const database = await createTestDatabase();
     let actorOptions: ChargingPointActorOptions | undefined;
     const app = createApp({
       database,
-      diagnosticDirectory: "logs/diagnostics",
+      runtimeLogDirectory: "logs/runtime",
       createChargingPointActor: (options) => {
         actorOptions = options;
         return createActorDouble({
@@ -1771,8 +1800,8 @@ describe("chargingPoint management API", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(actorOptions?.diagnosticSink).toBeDefined();
-    expect(typeof actorOptions?.diagnosticSink?.write).toBe("function");
+    expect(actorOptions?.runtimeLogSink).toBeDefined();
+    expect(typeof actorOptions?.runtimeLogSink?.write).toBe("function");
   });
 
   test("maps Boot Pending to starting status", async () => {

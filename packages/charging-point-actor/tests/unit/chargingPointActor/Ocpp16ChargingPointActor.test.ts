@@ -4,8 +4,8 @@ import { afterEach, describe, expect, vi, test } from "vitest";
 import { Ocpp16ChargingPointActor } from "../../../src/chargingPointActor/ocpp16/Ocpp16ChargingPointActor";
 import { ChargingPointActorError } from "../../../src/chargingPointActor/errors";
 import type {
-  ChargingPointActorDiagnosticRecord,
-  ChargingPointActorDiagnosticSink,
+  ChargingPointActorRuntimeLogRecord,
+  ChargingPointActorRuntimeLogSink,
   ChargingPointActorEvent,
   ChargingPointActorEventType,
 } from "../../../src/chargingPointActor/index.ts";
@@ -14,7 +14,7 @@ import {
   type ISession,
   type OutboundRequestResult,
   type ProtocolMessageEvent,
-  type SessionDiagnostic,
+  type SessionLogEntry,
   type SessionConnectionState,
   type SessionEvents,
 } from "../../../src/protocol/session/types.ts";
@@ -114,8 +114,8 @@ class FakeSession implements ISession {
     this.emitter.emit("protocolMessage", event);
   }
 
-  emitSessionError(diagnostic: SessionDiagnostic): void {
-    this.emitter.emit("sessionError", diagnostic);
+  emitSessionError(runtimeLog: SessionLogEntry): void {
+    this.emitter.emit("sessionError", runtimeLog);
   }
 }
 
@@ -602,7 +602,7 @@ function mapAuthorizationStatus(
 }
 
 function createHarness(dependencies: {
-  diagnosticSink?: ChargingPointActorDiagnosticSink;
+  runtimeLogSink?: ChargingPointActorRuntimeLogSink;
 } = {}) {
   const session = new FakeSession();
   const protocolRuntime = new FakeProtocolRuntime();
@@ -612,7 +612,7 @@ function createHarness(dependencies: {
       protocol: "OCPP16J",
       centralSystemUrl: "ws://localhost/cp-1",
       chargingPoint: createChargingPoint(),
-      diagnosticSink: dependencies.diagnosticSink,
+      runtimeLogSink: dependencies.runtimeLogSink,
     },
     {
       session,
@@ -629,7 +629,7 @@ function createRuntimeHarness(
   replies: ConstructorParameters<typeof RuntimeFakeSession>[0],
   dependencies: {
     configurationCatalog?: Ocpp16RuntimeOptions["configurationCatalog"];
-    diagnosticSink?: ChargingPointActorDiagnosticSink;
+    runtimeLogSink?: ChargingPointActorRuntimeLogSink;
   } = {},
 ) {
   const session = new RuntimeFakeSession(replies);
@@ -639,7 +639,7 @@ function createRuntimeHarness(
       protocol: "OCPP16J",
       centralSystemUrl: "ws://localhost/cp-1",
       chargingPoint: createChargingPoint(),
-      diagnosticSink: dependencies.diagnosticSink,
+      runtimeLogSink: dependencies.runtimeLogSink,
     },
     {
       session,
@@ -701,12 +701,12 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(actor.status).toBe("running");
   });
 
-  test("writes diagnostic records for actor lifecycle transitions", async () => {
-    const diagnostics: ChargingPointActorDiagnosticRecord[] = [];
+  test("writes runtime log records for actor lifecycle transitions", async () => {
+    const runtimeLogs: ChargingPointActorRuntimeLogRecord[] = [];
     const { actor } = createHarness({
-      diagnosticSink: {
+      runtimeLogSink: {
         write: (record) => {
-          diagnostics.push(record);
+          runtimeLogs.push(record);
         },
       },
     });
@@ -714,7 +714,7 @@ describe("Ocpp16ChargingPointActor", () => {
     await actor.start();
     await actor.stop();
 
-    expect(diagnostics).toEqual([
+    expect(runtimeLogs).toEqual([
       expect.objectContaining({
         id: "event-1",
         sequence: 1,
@@ -749,20 +749,20 @@ describe("Ocpp16ChargingPointActor", () => {
     ]);
   });
 
-  test("isolates diagnostic sink failures from actor operations", async () => {
+  test("isolates runtime log sink failures from actor operations", async () => {
     const unhandledRejections: unknown[] = [];
     const handleUnhandledRejection = (reason: unknown): void => {
       unhandledRejections.push(reason);
     };
     process.on("unhandledRejection", handleUnhandledRejection);
     const { actor } = createHarness({
-      diagnosticSink: {
+      runtimeLogSink: {
         write: (record) => {
           if (record.sequence === 1) {
-            throw new Error("diagnostic write failed");
+            throw new Error("runtime log write failed");
           }
 
-          return Promise.reject(new Error("async diagnostic write failed"));
+          return Promise.reject(new Error("async runtime log write failed"));
         },
       },
     });
@@ -780,12 +780,12 @@ describe("Ocpp16ChargingPointActor", () => {
     }
   });
 
-  test("writes session errors as diagnostic records without raw protocol bodies", () => {
-    const diagnostics: ChargingPointActorDiagnosticRecord[] = [];
+  test("writes session errors as runtime log records without raw protocol bodies", () => {
+    const runtimeLogs: ChargingPointActorRuntimeLogRecord[] = [];
     const { session } = createHarness({
-      diagnosticSink: {
+      runtimeLogSink: {
         write: (record) => {
-          diagnostics.push(record);
+          runtimeLogs.push(record);
         },
       },
     });
@@ -798,13 +798,13 @@ describe("Ocpp16ChargingPointActor", () => {
       error: new SessionError("DECODE_ERROR", "Invalid inbound message"),
     });
 
-    expect(diagnostics).toEqual([
+    expect(runtimeLogs).toEqual([
       expect.objectContaining({
         sequence: 1,
         chargingPointId: "cp-1",
         level: "error",
         code: "DECODE_ERROR",
-        message: "Charging point session reported diagnostic error",
+        message: "Charging point session reported session error",
         context: {
           source: "decode",
           action: "BootNotification",
@@ -818,12 +818,12 @@ describe("Ocpp16ChargingPointActor", () => {
     ]);
   });
 
-  test("writes session connection changes as diagnostic records", () => {
-    const diagnostics: ChargingPointActorDiagnosticRecord[] = [];
+  test("writes session connection changes as runtime log records", () => {
+    const runtimeLogs: ChargingPointActorRuntimeLogRecord[] = [];
     const { session } = createHarness({
-      diagnosticSink: {
+      runtimeLogSink: {
         write: (record) => {
-          diagnostics.push(record);
+          runtimeLogs.push(record);
         },
       },
     });
@@ -832,7 +832,7 @@ describe("Ocpp16ChargingPointActor", () => {
     session.emitReconnecting(2, new SessionError("CONNECT_FAILED", "Connection failed"));
     session.emitOffline();
 
-    expect(diagnostics).toEqual([
+    expect(runtimeLogs).toEqual([
       expect.objectContaining({
         sequence: 1,
         level: "info",
@@ -864,8 +864,8 @@ describe("Ocpp16ChargingPointActor", () => {
     ]);
   });
 
-  test("writes startup protocol actions as diagnostic records", async () => {
-    const diagnostics: ChargingPointActorDiagnosticRecord[] = [];
+  test("writes startup protocol actions as runtime log records", async () => {
+    const runtimeLogs: ChargingPointActorRuntimeLogRecord[] = [];
     const { actor } = createRuntimeHarness(
       [
         runtimeBootAccepted(),
@@ -873,9 +873,9 @@ describe("Ocpp16ChargingPointActor", () => {
         runtimeResponse("StatusNotification", {}),
       ],
       {
-        diagnosticSink: {
+        runtimeLogSink: {
           write: (record) => {
-            diagnostics.push(record);
+            runtimeLogs.push(record);
           },
         },
       },
@@ -883,14 +883,14 @@ describe("Ocpp16ChargingPointActor", () => {
 
     await actor.start();
 
-    const actionDiagnostics = diagnostics.filter((record) =>
+    const actionRuntimeLogs = runtimeLogs.filter((record) =>
       record.context?.category === "action"
     );
-    const bootStarted = actionDiagnostics.find((record) =>
+    const bootStarted = actionRuntimeLogs.find((record) =>
       record.context?.name === "BootNotification" &&
       record.context.phase === "started"
     );
-    const bootCompleted = actionDiagnostics.find((record) =>
+    const bootCompleted = actionRuntimeLogs.find((record) =>
       record.context?.name === "BootNotification" &&
       record.context.phase === "completed"
     );
@@ -920,7 +920,7 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(bootCompleted?.context?.operationId).toBe(
       bootStarted?.context?.operationId,
     );
-    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+    expect(actionRuntimeLogs).toContainEqual(expect.objectContaining({
       code: "OCPP16_ACTION_STARTED",
       context: expect.objectContaining({
         category: "action",
@@ -928,7 +928,7 @@ describe("Ocpp16ChargingPointActor", () => {
         name: "StatusNotification",
       }),
     }));
-    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+    expect(actionRuntimeLogs).toContainEqual(expect.objectContaining({
       code: "OCPP16_ACTION_COMPLETED",
       context: expect.objectContaining({
         category: "action",

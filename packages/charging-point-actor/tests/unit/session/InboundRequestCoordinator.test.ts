@@ -3,7 +3,7 @@ import { afterEach, describe, expect, vi, test } from "vitest";
 import type { RequestMessage } from "../../../src/protocol/types.ts";
 import { InboundRequestCoordinator } from "../../../src/protocol/session/internal/InboundRequestCoordinator.ts";
 import { ProtocolMessageSender } from "../../../src/protocol/session/internal/ProtocolMessageSender.ts";
-import type { InboundRequest, SessionDiagnostic } from "../../../src/protocol/session/types.ts";
+import type { InboundRequest, SessionLogEntry } from "../../../src/protocol/session/types.ts";
 import {
   createValidator,
   ConfigurableCodec,
@@ -32,7 +32,7 @@ describe("InboundRequestCoordinator", () => {
   test("emits validated inbound requests and sends successful replies", async () => {
     const transport = new MemoryTransport();
     const emittedRequests: InboundRequest[] = [];
-    const diagnostics: SessionDiagnostic[] = [];
+    const runtimeLogs: SessionLogEntry[] = [];
     const coordinator = new InboundRequestCoordinator({
       validator: createValidator(),
       inboundResponseTimeoutMs: 5_000,
@@ -40,8 +40,8 @@ describe("InboundRequestCoordinator", () => {
       emitInboundRequest: (request) => {
         emittedRequests.push(request);
       },
-      emitSessionDiagnostic: (diagnostic) => {
-        diagnostics.push(diagnostic);
+      emitSessionLog: (runtimeLog) => {
+        runtimeLogs.push(runtimeLog);
       },
     });
 
@@ -54,7 +54,7 @@ describe("InboundRequestCoordinator", () => {
 
     await inboundRequest.respond({ accepted: true });
 
-    expect(diagnostics).toHaveLength(0);
+    expect(runtimeLogs).toHaveLength(0);
     expect(JSON.parse(transport.sentMessages[0] as string)).toEqual({
       kind: "response",
       messageId: "msg-1",
@@ -91,7 +91,7 @@ describe("InboundRequestCoordinator", () => {
       emitInboundRequest: (request) => {
         emittedRequests.push(request);
       },
-      emitSessionDiagnostic: () => {},
+      emitSessionLog: () => {},
     });
 
     await coordinator.handleInboundRequest(createRequestMessage());
@@ -121,12 +121,12 @@ describe("InboundRequestCoordinator", () => {
     });
   });
 
-  test("reports diagnostics when invalid inbound requests cannot be auto-rejected", async () => {
+  test("reports runtimeLogs when invalid inbound requests cannot be auto-rejected", async () => {
     const transport = new MemoryTransport();
     transport.sendImplementation = async () => {
       throw new Error("send exploded");
     };
-    const diagnostics: SessionDiagnostic[] = [];
+    const runtimeLogs: SessionLogEntry[] = [];
     const coordinator = new InboundRequestCoordinator({
       validator: createValidator(() => ({
         success: false,
@@ -143,15 +143,15 @@ describe("InboundRequestCoordinator", () => {
       emitInboundRequest: () => {
         throw new Error("should not emit request");
       },
-      emitSessionDiagnostic: (diagnostic) => {
-        diagnostics.push(diagnostic);
+      emitSessionLog: (runtimeLog) => {
+        runtimeLogs.push(runtimeLog);
       },
     });
 
     await coordinator.handleInboundRequest(createRequestMessage());
 
-    expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]).toMatchObject({
+    expect(runtimeLogs).toHaveLength(1);
+    expect(runtimeLogs[0]).toMatchObject({
       source: "inbound_request",
       action: "Heartbeat",
       messageId: "msg-1",
@@ -159,23 +159,23 @@ describe("InboundRequestCoordinator", () => {
         code: "INBOUND_REQUEST_REPLY_FAILED",
       },
     });
-    expect("requestId" in diagnostics[0]!).toBe(false);
+    expect("requestId" in runtimeLogs[0]!).toBe(false);
   });
 
-  test("reports diagnostics when timeout auto replies fail to send", async () => {
+  test("reports runtimeLogs when timeout auto replies fail to send", async () => {
     vi.useFakeTimers();
     const transport = new MemoryTransport();
     transport.sendImplementation = async () => {
       throw new Error("send exploded");
     };
-    const diagnostics: SessionDiagnostic[] = [];
+    const runtimeLogs: SessionLogEntry[] = [];
     const coordinator = new InboundRequestCoordinator({
       validator: createValidator(),
       inboundResponseTimeoutMs: 1_000,
       messageSender: createMessageSender(transport),
       emitInboundRequest: () => {},
-      emitSessionDiagnostic: (diagnostic) => {
-        diagnostics.push(diagnostic);
+      emitSessionLog: (runtimeLog) => {
+        runtimeLogs.push(runtimeLog);
       },
     });
 
@@ -184,8 +184,8 @@ describe("InboundRequestCoordinator", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await flushMicrotasks();
 
-    expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]).toMatchObject({
+    expect(runtimeLogs).toHaveLength(1);
+    expect(runtimeLogs[0]).toMatchObject({
       source: "inbound_request",
       action: "Heartbeat",
       messageId: "msg-1",
@@ -193,6 +193,6 @@ describe("InboundRequestCoordinator", () => {
         code: "INBOUND_REQUEST_REPLY_FAILED",
       },
     });
-    expect("requestId" in diagnostics[0]!).toBe(false);
+    expect("requestId" in runtimeLogs[0]!).toBe(false);
   });
 });

@@ -31,7 +31,7 @@ export interface HeaderMetricItem {
 export interface ChargingPointDetailHeaderModel {
   connectorCountLabel: string;
   finalConnectionUrl: string | null;
-  runtimeDiagnostics: HeaderMetricItem[];
+  runtimeSummaryItems: HeaderMetricItem[];
   mainStatus: HeaderStatusItem;
   sessionStatus: HeaderStatusItem;
   chargingPointStatus: HeaderStatusItem;
@@ -66,7 +66,7 @@ export function buildChargingPointDetailHeaderModel({
   const base = {
     connectorCountLabel,
     finalConnectionUrl: toFinalConnectionUrl(runtimeEventState),
-    runtimeDiagnostics: toRuntimeDiagnostics(
+    runtimeSummaryItems: toRuntimeSummaryItems(
       runtimeStatus,
       statusQueryState,
       runtimeEventState,
@@ -262,28 +262,28 @@ function toBootSummary(
   return fallback;
 }
 
-function toRuntimeDiagnostics(
+function toRuntimeSummaryItems(
   runtimeStatus: RuntimeOperationResponse | undefined,
   statusQueryState: RuntimeStatusQueryState,
   runtimeEventState: ChargingPointRuntimeEventState | undefined,
 ): HeaderMetricItem[] {
-  const sessionDiagnostic = toSessionDiagnostic(
+  const sessionSummaryItem = toSessionLogEntry(
     runtimeStatus,
     statusQueryState,
     runtimeEventState,
   );
   const recentIssue = toRecentIssue(runtimeEventState);
 
-  const diagnostics: HeaderMetricItem[] = [
+  const runtimeLogs: HeaderMetricItem[] = [
     {
       label: "Boot",
-      value: toBootDiagnostic(runtimeStatus, statusQueryState),
-      tone: toBootDiagnosticTone(runtimeStatus, statusQueryState),
+      value: toBootSummaryItemValue(runtimeStatus, statusQueryState),
+      tone: toBootSummaryTone(runtimeStatus, statusQueryState),
     },
     {
       label: "会话状态",
-      value: sessionDiagnostic.value,
-      tone: sessionDiagnostic.tone,
+      value: sessionSummaryItem.value,
+      tone: sessionSummaryItem.tone,
     },
     {
       label: "最近异常",
@@ -291,7 +291,7 @@ function toRuntimeDiagnostics(
       tone: recentIssue?.tone,
     },
   ];
-  return diagnostics;
+  return runtimeLogs;
 }
 
 function toFinalConnectionUrl(
@@ -303,7 +303,7 @@ function toFinalConnectionUrl(
     : connectionUrl;
 }
 
-function toSessionDiagnostic(
+function toSessionLogEntry(
   runtimeStatus: RuntimeOperationResponse | undefined,
   statusQueryState: RuntimeStatusQueryState,
   runtimeEventState: ChargingPointRuntimeEventState | undefined,
@@ -318,7 +318,7 @@ function toSessionDiagnostic(
   const item = toSessionStatusItem(runtimeStatus, runtimeEventState);
 
   return {
-    value: formatSessionDiagnosticValue(
+    value: formatSessionLogEntryValue(
       item.label,
       runtimeEventState?.sessionStatus,
     ),
@@ -326,7 +326,7 @@ function toSessionDiagnostic(
   };
 }
 
-function toBootDiagnostic(
+function toBootSummaryItemValue(
   runtimeStatus: RuntimeOperationResponse | undefined,
   statusQueryState: RuntimeStatusQueryState,
 ) {
@@ -357,7 +357,7 @@ function toBootDiagnostic(
     : "状态待同步";
 }
 
-function toBootDiagnosticTone(
+function toBootSummaryTone(
   runtimeStatus: RuntimeOperationResponse | undefined,
   statusQueryState: RuntimeStatusQueryState,
 ): HeaderTone {
@@ -380,15 +380,15 @@ function toBootDiagnosticTone(
   return "neutral";
 }
 
-function formatSessionDiagnosticValue(
+function formatSessionLogEntryValue(
   label: string,
   sessionStatus: ChargingPointRuntimeEventState["sessionStatus"] | undefined,
 ) {
-  const detail = formatSessionDiagnosticDetail(sessionStatus);
+  const detail = formatSessionLogEntryDetail(sessionStatus);
   return detail === undefined ? label : `${label} · ${detail}`;
 }
 
-function formatSessionDiagnosticDetail(
+function formatSessionLogEntryDetail(
   sessionStatus: ChargingPointRuntimeEventState["sessionStatus"] | undefined,
 ) {
   if (sessionStatus === undefined || sessionStatus === null) {

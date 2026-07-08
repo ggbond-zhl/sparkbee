@@ -276,7 +276,7 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("setQueryData<ChargingPointDetailResponse>");
     expect(detailPageSource).toContain("connectors: current.connectors.map");
     expect(detailPageSource).toContain("请先停止桩实例再编辑枪口配置。");
-    expect(detailPageSource).toContain("运行诊断");
+    expect(detailPageSource).toContain("运行摘要");
     expect(detailPageSource).not.toContain("<StatusBadge item={headerModel.sessionStatus}");
     expect(detailPageSource).not.toContain("最终连接");
     expect(detailPageSource).toContain("headerModel.finalConnectionUrl");

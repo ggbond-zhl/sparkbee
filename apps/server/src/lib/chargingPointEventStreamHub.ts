@@ -22,6 +22,7 @@ export class ChargingPointEventStreamHub {
     Set<(event: ChargingPointStreamEvent) => void>
   >();
   private readonly actorUnsubscribers = new Map<string, () => void>();
+  private readonly actors = new Map<string, ChargingPointActor>();
   private readonly projections = new Map<string, RuntimeProjection>();
 
   subscribe(
@@ -49,6 +50,7 @@ export class ChargingPointEventStreamHub {
       this.publishActorEvent(event);
     });
     this.actorUnsubscribers.set(actor.id, unsubscribe);
+    this.actors.set(actor.id, actor);
   }
 
   detachActor(chargingPointId: string): void {
@@ -59,6 +61,7 @@ export class ChargingPointEventStreamHub {
 
     unsubscribe();
     this.actorUnsubscribers.delete(chargingPointId);
+    this.actors.delete(chargingPointId);
     this.clearProjection(chargingPointId);
   }
 
@@ -105,6 +108,13 @@ export class ChargingPointEventStreamHub {
       event: event.type,
       data: event,
     });
+    this.publish(event.chargingPointId, {
+      event: "snapshot",
+      data: this.getRuntimeSnapshot(
+        event.chargingPointId,
+        toRuntimeStatusResponse(event.chargingPointId, this.actors.get(event.chargingPointId)),
+      ),
+    });
   }
 
   private publish(chargingPointId: string, event: ChargingPointStreamEvent): void {
@@ -140,6 +150,32 @@ function createEmptyProjection(): RuntimeProjection {
     transactionStatuses: [],
     lastHeartbeatAt: null,
     recentIssue: null,
+  };
+}
+
+function toRuntimeStatusResponse(
+  chargingPointId: string,
+  actor: ChargingPointActor | undefined,
+): RuntimeOperationResponse {
+  if (actor?.status === "running") {
+    return {
+      chargingPointId,
+      status: "running",
+      bootStatus: "Accepted",
+    };
+  }
+
+  if (actor?.status === "starting") {
+    return {
+      chargingPointId,
+      status: "starting",
+      bootStatus: "Pending",
+    };
+  }
+
+  return {
+    chargingPointId,
+    status: "stopped",
   };
 }
 

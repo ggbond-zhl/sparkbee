@@ -8,7 +8,7 @@ const config = loadServerConfig();
 const database = createPostgresDatabase(config.databaseUrl);
 const app = createApp({
   database,
-  diagnosticDirectory: config.diagnosticDirectory,
+  runtimeLogDirectory: config.runtimeLogDirectory,
 });
 
 serve({

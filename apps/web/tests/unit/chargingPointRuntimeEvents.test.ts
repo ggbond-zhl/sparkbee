@@ -157,54 +157,36 @@ describe("charging point runtime events", () => {
     expect(state.lastHeartbeatAt?.toISOString()).toBe("2026-07-04T09:00:05.000Z");
   });
 
-  test("maps lifecycle running events to accepted Boot status", () => {
+  test("maps snapshot messages to runtime status updates", () => {
     const runtimeStatus = toRuntimeStatusFromStreamMessage({
-      event: "chargingPoint.lifecycle",
+      event: "snapshot",
       data: {
-        type: "chargingPoint.lifecycle",
-        chargingPointId: "cp-1",
-        occurredAt: "2026-07-04T09:00:10.000Z",
-        resource: { scope: "chargingPoint" },
-        previousStatus: "starting",
-        currentStatus: "running",
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        runtimeStatus: {
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          status: "running",
+          bootStatus: "Accepted",
+        },
+        sessionStatus: null,
+        chargingPointStatus: null,
+        evseStatuses: [],
+        connectorStatuses: [],
+        transactionStatuses: [],
+        lastHeartbeatAt: null,
+        recentIssue: null,
       },
     });
 
     expect(runtimeStatus).toEqual({
-      chargingPointId: "cp-1",
+      chargingPointId: "00000000-0000-4000-8000-000000000001",
       status: "running",
       bootStatus: "Accepted",
-      retryAfterSec: undefined,
     });
   });
 
-  test("tracks session, point, connector, transaction and heartbeat states", () => {
-    let state = createChargingPointRuntimeEventState();
-
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "session.status",
-      data: {
-        type: "session.status",
-        chargingPointId: "cp-1",
-        occurredAt: "2026-07-04T09:00:00.000Z",
-        resource: { scope: "session" },
-        previousStatus: "offline",
-        currentStatus: "online",
-        connectionUrl: "ws://localhost/CP_001",
-      },
-    });
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "chargingPoint.status",
-      data: {
-        type: "chargingPoint.status",
-        chargingPointId: "cp-1",
-        occurredAt: "2026-07-04T09:00:01.000Z",
-        resource: { scope: "chargingPoint" },
-        previousStatus: null,
-        currentStatus: "available",
-      },
-    });
-    state = reduceChargingPointRuntimeEventState(state, {
+  test("keeps runtime projection state driven by snapshots only", () => {
+    const initialState = createChargingPointRuntimeEventState();
+    const state = reduceChargingPointRuntimeEventState(initialState, {
       event: "connector.status",
       data: {
         type: "connector.status",
@@ -215,84 +197,40 @@ describe("charging point runtime events", () => {
         currentStatus: "occupied",
       },
     });
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "transaction.status",
-      data: {
-        type: "transaction.status",
-        chargingPointId: "cp-1",
-        occurredAt: "2026-07-04T09:00:03.000Z",
-        resource: {
-          scope: "transaction",
-          evseId: 1,
-          connectorId: 1,
-          transactionId: "tx-1",
-        },
-        previousStatus: "starting",
-        currentStatus: "active",
-      },
-    });
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "protocol.message",
-      data: {
-        type: "protocol.message",
-        chargingPointId: "cp-1",
-        occurredAt: "2026-07-04T09:00:04.000Z",
-        resource: { scope: "protocol" },
-        direction: "received",
-        action: "Heartbeat",
-        messageId: "msg-1",
-        body: { currentTime: "2026-07-04T09:00:04.000Z" },
-      },
-    });
 
-    expect(state.sessionStatus?.currentStatus).toBe("online");
-    expect(state.chargingPointStatus?.currentStatus).toBe("available");
-    expect(state.connectorStatuses["1/1"]?.currentStatus).toBe("occupied");
-    expect(state.transactionStatuses["tx-1"]?.currentStatus).toBe("active");
-    expect(state.lastHeartbeatAt?.toISOString()).toBe("2026-07-04T09:00:04.000Z");
-    expect(state.recentIssue).toBeNull();
+    expect(state).toBe(initialState);
   });
 
-  test("records operational issues but keeps authorization rejection out of recent issue", () => {
-    let state = createChargingPointRuntimeEventState();
-
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "authorization.status",
-      data: {
-        type: "authorization.status",
-        chargingPointId: "cp-1",
-        occurredAt: "2026-07-04T09:01:00.000Z",
-        resource: {
-          scope: "authorization",
-          idTag: "CARD-001",
-          evseId: 1,
-          connectorId: 1,
-        },
-        status: "invalid",
-        source: "online",
-        protocolStatus: "Invalid",
-      },
-    });
-
-    expect(state.recentIssue).toBeNull();
-
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "session.status",
-      data: {
-        type: "session.status",
-        chargingPointId: "cp-1",
-        occurredAt: "2026-07-04T09:02:00.000Z",
-        resource: { scope: "session" },
-        previousStatus: "online",
-        currentStatus: "reconnecting",
-        connectionUrl: "ws://localhost/CP_001",
-        attempt: 2,
-        error: {
-          code: "CONNECT_FAILED",
-          message: "建立底层链路失败",
+  test("uses the server snapshot recent issue instead of deriving one from raw events", () => {
+    const state = reduceChargingPointRuntimeEventState(
+      createChargingPointRuntimeEventState(),
+      {
+        event: "snapshot",
+        data: {
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          runtimeStatus: {
+            chargingPointId: "00000000-0000-4000-8000-000000000001",
+            status: "running",
+          },
+          sessionStatus: {
+            currentStatus: "reconnecting",
+            occurredAt: "2026-07-04T09:02:00.000Z",
+            connectionUrl: "ws://localhost/CP_001",
+            attempt: 2,
+          },
+          chargingPointStatus: null,
+          evseStatuses: [],
+          connectorStatuses: [],
+          transactionStatuses: [],
+          lastHeartbeatAt: null,
+          recentIssue: {
+            label: "会话重连中: 建立底层链路失败",
+            tone: "warning",
+            occurredAt: "2026-07-04T09:02:00.000Z",
+          },
         },
       },
-    });
+    );
 
     expect(state.recentIssue).toMatchObject({
       label: "会话重连中: 建立底层链路失败",
@@ -300,34 +238,29 @@ describe("charging point runtime events", () => {
     });
   });
 
-  test("clears volatile runtime states when the actor stops", () => {
+  test("clears volatile runtime states from stopped snapshots", () => {
     let state = createChargingPointRuntimeEventState();
 
     state = reduceChargingPointRuntimeEventState(state, {
-      event: "connector.status",
+      event: "snapshot",
       data: {
-        type: "connector.status",
-        chargingPointId: "cp-1",
-        occurredAt: "2026-07-04T09:00:00.000Z",
-        resource: { scope: "connector", evseId: 1, connectorId: 1 },
-        previousStatus: null,
-        currentStatus: "occupied",
-      },
-    });
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "chargingPoint.lifecycle",
-      data: {
-        type: "chargingPoint.lifecycle",
-        chargingPointId: "cp-1",
-        occurredAt: "2026-07-04T09:05:00.000Z",
-        resource: { scope: "chargingPoint" },
-        previousStatus: "running",
-        currentStatus: "stopped",
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        runtimeStatus: {
+          chargingPointId: "00000000-0000-4000-8000-000000000001",
+          status: "stopped",
+        },
+        sessionStatus: null,
+        chargingPointStatus: null,
+        evseStatuses: [],
+        connectorStatuses: [],
+        transactionStatuses: [],
+        lastHeartbeatAt: null,
+        recentIssue: null,
       },
     });
 
     expect(state.connectorStatuses).toEqual({});
     expect(state.transactionStatuses).toEqual({});
-    expect(state.sessionStatus?.currentStatus).toBe("offline");
+    expect(state.sessionStatus).toBeNull();
   });
 });

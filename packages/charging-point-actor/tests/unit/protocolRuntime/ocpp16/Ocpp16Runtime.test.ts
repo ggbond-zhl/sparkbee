@@ -17,7 +17,7 @@ import {
   Ocpp16Runtime,
   ProtocolRuntimeError,
   type Ocpp16HeartbeatResult,
-  type Ocpp16RuntimeDiagnostic,
+  type Ocpp16RuntimeLog,
   type Ocpp16RuntimeOptions,
   type Ocpp16RuntimeEvent,
 } from "../../../../src/protocol/runtime/index.ts";
@@ -670,7 +670,7 @@ describe("Ocpp16Runtime", () => {
 
   describe("local transaction delivery", () => {
   test("runs the basic local charging happy path in protocol order", async () => {
-    const diagnostics: Ocpp16RuntimeDiagnostic[] = [];
+    const runtimeLogs: Ocpp16RuntimeLog[] = [];
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("Heartbeat", { currentTime: "2026-01-01T00:00:01.000Z" }),
@@ -691,7 +691,7 @@ describe("Ocpp16Runtime", () => {
       response("StatusNotification", {}),
       response("StopTransaction", {}),
       response("StatusNotification", {}),
-    ], { diagnostics });
+    ], { runtimeLogs });
 
     await boot(protocolRuntime);
     await protocolRuntime.sendHeartbeat();
@@ -788,8 +788,8 @@ describe("Ocpp16Runtime", () => {
       connectorId: 1,
       status: "Preparing",
     });
-    const actionDiagnostics = diagnostics.filter((diagnostic) =>
-      diagnostic.context?.category === "action"
+    const actionRuntimeLogs = runtimeLogs.filter((runtimeLog) =>
+      runtimeLog.context?.category === "action"
     );
     for (const name of [
       "PlugConnector",
@@ -797,7 +797,7 @@ describe("Ocpp16Runtime", () => {
       "MeterValues",
       "StopTransaction",
     ]) {
-      expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+      expect(actionRuntimeLogs).toContainEqual(expect.objectContaining({
         code: "OCPP16_ACTION_STARTED",
         context: expect.objectContaining({
           category: "action",
@@ -805,7 +805,7 @@ describe("Ocpp16Runtime", () => {
           name,
         }),
       }));
-      expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+      expect(actionRuntimeLogs).toContainEqual(expect.objectContaining({
         code: "OCPP16_ACTION_COMPLETED",
         context: expect.objectContaining({
           category: "action",
@@ -815,7 +815,7 @@ describe("Ocpp16Runtime", () => {
         }),
       }));
     }
-    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+    expect(actionRuntimeLogs).toContainEqual(expect.objectContaining({
       code: "OCPP16_ACTION_COMPLETED",
       context: expect.objectContaining({
         name: "MeterValues",
@@ -6075,19 +6075,19 @@ describe("Ocpp16Runtime", () => {
       bootAccepted(),
     ]);
     await boot(protocolRuntime);
-    const diagnostics = new FakeInboundRequest("TriggerMessage", {
+    const triggerRequest = new FakeInboundRequest("TriggerMessage", {
       requestedMessage: "DiagnosticsStatusNotification",
     });
     const firmware = new FakeInboundRequest("TriggerMessage", {
       requestedMessage: "FirmwareStatusNotification",
     });
 
-    await protocolRuntime.handleInboundRequest(diagnostics);
+    await protocolRuntime.handleInboundRequest(triggerRequest);
     await protocolRuntime.handleInboundRequest(firmware);
 
-    expect(diagnostics.responses).toEqual([{ status: "NotImplemented" }]);
+    expect(triggerRequest.responses).toEqual([{ status: "NotImplemented" }]);
     expect(firmware.responses).toEqual([{ status: "NotImplemented" }]);
-    expect(diagnostics.rejections).toEqual([]);
+    expect(triggerRequest.rejections).toEqual([]);
     expect(firmware.rejections).toEqual([]);
     expect(session.requests.map((item) => item.action)).toEqual([
       "BootNotification",
@@ -6110,25 +6110,25 @@ describe("Ocpp16Runtime", () => {
     ]);
   });
 
-  test("writes inbound command diagnostics for supported and unsupported commands", async () => {
-    const diagnostics: Ocpp16RuntimeDiagnostic[] = [];
-    const { protocolRuntime } = createProtocolRuntime([], { diagnostics });
+  test("writes inbound command runtimeLogs for supported and unsupported commands", async () => {
+    const runtimeLogs: Ocpp16RuntimeLog[] = [];
+    const { protocolRuntime } = createProtocolRuntime([], { runtimeLogs });
     const supported = new FakeInboundRequest("ClearCache", {}, "command-1");
     const unsupported = new FakeInboundRequest("Reset", { type: "Soft" }, "command-2");
 
     await protocolRuntime.handleInboundRequest(supported);
     await protocolRuntime.handleInboundRequest(unsupported);
 
-    const commandDiagnostics = diagnostics.filter((diagnostic) =>
-      diagnostic.context?.category === "command"
+    const commandRuntimeLogs = runtimeLogs.filter((runtimeLog) =>
+      runtimeLog.context?.category === "command"
     );
-    const supportedStarted = commandDiagnostics.find((diagnostic) =>
-      diagnostic.context?.name === "ClearCache" &&
-      diagnostic.context.phase === "started"
+    const supportedStarted = commandRuntimeLogs.find((runtimeLog) =>
+      runtimeLog.context?.name === "ClearCache" &&
+      runtimeLog.context.phase === "started"
     );
-    const supportedCompleted = commandDiagnostics.find((diagnostic) =>
-      diagnostic.context?.name === "ClearCache" &&
-      diagnostic.context.phase === "completed"
+    const supportedCompleted = commandRuntimeLogs.find((runtimeLog) =>
+      runtimeLog.context?.name === "ClearCache" &&
+      runtimeLog.context.phase === "completed"
     );
 
     expect(supportedStarted).toMatchObject({
@@ -6160,7 +6160,7 @@ describe("Ocpp16Runtime", () => {
     expect(supportedCompleted?.context?.operationId).toBe(
       supportedStarted?.context?.operationId,
     );
-    expect(commandDiagnostics).toContainEqual(expect.objectContaining({
+    expect(commandRuntimeLogs).toContainEqual(expect.objectContaining({
       level: "warn",
       code: "OCPP16_COMMAND_REJECTED",
       context: expect.objectContaining({
@@ -6177,10 +6177,10 @@ describe("Ocpp16Runtime", () => {
     }));
   });
 
-  test("writes failed command diagnostics when the handler rejects the request", async () => {
-    const diagnostics: Ocpp16RuntimeDiagnostic[] = [];
+  test("writes failed command runtimeLogs when the handler rejects the request", async () => {
+    const runtimeLogs: Ocpp16RuntimeLog[] = [];
     const { protocolRuntime } = createProtocolRuntime([], {
-      diagnostics,
+      runtimeLogs,
       configurationCatalog: {
         chargingPointId: "cp-1",
         protocolVersion: "OCPP16J",
@@ -6206,15 +6206,15 @@ describe("Ocpp16Runtime", () => {
 
     await protocolRuntime.handleInboundRequest(request);
 
-    const started = diagnostics.find((diagnostic) =>
-      diagnostic.context?.category === "command" &&
-      diagnostic.context.name === "GetConfiguration" &&
-      diagnostic.context.phase === "started"
+    const started = runtimeLogs.find((runtimeLog) =>
+      runtimeLog.context?.category === "command" &&
+      runtimeLog.context.name === "GetConfiguration" &&
+      runtimeLog.context.phase === "started"
     );
-    const failed = diagnostics.find((diagnostic) =>
-      diagnostic.context?.category === "command" &&
-      diagnostic.context.name === "GetConfiguration" &&
-      diagnostic.context.phase === "failed"
+    const failed = runtimeLogs.find((runtimeLog) =>
+      runtimeLog.context?.category === "command" &&
+      runtimeLog.context.name === "GetConfiguration" &&
+      runtimeLog.context.phase === "failed"
     );
 
     expect(failed).toMatchObject({
@@ -6241,8 +6241,8 @@ describe("Ocpp16Runtime", () => {
     expect(failed?.context?.operationId).toBe(started?.context?.operationId);
   });
 
-  test("separates accepted remote command diagnostics from follow-up action diagnostics", async () => {
-    const diagnostics: Ocpp16RuntimeDiagnostic[] = [];
+  test("separates accepted remote command runtimeLogs from follow-up action runtimeLogs", async () => {
+    const runtimeLogs: Ocpp16RuntimeLog[] = [];
     const { protocolRuntime } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
@@ -6251,7 +6251,7 @@ describe("Ocpp16Runtime", () => {
         idTagInfo: { status: "Accepted" },
       }),
       response("StatusNotification", {}),
-    ], { diagnostics });
+    ], { runtimeLogs });
     await boot(protocolRuntime);
     await protocolRuntime.plugConnector({ evseId: 1, connectorId: 1 });
     const request = new FakeInboundRequest("RemoteStartTransaction", {
@@ -6261,22 +6261,22 @@ describe("Ocpp16Runtime", () => {
 
     await protocolRuntime.handleInboundRequest(request);
 
-    const commandCompletedIndex = diagnostics.findIndex((diagnostic) =>
-      diagnostic.context?.category === "command" &&
-      diagnostic.context.name === "RemoteStartTransaction" &&
-      diagnostic.context.phase === "completed"
+    const commandCompletedIndex = runtimeLogs.findIndex((runtimeLog) =>
+      runtimeLog.context?.category === "command" &&
+      runtimeLog.context.name === "RemoteStartTransaction" &&
+      runtimeLog.context.phase === "completed"
     );
-    const startActionStartedIndex = diagnostics.findIndex((diagnostic) =>
-      diagnostic.context?.category === "action" &&
-      diagnostic.context.name === "StartTransaction" &&
-      diagnostic.context.phase === "started"
+    const startActionStartedIndex = runtimeLogs.findIndex((runtimeLog) =>
+      runtimeLog.context?.category === "action" &&
+      runtimeLog.context.name === "StartTransaction" &&
+      runtimeLog.context.phase === "started"
     );
 
     expect(request.responses).toEqual([{ status: "Accepted" }]);
     expect(commandCompletedIndex).toBeGreaterThan(-1);
     expect(startActionStartedIndex).toBeGreaterThan(-1);
     expect(commandCompletedIndex).toBeLessThan(startActionStartedIndex);
-    expect(diagnostics[commandCompletedIndex]).toMatchObject({
+    expect(runtimeLogs[commandCompletedIndex]).toMatchObject({
       code: "OCPP16_COMMAND_COMPLETED",
       context: {
         category: "command",
@@ -6292,8 +6292,8 @@ describe("Ocpp16Runtime", () => {
     });
   });
 
-  test("writes heartbeat and rejected authorize action diagnostics", async () => {
-    const diagnostics: Ocpp16RuntimeDiagnostic[] = [];
+  test("writes heartbeat and rejected authorize action runtimeLogs", async () => {
+    const runtimeLogs: Ocpp16RuntimeLog[] = [];
     const { protocolRuntime } = createProtocolRuntime([
       bootAccepted(),
       response("Heartbeat", { currentTime: "2026-01-01T00:00:00.000Z" }),
@@ -6302,16 +6302,16 @@ describe("Ocpp16Runtime", () => {
           status: "Invalid",
         },
       }),
-    ], { diagnostics });
+    ], { runtimeLogs });
     await boot(protocolRuntime);
 
     await protocolRuntime.sendHeartbeat();
     await protocolRuntime.authorize({ connectorId: 1, idTag: "CARD001" });
 
-    const actionDiagnostics = diagnostics.filter((diagnostic) =>
-      diagnostic.context?.category === "action"
+    const actionRuntimeLogs = runtimeLogs.filter((runtimeLog) =>
+      runtimeLog.context?.category === "action"
     );
-    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+    expect(actionRuntimeLogs).toContainEqual(expect.objectContaining({
       code: "OCPP16_ACTION_STARTED",
       context: expect.objectContaining({
         category: "action",
@@ -6319,7 +6319,7 @@ describe("Ocpp16Runtime", () => {
         name: "Heartbeat",
       }),
     }));
-    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+    expect(actionRuntimeLogs).toContainEqual(expect.objectContaining({
       level: "info",
       code: "OCPP16_ACTION_COMPLETED",
       context: expect.objectContaining({
@@ -6330,7 +6330,7 @@ describe("Ocpp16Runtime", () => {
         durationMs: 0,
       }),
     }));
-    expect(actionDiagnostics).toContainEqual(expect.objectContaining({
+    expect(actionRuntimeLogs).toContainEqual(expect.objectContaining({
       level: "warn",
       code: "OCPP16_ACTION_REJECTED",
       message: "OCPP 1.6 action rejected",

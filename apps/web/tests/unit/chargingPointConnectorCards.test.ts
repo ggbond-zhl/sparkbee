@@ -8,7 +8,6 @@ import { buildConnectorCardModels } from "../../src/features/charging-points/mod
 import {
   createChargingPointRuntimeEventState,
   reduceChargingPointRuntimeEventState,
-  type ChargingPointRuntimeEventState,
 } from "../../src/features/charging-points/model/chargingPointRuntimeEvents";
 
 const chargingPointId = "00000000-0000-4000-8000-000000000001";
@@ -38,29 +37,60 @@ function runtimeStatus(
   };
 }
 
-function reduceConnectorStatus(
-  state: ChargingPointRuntimeEventState,
-  status: "available" | "occupied" | "unavailable" | "faulted",
-) {
-  return reduceChargingPointRuntimeEventState(state, {
-    event: "connector.status",
+function createRuntimeState(input: {
+  connectorStatus: "available" | "occupied" | "unavailable" | "faulted";
+  transaction?: {
+    status: "active" | "rejected";
+    meterWh?: number;
+  };
+}) {
+  return reduceChargingPointRuntimeEventState(createChargingPointRuntimeEventState(), {
+    event: "snapshot",
     data: {
-      type: "connector.status",
       chargingPointId,
-      occurredAt: "2026-07-04T09:00:00.000Z",
-      resource: { scope: "connector", evseId: 1, connectorId: 1 },
-      previousStatus: null,
-      currentStatus: status,
+      runtimeStatus: runtimeStatus("running"),
+      sessionStatus: null,
+      chargingPointStatus: null,
+      evseStatuses: [],
+      connectorStatuses: [
+        {
+          evseId: 1,
+          connectorId: 1,
+          currentStatus: input.connectorStatus,
+          occurredAt: "2026-07-04T09:00:00.000Z",
+        },
+      ],
+      transactionStatuses: input.transaction === undefined
+        ? []
+        : [
+        {
+          transactionId: input.transaction.status === "active" ? "tx-1" : "1/1",
+          evseId: 1,
+          connectorId: 1,
+          currentStatus: input.transaction.status,
+          ...(input.transaction.status === "rejected"
+            ? { reason: "未找到有效授权" }
+            : {}),
+          ...(input.transaction.meterWh === undefined
+            ? {}
+            : {
+                meterWh: input.transaction.meterWh,
+                sampledAt: "2026-07-04T09:00:02.000Z",
+              }),
+          occurredAt: input.transaction.meterWh === undefined
+            ? "2026-07-04T09:00:01.000Z"
+            : "2026-07-04T09:00:02.000Z",
+        },
+      ],
+      lastHeartbeatAt: null,
+      recentIssue: null,
     },
   });
 }
 
 describe("charging point connector cards", () => {
   test("shows only plug action for a running available connector", () => {
-    const state = reduceConnectorStatus(
-      createChargingPointRuntimeEventState(),
-      "available",
-    );
+    const state = createRuntimeState({ connectorStatus: "available" });
 
     const [model] = buildConnectorCardModels({
       connectors: [connector],
@@ -80,10 +110,7 @@ describe("charging point connector cards", () => {
   });
 
   test("shows unplug and start charging actions for a plugged connector without transaction", () => {
-    const state = reduceConnectorStatus(
-      createChargingPointRuntimeEventState(),
-      "occupied",
-    );
+    const state = createRuntimeState({ connectorStatus: "occupied" });
 
     const [model] = buildConnectorCardModels({
       connectors: [connector],
@@ -103,40 +130,11 @@ describe("charging point connector cards", () => {
   });
 
   test("shows only stop charging action when the connector has an active transaction", () => {
-    let state = reduceConnectorStatus(
-      createChargingPointRuntimeEventState(),
-      "occupied",
-    );
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "transaction.status",
-      data: {
-        type: "transaction.status",
-        chargingPointId,
-        occurredAt: "2026-07-04T09:00:01.000Z",
-        resource: {
-          scope: "transaction",
-          evseId: 1,
-          connectorId: 1,
-          transactionId: "tx-1",
-        },
-        previousStatus: "starting",
-        currentStatus: "active",
-      },
-    });
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "transaction.meterValue",
-      data: {
-        type: "transaction.meterValue",
-        chargingPointId,
-        occurredAt: "2026-07-04T09:00:02.000Z",
-        resource: {
-          scope: "transaction",
-          evseId: 1,
-          connectorId: 1,
-          transactionId: "tx-1",
-        },
+    const state = createRuntimeState({
+      connectorStatus: "occupied",
+      transaction: {
+        status: "active",
         meterWh: 1200,
-        sampledAt: "2026-07-04T09:00:02.000Z",
       },
     });
 
@@ -162,10 +160,7 @@ describe("charging point connector cards", () => {
   });
 
   test("hides actions when the charging point is not running", () => {
-    const state = reduceConnectorStatus(
-      createChargingPointRuntimeEventState(),
-      "available",
-    );
+    const state = createRuntimeState({ connectorStatus: "available" });
 
     const [model] = buildConnectorCardModels({
       connectors: [connector],
@@ -178,24 +173,11 @@ describe("charging point connector cards", () => {
   });
 
   test("formats meter value with 3 decimal places", () => {
-    let state = reduceConnectorStatus(
-      createChargingPointRuntimeEventState(),
-      "occupied",
-    );
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "transaction.meterValue",
-      data: {
-        type: "transaction.meterValue",
-        chargingPointId,
-        occurredAt: "2026-07-04T09:00:02.000Z",
-        resource: {
-          scope: "transaction",
-          evseId: 1,
-          connectorId: 1,
-          transactionId: "tx-1",
-        },
+    const state = createRuntimeState({
+      connectorStatus: "occupied",
+      transaction: {
+        status: "active",
         meterWh: 116.66666666666667,
-        sampledAt: "2026-07-04T09:00:02.000Z",
       },
     });
 
@@ -209,10 +191,7 @@ describe("charging point connector cards", () => {
   });
 
   test("shows connector issue without exposing unavailable actions", () => {
-    const state = reduceConnectorStatus(
-      createChargingPointRuntimeEventState(),
-      "faulted",
-    );
+    const state = createRuntimeState({ connectorStatus: "faulted" });
 
     const [model] = buildConnectorCardModels({
       connectors: [connector],
@@ -228,24 +207,10 @@ describe("charging point connector cards", () => {
   });
 
   test("keeps rejected transaction attempts out of current connector state", () => {
-    let state = reduceConnectorStatus(
-      createChargingPointRuntimeEventState(),
-      "occupied",
-    );
-    state = reduceChargingPointRuntimeEventState(state, {
-      event: "transaction.status",
-      data: {
-        type: "transaction.status",
-        chargingPointId,
-        occurredAt: "2026-07-04T09:00:01.000Z",
-        resource: {
-          scope: "transaction",
-          evseId: 1,
-          connectorId: 1,
-        },
-        previousStatus: null,
-        currentStatus: "rejected",
-        reason: "未找到有效授权",
+    const state = createRuntimeState({
+      connectorStatus: "occupied",
+      transaction: {
+        status: "rejected",
       },
     });
 

@@ -5,7 +5,7 @@ import { createMeterValue } from "../payloadBuilders";
 import { emitTransactionMeterValue } from "../events";
 import { requireOcppConnectorId } from "../resourceAccess";
 import { requireConnectorSelection } from "../connectorSelection";
-import { traceOcpp16RuntimeOperation } from "../diagnostics";
+import { traceOcpp16RuntimeOperation } from "../runtimeLogs";
 import { getUnexpectedResponseFields, toRequestErrorInfo } from "../requestErrors";
 import type { Ocpp16RuntimeContext } from "../state";
 import type {
@@ -13,14 +13,8 @@ import type {
   Ocpp16MeterValuesResult,
 } from "../types";
 import {
-  calculateNextMeterWh,
-  isOfflineDeliveryError,
-  recordMeterValueForOfflineDelivery,
-  recordTransactionMeterValue,
+  getOcpp16TransactionDelivery,
   resolveConnectorMeasurements,
-  resolveTransactionDeliveryBinding,
-  resolveTransactionMeasurements,
-  shouldQueueTransactionDelivery,
 } from "../Ocpp16TransactionDelivery";
 
 type MeterValueReadingContext = "Sample.Periodic" | "Trigger";
@@ -96,14 +90,12 @@ async function reportMeterValueWithContext(
   },
 ): Promise<Ocpp16MeterValuesResult> {
   const at = input.sampledAt ?? context.clock();
-  const updatedTransaction = recordTransactionMeterValue(context, input);
-  const deliveryBinding = resolveTransactionDeliveryBinding(
-    context,
-    updatedTransaction,
-  );
+  const transactionDelivery = getOcpp16TransactionDelivery(context);
+  const updatedTransaction = transactionDelivery.recordTransactionMeterValue(input);
+  const deliveryBinding = transactionDelivery.resolveBinding(updatedTransaction);
   if (deliveryBinding.status === "offline") {
-    const measurements = resolveTransactionMeasurements(context, updatedTransaction);
-    return recordMeterValueForOfflineDelivery(context, {
+    const measurements = transactionDelivery.resolveTransactionMeasurements(updatedTransaction);
+    return transactionDelivery.recordOfflineMeterValue({
       transaction: updatedTransaction,
       ocppConnectorId: null,
       ocppTransactionId: null,
@@ -115,9 +107,9 @@ async function reportMeterValueWithContext(
 
   const ocppTransactionId = deliveryBinding.ocppTransactionId;
   const connectorId = requireOcppConnectorId(context, updatedTransaction);
-  const measurements = resolveTransactionMeasurements(context, updatedTransaction);
-  if (shouldQueueTransactionDelivery(context, input.transactionId)) {
-    return recordMeterValueForOfflineDelivery(context, {
+  const measurements = transactionDelivery.resolveTransactionMeasurements(updatedTransaction);
+  if (transactionDelivery.shouldQueue(input.transactionId)) {
+    return transactionDelivery.recordOfflineMeterValue({
       transaction: updatedTransaction,
       ocppConnectorId: connectorId,
       ocppTransactionId,
@@ -169,8 +161,8 @@ async function reportMeterValueWithContext(
 
     return meterValuesResult;
   } catch (cause) {
-    if (isOfflineDeliveryError(cause)) {
-      return recordMeterValueForOfflineDelivery(context, {
+    if (transactionDelivery.isOfflineDeliveryError(cause)) {
+      return transactionDelivery.recordOfflineMeterValue({
         transaction: updatedTransaction,
         ocppConnectorId: connectorId,
         ocppTransactionId,
@@ -315,10 +307,10 @@ async function reportPeriodicMeterValue(
   try {
     const sampledAt = context.clock();
     await reportMeterValue(context, {
-      transactionId,
-      meterWh: calculateNextMeterWh(context, {
-        transaction,
-        intervalSec: loop.intervalSec,
+        transactionId,
+        meterWh: getOcpp16TransactionDelivery(context).calculateNextMeterWh({
+          transaction,
+          intervalSec: loop.intervalSec,
       }),
       sampledAt,
     });

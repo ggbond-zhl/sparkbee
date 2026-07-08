@@ -1,5 +1,5 @@
 import type { IValidator, RequestMessage } from "../../types";
-import type { InboundRequest, SessionDiagnostic } from "../types";
+import type { InboundRequest, SessionLogEntry } from "../types";
 import { SessionError } from "../types";
 import {
   InboundRequestRegistry,
@@ -13,7 +13,7 @@ type InboundRequestCoordinatorOptions = {
   inboundResponseTimeoutMs: number;
   messageSender: ProtocolMessageSender;
   emitInboundRequest(request: InboundRequest): void;
-  emitSessionDiagnostic(diagnostic: SessionDiagnostic): void;
+  emitSessionLog(runtimeLog: SessionLogEntry): void;
 };
 
 type InboundReplyContext = {
@@ -21,7 +21,7 @@ type InboundReplyContext = {
   messageId: string;
 };
 
-/** 负责入站请求的校验、回复和兜底失败诊断。 */
+/** 负责入站请求的校验、回复和兜底失败日志。 */
 export class InboundRequestCoordinator {
   private readonly inboundRequests: InboundRequestRegistry;
 
@@ -122,8 +122,8 @@ export class InboundRequestCoordinator {
         errorDetails,
       );
     } catch (cause) {
-      this.options.emitSessionDiagnostic(
-        this.createReplyFailureDiagnostic(replyContext, cause),
+      this.options.emitSessionLog(
+        this.createReplyFailureLog(replyContext, cause),
       );
     }
   }
@@ -206,10 +206,10 @@ export class InboundRequestCoordinator {
     return { direction: "outbound" as const };
   }
 
-  private createReplyFailureDiagnostic(
+  private createReplyFailureLog(
     replyContext: InboundReplyContext,
     cause: unknown,
-  ): SessionDiagnostic {
+  ): SessionLogEntry {
     return {
       source: "inbound_request",
       action: replyContext.action,

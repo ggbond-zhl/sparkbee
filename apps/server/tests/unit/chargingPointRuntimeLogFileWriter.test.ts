@@ -4,25 +4,25 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { ChargingPointDiagnosticFileWriter } from "../../src/lib/chargingPointDiagnosticFileWriter";
+import { ChargingPointRuntimeLogFileWriter } from "../../src/lib/chargingPointRuntimeLogFileWriter";
 
 const tempDirs: string[] = [];
 
-describe("ChargingPointDiagnosticFileWriter", () => {
+describe("ChargingPointRuntimeLogFileWriter", () => {
   afterEach(async () => {
     await Promise.all(tempDirs.splice(0).map((dir) =>
       rm(dir, { recursive: true, force: true })
     ));
   });
 
-  test("writes charging point diagnostic records as JSON Lines", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "sparkbee-diagnostics-"));
+  test("writes charging point runtime log records as JSON Lines", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "sparkbee-runtime-logs-"));
     tempDirs.push(directory);
-    const writer = new ChargingPointDiagnosticFileWriter(directory);
+    const writer = new ChargingPointRuntimeLogFileWriter(directory);
     const sink = writer.createSink("cp/../1");
 
     await sink.write({
-      id: "diagnostic-1",
+      id: "runtime-log-1",
       sequence: 1,
       chargingPointId: "cp/../1",
       occurredAt: "2026-01-01T00:00:00.000Z",
@@ -34,20 +34,20 @@ describe("ChargingPointDiagnosticFileWriter", () => {
       },
     });
     await sink.write({
-      id: "diagnostic-2",
+      id: "runtime-log-2",
       sequence: 2,
       chargingPointId: "cp/../1",
       occurredAt: "2026-01-01T00:00:01.000Z",
       level: "error",
       code: "DECODE_ERROR",
-      message: "Charging point session reported diagnostic error",
+      message: "Charging point session reported session error",
     });
 
     const content = await readFile(join(directory, "cp-1.jsonl"), "utf8");
 
     expect(content.split("\n").filter(Boolean).map((line) => JSON.parse(line))).toEqual([
       {
-        id: "diagnostic-1",
+        id: "runtime-log-1",
         sequence: 1,
         chargingPointId: "cp/../1",
         occurredAt: "2026-01-01T00:00:00.000Z",
@@ -59,13 +59,13 @@ describe("ChargingPointDiagnosticFileWriter", () => {
         },
       },
       {
-        id: "diagnostic-2",
+        id: "runtime-log-2",
         sequence: 2,
         chargingPointId: "cp/../1",
         occurredAt: "2026-01-01T00:00:01.000Z",
         level: "error",
         code: "DECODE_ERROR",
-        message: "Charging point session reported diagnostic error",
+        message: "Charging point session reported session error",
       },
     ]);
   });

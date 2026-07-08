@@ -3,7 +3,7 @@ import type {
 } from "../../protocol/runtime";
 import type {
   ISession,
-  SessionDiagnostic,
+  SessionLogEntry,
   SessionError,
   SessionOfflineReason,
 } from "../../protocol/session/types";
@@ -36,7 +36,7 @@ import {
   createDefaultOcpp16Runtime,
   createDefaultSession,
 } from "./defaults";
-import { DiagnosticRecordPublisher } from "./DiagnosticRecordPublisher";
+import { RuntimeLogRecordPublisher } from "./RuntimeLogRecordPublisher";
 import {
   toPublicAuthorizeResult,
   toPublicTransactionStartResult,
@@ -61,7 +61,7 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
   private disposed = false;
 
   private readonly eventEnvelope: Ocpp16EventEnvelope;
-  private readonly diagnosticRecords: DiagnosticRecordPublisher;
+  private readonly runtimeLogRecords: RuntimeLogRecordPublisher;
   private readonly startupLifecycle: Ocpp16StartupLifecycle;
 
   readonly id: string;
@@ -83,11 +83,11 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     this.idGenerator =
       dependencies.idGenerator ?? crypto.randomUUID.bind(crypto);
     this.session = dependencies.session ?? createDefaultSession(options);
-    this.diagnosticRecords = new DiagnosticRecordPublisher({
+    this.runtimeLogRecords = new RuntimeLogRecordPublisher({
       chargingPointId: this.id,
       clock: this.clock,
       idGenerator: this.idGenerator,
-      sink: options.diagnosticSink,
+      sink: options.runtimeLogSink,
     });
     this.ocpp16Runtime =
       dependencies.ocpp16Runtime ??
@@ -96,7 +96,7 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
         idGenerator: this.idGenerator,
         configurationCatalog:
           dependencies.configurationCatalog ?? options.configurationCatalog,
-        emitDiagnostic: (diagnostic) => this.diagnosticRecords.publish(diagnostic),
+        emitRuntimeLog: (runtimeLog) => this.runtimeLogRecords.publish(runtimeLog),
       });
     this.eventEnvelope = new Ocpp16EventEnvelope({
       chargingPointId: this.id,
@@ -117,10 +117,10 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
       transitionStatus: (currentStatus, error) =>
         this.transitionChargingPointActorStatus(currentStatus, error),
     });
-    this.session.on("sessionError", this.handleSessionDiagnostic);
-    this.session.on("online", this.handleSessionOnlineDiagnostic);
-    this.session.on("reconnecting", this.handleSessionReconnectingDiagnostic);
-    this.session.on("offline", this.handleSessionOfflineDiagnostic);
+    this.session.on("sessionError", this.handleSessionLog);
+    this.session.on("online", this.handleSessionOnlineLog);
+    this.session.on("reconnecting", this.handleSessionReconnectingLog);
+    this.session.on("offline", this.handleSessionOfflineLog);
     this.events = this.eventEnvelope.events;
   }
 
@@ -178,10 +178,10 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     try {
       await this.stop();
     } finally {
-      this.session.off("sessionError", this.handleSessionDiagnostic);
-      this.session.off("online", this.handleSessionOnlineDiagnostic);
-      this.session.off("reconnecting", this.handleSessionReconnectingDiagnostic);
-      this.session.off("offline", this.handleSessionOfflineDiagnostic);
+      this.session.off("sessionError", this.handleSessionLog);
+      this.session.off("online", this.handleSessionOnlineLog);
+      this.session.off("reconnecting", this.handleSessionReconnectingLog);
+      this.session.off("offline", this.handleSessionOfflineLog);
       this.eventEnvelope.dispose();
       this.ocpp16Runtime.dispose();
       this.disposed = true;
@@ -334,36 +334,36 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     this.startupLifecycle.handleOnline();
   };
 
-  private readonly handleSessionDiagnostic = (diagnostic: SessionDiagnostic): void => {
-    this.diagnosticRecords.publish({
+  private readonly handleSessionLog = (runtimeLog: SessionLogEntry): void => {
+    this.runtimeLogRecords.publish({
       level: "error",
-      message: "Charging point session reported diagnostic error",
-      code: diagnostic.error.code,
+      message: "Charging point session reported session error",
+      code: runtimeLog.error.code,
       context: {
-        source: diagnostic.source,
-        ...(diagnostic.action === undefined ? {} : { action: diagnostic.action }),
-        ...(diagnostic.messageId === undefined ? {} : { messageId: diagnostic.messageId }),
+        source: runtimeLog.source,
+        ...(runtimeLog.action === undefined ? {} : { action: runtimeLog.action }),
+        ...(runtimeLog.messageId === undefined ? {} : { messageId: runtimeLog.messageId }),
         error: {
-          code: diagnostic.error.code,
-          message: diagnostic.error.message,
+          code: runtimeLog.error.code,
+          message: runtimeLog.error.message,
         },
       },
     });
   };
 
-  private readonly handleSessionOnlineDiagnostic = (): void => {
-    this.diagnosticRecords.publish({
+  private readonly handleSessionOnlineLog = (): void => {
+    this.runtimeLogRecords.publish({
       level: "info",
       message: "Charging point session went online",
       code: "CHARGING_POINT_SESSION_ONLINE",
     });
   };
 
-  private readonly handleSessionReconnectingDiagnostic = (
+  private readonly handleSessionReconnectingLog = (
     attempt: number,
     error?: SessionError,
   ): void => {
-    this.diagnosticRecords.publish({
+    this.runtimeLogRecords.publish({
       level: "warn",
       message: "Charging point session is reconnecting",
       code: "CHARGING_POINT_SESSION_RECONNECTING",
@@ -381,10 +381,10 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     });
   };
 
-  private readonly handleSessionOfflineDiagnostic = (
+  private readonly handleSessionOfflineLog = (
     reason: SessionOfflineReason,
   ): void => {
-    this.diagnosticRecords.publish({
+    this.runtimeLogRecords.publish({
       level: reason === "intentional" ? "info" : "warn",
       message: "Charging point session went offline",
       code: "CHARGING_POINT_SESSION_OFFLINE",
@@ -399,7 +399,7 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     const previousStatus = this.currentStatus;
     this.currentStatus = currentStatus;
     this.eventEnvelope.publishChargingPointLifecycle(previousStatus, currentStatus, error);
-    this.diagnosticRecords.publish({
+    this.runtimeLogRecords.publish({
       level: error === undefined ? "info" : "error",
       message: error === undefined
         ? "Charging point actor status changed"

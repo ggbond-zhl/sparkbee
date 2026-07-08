@@ -1,6 +1,7 @@
 import type {
   ChargingPointDetailResponse,
   RuntimeOperationResponse,
+  RuntimeSnapshotResponse,
 } from "@spark-bee/contracts";
 import { describe, expect, test } from "vitest";
 
@@ -54,6 +55,26 @@ function buildRuntimeStatus(
   };
 }
 
+function buildRuntimeEventState(
+  input: Partial<Omit<RuntimeSnapshotResponse, "chargingPointId" | "runtimeStatus">>,
+) {
+  return reduceChargingPointRuntimeEventState(createChargingPointRuntimeEventState(), {
+    event: "snapshot",
+    data: {
+      chargingPointId: baseDetail.id,
+      runtimeStatus: buildRuntimeStatus({ status: "running", bootStatus: "Accepted" }),
+      sessionStatus: null,
+      chargingPointStatus: null,
+      evseStatuses: [],
+      connectorStatuses: [],
+      transactionStatuses: [],
+      lastHeartbeatAt: null,
+      recentIssue: null,
+      ...input,
+    },
+  });
+}
+
 describe("charging point detail header model", () => {
   test("marks a stopped charging point with connectors as startable", () => {
     const model = buildChargingPointDetailHeaderModel({
@@ -77,42 +98,19 @@ describe("charging point detail header model", () => {
     expect(model.transactionSummary).toBe("无运行交易");
   });
 
-  test("exposes runtime communication diagnostics", () => {
-    let runtimeEventState = createChargingPointRuntimeEventState();
-    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
-      event: "session.status",
-      data: {
-        type: "session.status",
-        chargingPointId: baseDetail.id,
-        occurredAt: "2026-07-04T09:00:00.000Z",
-        resource: { scope: "session" },
-        previousStatus: "online",
+  test("exposes runtime communication summary", () => {
+    const runtimeEventState = buildRuntimeEventState({
+      sessionStatus: {
         currentStatus: "reconnecting",
+        occurredAt: "2026-07-04T09:00:00.000Z",
         connectionUrl: "ws://localhost:9000/ocpp/CP_001",
         attempt: 2,
       },
-    });
-    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
-      event: "chargingPoint.status",
-      data: {
-        type: "chargingPoint.status",
-        chargingPointId: baseDetail.id,
-        occurredAt: "2026-07-04T09:00:01.000Z",
-        resource: { scope: "chargingPoint" },
-        previousStatus: "available",
+      chargingPointStatus: {
         currentStatus: "unavailable",
+        occurredAt: "2026-07-04T09:00:01.000Z",
       },
-    });
-    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
-      event: "protocol.message",
-      data: {
-        type: "protocol.message",
-        chargingPointId: baseDetail.id,
-        occurredAt: "2026-07-04T09:00:04.000Z",
-        resource: { scope: "protocol" },
-        direction: "received",
-        action: "Heartbeat",
-      },
+      lastHeartbeatAt: "2026-07-04T09:00:04.000Z",
     });
 
     const model = buildChargingPointDetailHeaderModel({
@@ -133,44 +131,41 @@ describe("charging point detail header model", () => {
       runtimeEventState,
     });
 
-    const diagnosticsByLabel = Object.fromEntries(
-      model.runtimeDiagnostics.map((item) => [item.label, item]),
+    const summaryItemsByLabel = Object.fromEntries(
+      model.runtimeSummaryItems.map((item) => [item.label, item]),
     );
 
-    expect(Object.keys(diagnosticsByLabel)).toEqual([
+    expect(Object.keys(summaryItemsByLabel)).toEqual([
       "Boot",
       "会话状态",
       "最近异常",
     ]);
-    expect(diagnosticsByLabel.Boot).toMatchObject({
+    expect(summaryItemsByLabel.Boot).toMatchObject({
       value: "待接受 · 12 秒后再次上报",
     });
-    expect(diagnosticsByLabel.会话状态).toMatchObject({
+    expect(summaryItemsByLabel.会话状态).toMatchObject({
       value: "会话重连中 · 第 2 次",
     });
-    expect(diagnosticsByLabel.最近异常).toMatchObject({
+    expect(summaryItemsByLabel.最近异常).toMatchObject({
       value: "无",
     });
     expect(model.finalConnectionUrl).toBe("ws://localhost:9000/ocpp/CP_001");
   });
 
-  test("puts the offline reason in the session diagnostic", () => {
-    const runtimeEventState = reduceChargingPointRuntimeEventState(
-      createChargingPointRuntimeEventState(),
-      {
-        event: "session.status",
-        data: {
-          type: "session.status",
-          chargingPointId: baseDetail.id,
-          occurredAt: "2026-07-04T09:00:00.000Z",
-          resource: { scope: "session" },
-          previousStatus: "reconnecting",
-          currentStatus: "offline",
-          connectionUrl: "ws://localhost:9000/ocpp/CP_001",
-          reason: "unexpected_disconnect",
-        },
+  test("puts the offline reason in the session summary", () => {
+    const runtimeEventState = buildRuntimeEventState({
+      sessionStatus: {
+        currentStatus: "offline",
+        occurredAt: "2026-07-04T09:00:00.000Z",
+        connectionUrl: "ws://localhost:9000/ocpp/CP_001",
+        reason: "unexpected_disconnect",
       },
-    );
+      recentIssue: {
+        label: "会话意外断开",
+        tone: "warning",
+        occurredAt: "2026-07-04T09:00:00.000Z",
+      },
+    });
 
     const model = buildChargingPointDetailHeaderModel({
       detail: baseDetail,
@@ -183,20 +178,20 @@ describe("charging point detail header model", () => {
       runtimeEventState,
     });
 
-    const sessionDiagnostic = model.runtimeDiagnostics.find(
+    const sessionSummaryItem = model.runtimeSummaryItems.find(
       (item) => item.label === "会话状态",
     );
 
-    expect(sessionDiagnostic).toMatchObject({
+    expect(sessionSummaryItem).toMatchObject({
       value: "会话离线 · 底层连接意外断开",
     });
-    expect(model.runtimeDiagnostics.find(
+    expect(model.runtimeSummaryItems.find(
       (item) => item.label === "最近异常",
     )).toMatchObject({
       value: "会话意外断开",
       tone: "warning",
     });
-    expect(model.runtimeDiagnostics.map((item) => item.label)).not.toContain(
+    expect(model.runtimeSummaryItems.map((item) => item.label)).not.toContain(
       "离线原因",
     );
   });
@@ -210,7 +205,7 @@ describe("charging point detail header model", () => {
     });
 
     expect(model.finalConnectionUrl).toBeNull();
-    expect(model.runtimeDiagnostics.map((item) => item.label)).not.toContain(
+    expect(model.runtimeSummaryItems.map((item) => item.label)).not.toContain(
       "运行连接",
     );
   });
@@ -274,67 +269,34 @@ describe("charging point detail header model", () => {
   });
 
   test("uses runtime events for session, point, connector and transaction summaries", () => {
-    let runtimeEventState = createChargingPointRuntimeEventState();
-    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
-      event: "session.status",
-      data: {
-        type: "session.status",
-        chargingPointId: baseDetail.id,
-        occurredAt: "2026-07-04T09:00:00.000Z",
-        resource: { scope: "session" },
-        previousStatus: "offline",
+    const runtimeEventState = buildRuntimeEventState({
+      sessionStatus: {
         currentStatus: "online",
+        occurredAt: "2026-07-04T09:00:00.000Z",
         connectionUrl: "ws://localhost:9000/ocpp/CP_001",
       },
-    });
-    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
-      event: "chargingPoint.status",
-      data: {
-        type: "chargingPoint.status",
-        chargingPointId: baseDetail.id,
-        occurredAt: "2026-07-04T09:00:01.000Z",
-        resource: { scope: "chargingPoint" },
-        previousStatus: null,
+      chargingPointStatus: {
         currentStatus: "available",
+        occurredAt: "2026-07-04T09:00:01.000Z",
       },
-    });
-    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
-      event: "connector.status",
-      data: {
-        type: "connector.status",
-        chargingPointId: baseDetail.id,
-        occurredAt: "2026-07-04T09:00:02.000Z",
-        resource: { scope: "connector", evseId: 1, connectorId: 1 },
-        previousStatus: null,
-        currentStatus: "occupied",
-      },
-    });
-    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
-      event: "transaction.status",
-      data: {
-        type: "transaction.status",
-        chargingPointId: baseDetail.id,
-        occurredAt: "2026-07-04T09:00:03.000Z",
-        resource: {
-          scope: "transaction",
+      connectorStatuses: [
+        {
           evseId: 1,
           connectorId: 1,
-          transactionId: "tx-1",
+          currentStatus: "occupied",
+          occurredAt: "2026-07-04T09:00:02.000Z",
         },
-        previousStatus: "starting",
-        currentStatus: "active",
-      },
-    });
-    runtimeEventState = reduceChargingPointRuntimeEventState(runtimeEventState, {
-      event: "protocol.message",
-      data: {
-        type: "protocol.message",
-        chargingPointId: baseDetail.id,
-        occurredAt: "2026-07-04T09:00:04.000Z",
-        resource: { scope: "protocol" },
-        direction: "received",
-        action: "Heartbeat",
-      },
+      ],
+      transactionStatuses: [
+        {
+          transactionId: "tx-1",
+          evseId: 1,
+          connectorId: 1,
+          currentStatus: "active",
+          occurredAt: "2026-07-04T09:00:03.000Z",
+        },
+      ],
+      lastHeartbeatAt: "2026-07-04T09:00:04.000Z",
     });
 
     const model = buildChargingPointDetailHeaderModel({
@@ -356,20 +318,21 @@ describe("charging point detail header model", () => {
   });
 
   test("shows runtime event issues in the recent issue metric", () => {
-    const runtimeEventState = reduceChargingPointRuntimeEventState(
-      createChargingPointRuntimeEventState(),
-      {
-        event: "connector.status",
-        data: {
-          type: "connector.status",
-          chargingPointId: baseDetail.id,
-          occurredAt: "2026-07-04T09:00:00.000Z",
-          resource: { scope: "connector", evseId: 1, connectorId: 1 },
-          previousStatus: "available",
+    const runtimeEventState = buildRuntimeEventState({
+      connectorStatuses: [
+        {
+          evseId: 1,
+          connectorId: 1,
           currentStatus: "faulted",
+          occurredAt: "2026-07-04T09:00:00.000Z",
         },
+      ],
+      recentIssue: {
+        label: "枪口 1/1 故障",
+        tone: "destructive",
+        occurredAt: "2026-07-04T09:00:00.000Z",
       },
-    );
+    });
 
     const model = buildChargingPointDetailHeaderModel({
       detail: baseDetail,

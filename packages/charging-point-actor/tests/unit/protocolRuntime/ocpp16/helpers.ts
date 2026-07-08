@@ -20,7 +20,7 @@ import type {
 } from "../../../../src/protocol/session/types.ts";
 import {
   Ocpp16Runtime,
-  type Ocpp16RuntimeDiagnostic,
+  type Ocpp16RuntimeLog,
   type Ocpp16RuntimeOptions,
 } from "../../../../src/protocol/runtime/index.ts";
 import type { Ocpp16RuntimeContext } from "../../../../src/protocol/runtime/ocpp16/state.ts";
@@ -220,7 +220,7 @@ export function createChargingPoint(
 export function createProtocolRuntime(replies: QueuedReply[], options: {
   chargingPoint?: ChargingPoint;
   configurationCatalog?: Ocpp16RuntimeOptions["configurationCatalog"];
-  diagnostics?: Ocpp16RuntimeDiagnostic[];
+  runtimeLogs?: Ocpp16RuntimeLog[];
 } = {}): { protocolRuntime: Ocpp16Runtime; session: FakeSession } {
   const session = new FakeSession(replies);
   const protocolRuntime = new Ocpp16Runtime({
@@ -229,8 +229,8 @@ export function createProtocolRuntime(replies: QueuedReply[], options: {
     configurationCatalog: options.configurationCatalog,
     clock: () => new Date("2026-01-01T00:00:00.000Z"),
     idGenerator: () => "transaction-1",
-    emitDiagnostic: (diagnostic) => {
-      options.diagnostics?.push(diagnostic);
+    emitRuntimeLog: (runtimeLog) => {
+      options.runtimeLogs?.push(runtimeLog);
     },
   });
 
