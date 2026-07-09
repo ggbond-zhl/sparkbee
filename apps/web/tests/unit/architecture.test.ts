@@ -291,6 +291,8 @@ describe("web architecture", () => {
     expect(detailPageSource).not.toContain("headerModel.staticDetails");
     expect(detailHeaderModelSource).toContain("最近异常");
     expect(detailPageSource).toContain("启动充电");
+    expect(detailPageSource).toContain('const [idTag, setIdTag] = useState("");');
+    expect(detailPageSource).not.toContain('const [idTag, setIdTag] = useState("CARD001");');
     expect(detailPageSource).toContain("停止充电");
     expect(detailPageSource).toContain("ArrowRightIcon");
     expect(detailPageSource).toContain("ArrowLeftIcon");

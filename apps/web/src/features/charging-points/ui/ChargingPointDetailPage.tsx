@@ -811,7 +811,7 @@ function StartChargingDialog({
   onSubmit(idTag: string): void;
 }) {
   const [open, setOpen] = useState(false);
-  const [idTag, setIdTag] = useState("CARD001");
+  const [idTag, setIdTag] = useState("");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
