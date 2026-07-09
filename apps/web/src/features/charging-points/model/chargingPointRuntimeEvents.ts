@@ -286,7 +286,7 @@ export function reduceChargingPointRuntimeEventFeedState(
   if (message.event === "protocol.message") {
     return {
       ...state,
-      protocolMessages: prependAndLimit(
+      protocolMessages: prepend(
         state.protocolMessages,
         toProtocolMessageLogEntry(message.data),
       ),
@@ -295,7 +295,7 @@ export function reduceChargingPointRuntimeEventFeedState(
 
   return {
     ...state,
-    events: prependAndLimit(state.events, toRuntimeEventLogEntry(message)),
+    events: prepend(state.events, toRuntimeEventLogEntry(message)),
   };
 }
 
@@ -558,8 +558,8 @@ function formatTransactionStatus(status: TransactionRuntimeStatus) {
   return "失败";
 }
 
-function prependAndLimit<TItem>(items: TItem[], item: TItem) {
-  return [item, ...items].slice(0, 200);
+function prepend<TItem>(items: TItem[], item: TItem) {
+  return [item, ...items];
 }
 
 function createLogEntryId(

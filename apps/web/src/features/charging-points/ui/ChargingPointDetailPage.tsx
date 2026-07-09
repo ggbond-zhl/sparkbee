@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
   ChargingPointDetailResponse,
   ConnectorResponse,
@@ -9,12 +10,23 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   PencilIcon,
+  PinIcon,
   PlayIcon,
   PlugZapIcon,
   SquareIcon,
   UnplugIcon,
 } from "lucide-react";
-import { useCallback, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { toast } from "sonner";
 
 import {
@@ -50,6 +62,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tabs,
   TabsContent,
   TabsList,
@@ -83,6 +103,15 @@ import type {
   ProtocolMessageLogEntry,
   RuntimeEventLogEntry,
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
+import {
+  ALL_RUNTIME_LOG_TYPE_FILTER,
+  RUNTIME_LOG_TIME_FILTER_OPTIONS,
+  buildRuntimeLogTypeFilterOptions,
+  filterRuntimeLogEntries,
+  getRuntimeLogEmptyText,
+  type RuntimeLogTimeFilter,
+  type RuntimeLogTypeFilterOption,
+} from "@/features/charging-points/model/chargingPointRuntimeLogFilters";
 import {
   chargingPointDetailQueryOptions,
   chargingPointDetailQueryKey,
@@ -578,26 +607,222 @@ function RuntimeObservationTabs({
   events: RuntimeEventLogEntry[];
   protocolMessages: ProtocolMessageLogEntry[];
 }) {
+  const [activeObservationTab, setActiveObservationTab] =
+    useState<RuntimeObservationTab>("messages");
+  const [messageTimeFilter, setMessageTimeFilter] =
+    useState<RuntimeLogTimeFilter>("all");
+  const [eventTimeFilter, setEventTimeFilter] =
+    useState<RuntimeLogTimeFilter>("all");
+  const [messageTypeFilter, setMessageTypeFilter] = useState(
+    ALL_RUNTIME_LOG_TYPE_FILTER,
+  );
+  const [eventTypeFilter, setEventTypeFilter] = useState(
+    ALL_RUNTIME_LOG_TYPE_FILTER,
+  );
+  const [messagesPinned, setMessagesPinned] = useState(false);
+  const [eventsPinned, setEventsPinned] = useState(false);
+  const messagesListHandleRef = useRef<RuntimeLogListHandle | null>(null);
+  const eventsListHandleRef = useRef<RuntimeLogListHandle | null>(null);
+  const filterNowMs = Date.now();
+  const messageTypeOptions = useMemo(
+    () =>
+      buildRuntimeLogTypeFilterOptions(
+        protocolMessages,
+        (message) => message.action,
+      ),
+    [protocolMessages],
+  );
+  const eventTypeOptions = useMemo(
+    () =>
+      buildRuntimeLogTypeFilterOptions(
+        events,
+        (event) => event.eventType,
+      ),
+    [events],
+  );
+  const filteredProtocolMessages = useMemo(
+    () =>
+      filterRuntimeLogEntries(protocolMessages, {
+        getType: (message) => message.action,
+        nowMs: filterNowMs,
+        timeFilter: messageTimeFilter,
+        typeFilter: messageTypeFilter,
+      }),
+    [filterNowMs, messageTimeFilter, messageTypeFilter, protocolMessages],
+  );
+  const filteredEvents = useMemo(
+    () =>
+      filterRuntimeLogEntries(events, {
+        getType: (event) => event.eventType,
+        nowMs: filterNowMs,
+        timeFilter: eventTimeFilter,
+        typeFilter: eventTypeFilter,
+      }),
+    [eventTimeFilter, eventTypeFilter, events, filterNowMs],
+  );
+  const activeListHandleRef =
+    activeObservationTab === "messages" ? messagesListHandleRef : eventsListHandleRef;
+  const activeListPinned =
+    activeObservationTab === "messages" ? messagesPinned : eventsPinned;
+  const activeListLength =
+    activeObservationTab === "messages" ? protocolMessages.length : events.length;
+  const activeTimeFilter =
+    activeObservationTab === "messages" ? messageTimeFilter : eventTimeFilter;
+  const activeTypeFilter =
+    activeObservationTab === "messages" ? messageTypeFilter : eventTypeFilter;
+  const activeTypeOptions =
+    activeObservationTab === "messages" ? messageTypeOptions : eventTypeOptions;
+
+  function handleActiveTimeFilterChange(timeFilter: RuntimeLogTimeFilter) {
+    activeListHandleRef.current?.resetToTop();
+    if (activeObservationTab === "messages") {
+      setMessagesPinned(false);
+      setMessageTimeFilter(timeFilter);
+      return;
+    }
+
+    setEventsPinned(false);
+    setEventTimeFilter(timeFilter);
+  }
+
+  function handleActiveTypeFilterChange(typeFilter: string) {
+    activeListHandleRef.current?.resetToTop();
+    if (activeObservationTab === "messages") {
+      setMessagesPinned(false);
+      setMessageTypeFilter(typeFilter);
+      return;
+    }
+
+    setEventsPinned(false);
+    setEventTypeFilter(typeFilter);
+  }
+
   return (
     <section className="rounded-lg border border-border/60 bg-card p-3">
-      <Tabs defaultValue="messages">
+      <Tabs
+        value={activeObservationTab}
+        onValueChange={(value) =>
+          setActiveObservationTab(value as RuntimeObservationTab)}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <TabsList>
-            <TabsTrigger value="messages">报文 {protocolMessages.length}</TabsTrigger>
-            <TabsTrigger value="events">事件 {events.length}</TabsTrigger>
+            <TabsTrigger value="messages">
+              报文 {filteredProtocolMessages.length}
+            </TabsTrigger>
+            <TabsTrigger value="events">事件 {filteredEvents.length}</TabsTrigger>
           </TabsList>
-          <span className="text-xs text-muted-foreground">
-            当前页面打开后收到的最近 200 条
-          </span>
+          <RuntimeObservationToolbar
+            disabled={activeListLength === 0}
+            pinned={activeListPinned}
+            timeFilter={activeTimeFilter}
+            typeFilter={activeTypeFilter}
+            typeOptions={activeTypeOptions}
+            onPinnedToggle={() => activeListHandleRef.current?.togglePinned()}
+            onTimeFilterChange={handleActiveTimeFilterChange}
+            onTypeFilterChange={handleActiveTypeFilterChange}
+          />
         </div>
         <TabsContent className="mt-3" value="messages">
-          <ProtocolMessageLogList entries={protocolMessages} />
+          <ProtocolMessageLogList
+            entries={filteredProtocolMessages}
+            entriesCount={protocolMessages.length}
+            listHandleRef={messagesListHandleRef}
+            pinned={messagesPinned}
+            onPinnedChange={setMessagesPinned}
+          />
         </TabsContent>
         <TabsContent className="mt-3" value="events">
-          <RuntimeEventLogList entries={events} />
+          <RuntimeEventLogList
+            entries={filteredEvents}
+            entriesCount={events.length}
+            listHandleRef={eventsListHandleRef}
+            pinned={eventsPinned}
+            onPinnedChange={setEventsPinned}
+          />
         </TabsContent>
       </Tabs>
     </section>
+  );
+}
+
+type RuntimeObservationTab = "messages" | "events";
+
+function RuntimeObservationToolbar({
+  disabled,
+  pinned,
+  timeFilter,
+  typeFilter,
+  typeOptions,
+  onPinnedToggle,
+  onTimeFilterChange,
+  onTypeFilterChange,
+}: {
+  disabled: boolean;
+  pinned: boolean;
+  timeFilter: RuntimeLogTimeFilter;
+  typeFilter: string;
+  typeOptions: RuntimeLogTypeFilterOption[];
+  onPinnedToggle(): void;
+  onTimeFilterChange(timeFilter: RuntimeLogTimeFilter): void;
+  onTypeFilterChange(typeFilter: string): void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Select
+        disabled={disabled}
+        value={timeFilter}
+        onValueChange={(value) =>
+          onTimeFilterChange(value as RuntimeLogTimeFilter)}
+      >
+        <SelectTrigger aria-label="时间筛选" size="sm">
+          <SelectValue placeholder="时间筛选" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {RUNTIME_LOG_TIME_FILTER_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <Select
+        disabled={disabled}
+        value={typeFilter}
+        onValueChange={onTypeFilterChange}
+      >
+        <SelectTrigger aria-label="类型筛选" size="sm">
+          <SelectValue placeholder="类型筛选" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {typeOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            aria-label={pinned ? "取消滚动钉住" : "滚动钉住"}
+            aria-pressed={pinned}
+            size="icon-sm"
+            type="button"
+            variant={pinned ? "secondary" : "outline"}
+            onClick={onPinnedToggle}
+          >
+            <PinIcon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {pinned ? "取消滚动钉住" : "滚动钉住"}
+        </TooltipContent>
+      </Tooltip>
+    </div>
   );
 }
 
@@ -635,66 +860,265 @@ function ConnectorEditButton({
   );
 }
 
-function RuntimeEventLogList({ entries }: { entries: RuntimeEventLogEntry[] }) {
-  if (entries.length === 0) {
-    return <RuntimeLogEmptyState text="暂无事件" />;
-  }
-
+function RuntimeEventLogList({
+  entries,
+  entriesCount,
+  listHandleRef,
+  pinned,
+  onPinnedChange,
+}: {
+  entries: RuntimeEventLogEntry[];
+  entriesCount: number;
+  listHandleRef: Ref<RuntimeLogListHandle>;
+  pinned: boolean;
+  onPinnedChange(pinned: boolean): void;
+}) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border/40">
-      {entries.map((entry) => (
-        <details
-          key={entry.id}
-          className="group border-b border-border/40 last:border-b-0"
-        >
-          <summary className="grid cursor-pointer grid-cols-[5.5rem_minmax(8rem,0.9fr)_minmax(6rem,0.7fr)_minmax(0,1.6fr)] gap-3 px-3 py-2 text-sm hover:bg-muted/40">
-            <span className="text-xs text-muted-foreground">
-              {formatLogTime(entry.occurredAt)}
-            </span>
-            <span className="truncate font-mono text-xs text-muted-foreground">
-              {entry.eventType}
-            </span>
-            <span className="truncate text-muted-foreground">{entry.resource}</span>
-            <span className="truncate font-medium">{entry.summary}</span>
-          </summary>
-          <RuntimeLogJsonBlock value={entry.detail} />
-        </details>
-      ))}
-    </div>
+    <VirtualRuntimeLogList
+      entries={entries}
+      emptyText={getRuntimeLogEmptyText({
+        emptyText: "暂无事件",
+        entriesCount,
+        filteredEmptyText: "没有匹配筛选条件的事件",
+      })}
+      listHandleRef={listHandleRef}
+      pinned={pinned}
+      onPinnedChange={onPinnedChange}
+      renderRow={(entry) => <RuntimeEventLogRow entry={entry} />}
+    />
   );
 }
 
 function ProtocolMessageLogList({
   entries,
+  entriesCount,
+  listHandleRef,
+  pinned,
+  onPinnedChange,
 }: {
   entries: ProtocolMessageLogEntry[];
+  entriesCount: number;
+  listHandleRef: Ref<RuntimeLogListHandle>;
+  pinned: boolean;
+  onPinnedChange(pinned: boolean): void;
 }) {
-  if (entries.length === 0) {
-    return <RuntimeLogEmptyState text="暂无报文" />;
-  }
+  return (
+    <VirtualRuntimeLogList
+      entries={entries}
+      emptyText={getRuntimeLogEmptyText({
+        emptyText: "暂无报文",
+        entriesCount,
+        filteredEmptyText: "没有匹配筛选条件的报文",
+      })}
+      listHandleRef={listHandleRef}
+      pinned={pinned}
+      onPinnedChange={onPinnedChange}
+      renderRow={(entry) => <ProtocolMessageLogRow entry={entry} />}
+    />
+  );
+}
+
+interface RuntimeLogListEntry {
+  id: string;
+}
+
+interface RuntimeLogScrollAnchor {
+  id: string;
+  offset: number;
+  scrollTop: number;
+}
+
+interface RuntimeLogListHandle {
+  resetToTop(): void;
+  togglePinned(): void;
+}
+
+const RUNTIME_LOG_TOP_THRESHOLD = 8;
+
+function VirtualRuntimeLogList<TEntry extends RuntimeLogListEntry>({
+  entries,
+  emptyText,
+  listHandleRef,
+  pinned,
+  onPinnedChange,
+  renderRow,
+}: {
+  entries: TEntry[];
+  emptyText: string;
+  listHandleRef: Ref<RuntimeLogListHandle>;
+  pinned: boolean;
+  onPinnedChange(pinned: boolean): void;
+  renderRow(entry: TEntry): ReactNode;
+}) {
+  const scrollParentRef = useRef<HTMLDivElement | null>(null);
+  const anchorRef = useRef<RuntimeLogScrollAnchor | null>(null);
+  const previousEntriesRef = useRef(entries);
+  const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+    count: entries.length,
+    estimateSize: () => 48,
+    getItemKey: (index) => entries[index]?.id ?? index,
+    getScrollElement: () => scrollParentRef.current,
+    overscan: 10,
+    useAnimationFrameWithResizeObserver: true,
+  });
+
+  const updateAnchor = useCallback(() => {
+    const scrollElement = scrollParentRef.current;
+    if (scrollElement === null || entries.length === 0) {
+      anchorRef.current = null;
+      return;
+    }
+
+    const scrollTop = scrollElement.scrollTop;
+    const firstVisibleItem =
+      rowVirtualizer.getVirtualItemForOffset(scrollTop) ??
+      rowVirtualizer.getVirtualItems()[0];
+    const entry = entries[firstVisibleItem?.index ?? -1];
+    if (firstVisibleItem === undefined || entry === undefined) {
+      anchorRef.current = null;
+      return;
+    }
+
+    anchorRef.current = {
+      id: entry.id,
+      offset: Math.max(0, scrollTop - firstVisibleItem.start),
+      scrollTop,
+    };
+  }, [entries, rowVirtualizer]);
+
+  useLayoutEffect(() => {
+    const previousEntries = previousEntriesRef.current;
+    const anchor = anchorRef.current;
+    const shouldKeepAnchor =
+      pinned || (anchor?.scrollTop ?? 0) > RUNTIME_LOG_TOP_THRESHOLD;
+
+    if (entries.length > previousEntries.length && anchor && shouldKeepAnchor) {
+      const targetIndex = entries.findIndex((entry) => entry.id === anchor.id);
+      if (targetIndex >= 0) {
+        const targetOffset = rowVirtualizer.getOffsetForIndex(targetIndex, "start");
+        if (targetOffset !== undefined) {
+          rowVirtualizer.scrollToOffset(
+            Math.max(0, targetOffset[0] + anchor.offset),
+            { behavior: "auto" },
+          );
+        }
+      }
+    }
+
+    previousEntriesRef.current = entries;
+  }, [entries, pinned, rowVirtualizer]);
+
+  useLayoutEffect(() => {
+    updateAnchor();
+  }, [updateAnchor]);
+
+  const handlePinnedChange = useCallback(() => {
+    if (!pinned) {
+      updateAnchor();
+      onPinnedChange(true);
+      return;
+    }
+
+    onPinnedChange(false);
+    rowVirtualizer.scrollToIndex(0, { align: "start" });
+  }, [onPinnedChange, pinned, rowVirtualizer, updateAnchor]);
+
+  const resetToTop = useCallback(() => {
+    onPinnedChange(false);
+    rowVirtualizer.scrollToIndex(0, { align: "start" });
+  }, [onPinnedChange, rowVirtualizer]);
+
+  useImperativeHandle(
+    listHandleRef,
+    () => ({
+      resetToTop,
+      togglePinned: handlePinnedChange,
+    }),
+    [handlePinnedChange, resetToTop],
+  );
+
+  const virtualItems = rowVirtualizer.getVirtualItems();
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/40">
-      {entries.map((entry) => (
-        <details
-          key={entry.id}
-          className="group border-b border-border/40 last:border-b-0"
-        >
-          <summary className="grid cursor-pointer grid-cols-[5.5rem_4rem_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(0,1.2fr)] gap-3 px-3 py-2 text-sm hover:bg-muted/40">
-            <span className="text-xs text-muted-foreground">
-              {formatLogTime(entry.occurredAt)}
-            </span>
-            <ProtocolDirectionBadge direction={entry.direction} />
-            <span className="truncate font-medium">{entry.action}</span>
-            <span className="truncate font-mono text-xs text-muted-foreground">
-              {entry.messageId}
-            </span>
-            <span className="truncate text-muted-foreground">{entry.summary}</span>
-          </summary>
-          <RuntimeLogJsonBlock value={entry.detail} />
-        </details>
-      ))}
+    <div>
+      <div
+        ref={scrollParentRef}
+        className="h-[min(60vh,640px)] min-h-80 overflow-auto rounded-lg border border-border/40"
+        onScroll={updateAnchor}
+      >
+        {entries.length === 0 ? (
+          <RuntimeLogEmptyState text={emptyText} />
+        ) : (
+          <div
+            className="relative w-full"
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+          >
+            {virtualItems.map((virtualItem) => {
+              const entry = entries[virtualItem.index];
+              if (entry === undefined) {
+                return null;
+              }
+
+              return (
+                <div
+                  key={virtualItem.key}
+                  ref={rowVirtualizer.measureElement}
+                  data-index={virtualItem.index}
+                  className="absolute left-0 top-0 w-full"
+                  style={{
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                >
+                  {renderRow(entry)}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+function RuntimeEventLogRow({ entry }: { entry: RuntimeEventLogEntry }) {
+  return (
+    <details className="group border-b border-border/40">
+      <summary className="grid cursor-pointer grid-cols-[5.5rem_minmax(8rem,0.9fr)_minmax(6rem,0.7fr)_minmax(8rem,1fr)_minmax(0,1.4fr)] gap-3 px-3 py-2 text-sm hover:bg-muted/40">
+        <span className="text-xs text-muted-foreground">
+          {formatLogTime(entry.occurredAt)}
+        </span>
+        <span className="truncate font-mono text-xs text-muted-foreground">
+          {entry.eventType}
+        </span>
+        <span className="truncate text-muted-foreground">{entry.resource}</span>
+        <span className="truncate font-medium">{entry.summary}</span>
+        <span className="truncate font-mono text-xs text-muted-foreground group-open:hidden">
+          {formatRuntimeLogPreview(entry.detail)}
+        </span>
+      </summary>
+      <RuntimeLogJsonBlock value={entry.detail} />
+    </details>
+  );
+}
+
+function ProtocolMessageLogRow({ entry }: { entry: ProtocolMessageLogEntry }) {
+  return (
+    <details className="group border-b border-border/40">
+      <summary className="grid cursor-pointer grid-cols-[5.5rem_4rem_minmax(8rem,0.8fr)_minmax(8rem,1fr)_minmax(0,1.6fr)] gap-3 px-3 py-2 text-sm hover:bg-muted/40">
+        <span className="text-xs text-muted-foreground">
+          {formatLogTime(entry.occurredAt)}
+        </span>
+        <ProtocolDirectionBadge direction={entry.direction} />
+        <span className="truncate font-medium">{entry.action}</span>
+        <span className="truncate font-mono text-xs text-muted-foreground">
+          {entry.messageId}
+        </span>
+        <span className="truncate font-mono text-xs text-muted-foreground group-open:hidden">
+          {formatRuntimeLogPreview(entry.detail)}
+        </span>
+      </summary>
+      <RuntimeLogJsonBlock value={entry.detail} />
+    </details>
   );
 }
 
@@ -727,6 +1151,11 @@ function RuntimeLogJsonBlock({ value }: { value: unknown }) {
       {JSON.stringify(value, null, 2)}
     </pre>
   );
+}
+
+function formatRuntimeLogPreview(value: unknown) {
+  const preview = JSON.stringify(value);
+  return preview ?? String(value);
 }
 
 function RuntimeLogEmptyState({ text }: { text: string }) {

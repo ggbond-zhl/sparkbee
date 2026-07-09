@@ -277,19 +277,44 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("connectors: current.connectors.map");
     expect(detailPageSource).toContain("请先停止桩实例再编辑枪口配置。");
     expect(detailPageSource).toContain("运行摘要");
+    expect(detailPageSource).toContain("@tanstack/react-virtual");
+    expect(detailPageSource).toContain("useVirtualizer");
+    expect(detailPageSource).toContain("VirtualRuntimeLogList");
+    expect(detailPageSource).toContain("RuntimeObservationToolbar");
+    expect(detailPageSource).toContain("RUNTIME_LOG_TIME_FILTER_OPTIONS");
+    expect(detailPageSource).toContain("filterRuntimeLogEntries");
+    expect(detailPageSource).toContain("buildRuntimeLogTypeFilterOptions");
+    expect(detailPageSource).toContain("报文 {filteredProtocolMessages.length}");
+    expect(detailPageSource).toContain("事件 {filteredEvents.length}");
+    expect(detailPageSource).not.toContain("显示 {filteredCount}");
+    expect(detailPageSource).toContain("时间筛选");
+    expect(detailPageSource).toContain("类型筛选");
+    expect(detailPageSource).toContain("PinIcon");
+    expect(detailPageSource).toContain("滚动钉住");
+    expect(detailPageSource).not.toContain("Trash2Icon");
+    expect(detailPageSource).not.toContain("清空当前列表");
+    expect(detailPageSource).not.toContain("当前页面会话内实时观察");
+    expect(detailPageSource).not.toContain("当前页面打开后收到的最近 200 条");
     expect(detailPageSource).not.toContain("<StatusBadge item={headerModel.sessionStatus}");
     expect(detailPageSource).not.toContain("最终连接");
     expect(detailPageSource).toContain("headerModel.finalConnectionUrl");
     expect(detailPageSource).toContain("col-span-full");
     expect(detailPageSource).toContain("gap-x-3 gap-y-1");
     expect(detailPageSource).toContain("md:grid-cols-3");
-    expect(detailPageSource).toContain('defaultValue="messages"');
+    expect(detailPageSource).toContain("activeObservationTab");
+    expect(detailPageSource).toContain('value={activeObservationTab}');
     expect(detailPageSource.indexOf('value="messages"')).toBeLessThan(
       detailPageSource.indexOf('value="events"'),
     );
     expect(detailPageSource).not.toContain("最终连接目标");
     expect(detailPageSource).not.toContain("headerModel.staticDetails");
     expect(detailHeaderModelSource).toContain("最近异常");
+    expect(detailPageSource).toContain(
+      "grid-cols-[5.5rem_minmax(8rem,0.9fr)_minmax(6rem,0.7fr)_minmax(8rem,1fr)_minmax(0,1.4fr)]",
+    );
+    expect(detailPageSource).toContain("formatRuntimeLogPreview(entry.detail)");
+    expect(detailPageSource.match(/formatRuntimeLogPreview\(entry.detail\)/g)?.length).toBe(2);
+    expect(detailPageSource).toContain("group-open:hidden");
     expect(detailPageSource).toContain("启动充电");
     expect(detailPageSource).toContain('const [idTag, setIdTag] = useState("");');
     expect(detailPageSource).not.toContain('const [idTag, setIdTag] = useState("CARD001");');
@@ -298,6 +323,12 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("ArrowLeftIcon");
     expect(detailPageSource).toContain(
       "direction === \"received\" ? ArrowLeftIcon : ArrowRightIcon",
+    );
+    expect(detailPageSource).toContain(
+      "grid-cols-[5.5rem_4rem_minmax(8rem,0.8fr)_minmax(8rem,1fr)_minmax(0,1.6fr)]",
+    );
+    expect(detailPageSource).not.toContain(
+      '<span className="truncate text-muted-foreground">{entry.summary}</span>',
     );
     expect(detailPageSource).toContain("ProtocolDirectionBadge");
     expect(detailPageSource).toContain('"w-fit bg-transparent"');

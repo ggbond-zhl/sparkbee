@@ -70,7 +70,7 @@ describe("charging point runtime events", () => {
     });
   });
 
-  test("keeps newest runtime feed records first and limits each feed to 200", () => {
+  test("keeps newest runtime feed records first without truncating the page feed", () => {
     let feedState = createChargingPointRuntimeEventFeedState();
 
     for (let index = 0; index < 201; index += 1) {
@@ -92,9 +92,9 @@ describe("charging point runtime events", () => {
       });
     }
 
-    expect(feedState.events).toHaveLength(200);
+    expect(feedState.events).toHaveLength(201);
     expect(feedState.events[0]?.summary).toBe("交易 tx-200: 200.123 Wh");
-    expect(feedState.events.at(-1)?.summary).toBe("交易 tx-1: 1.123 Wh");
+    expect(feedState.events.at(-1)?.summary).toBe("交易 tx-0: 0.123 Wh");
   });
 
   test("initializes state from a runtime snapshot", () => {
