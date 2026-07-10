@@ -216,9 +216,18 @@ jobs:
       - name: 验证 Pages 前端
         id: smoke_pages
         run: |
-          html=$(curl --fail --silent --show-error \
-            "${CLOUDFLARE_PAGES_URL}/charging-points")
-          grep --quiet '<div id="root"></div>' <<<"${html}"
+          for attempt in {1..12}; do
+            if html=$(curl --fail --silent --show-error \
+              "${CLOUDFLARE_PAGES_URL}/charging-points") \
+              && grep --quiet '<div id="root"></div>' <<<"${html}"; then
+              exit 0
+            fi
+            if [[ "${attempt}" == '12' ]]; then
+              echo 'Cloudflare Pages 未在期限内就绪。' >&2
+              exit 1
+            fi
+            sleep 5
+          done
 
       - name: 回滚 Cloudflare Pages
         if: >-
