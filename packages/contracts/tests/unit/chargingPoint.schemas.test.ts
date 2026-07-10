@@ -288,6 +288,36 @@ describe("chargingPoint contract schemas", () => {
       .toContain("整桩可用性");
   });
 
+  test("accepts decimal meter readings in runtime snapshot", () => {
+    const snapshot = runtimeSnapshotResponseSchema.parse({
+      chargingPointId: "00000000-0000-4000-8000-000000000001",
+      runtimeStatus: {
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        status: "running",
+      },
+      sessionStatus: null,
+      chargingPointStatus: null,
+      chargingPointAvailability: null,
+      evseStatuses: [],
+      connectorStatuses: [],
+      connectorAvailabilities: [],
+      transactionStatuses: [
+        {
+          transactionId: "tx-1",
+          evseId: 1,
+          connectorId: 1,
+          currentStatus: "active",
+          meterWh: 19.4444444444,
+          occurredAt: "2026-07-04T09:00:04.000Z",
+        },
+      ],
+      lastHeartbeatAt: null,
+      recentIssue: null,
+    });
+
+    expect(snapshot.transactionStatuses[0]?.meterWh).toBe(19.4444444444);
+  });
+
   test("describes connector action response with business and protocol ids", () => {
     expect(
       chargingPointConnectorActionResponseSchema.parse({
