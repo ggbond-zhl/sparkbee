@@ -16,6 +16,7 @@ import { createRoutes } from "./routes";
 export interface AppDependencies {
   database?: ServerDatabase;
   environment?: string;
+  corsAllowedOrigin?: string;
   timeoutMs?: number;
   chargingPointActorHost?: ChargingPointActorHost;
   runtimeLogDirectory?: string;
@@ -28,7 +29,10 @@ export function createApp(dependencies: AppDependencies = {}) {
 
   app.use("*", requestId());
   app.use("*", secureHeaders());
-  app.use("*", cors());
+  app.use(
+    "*",
+    cors({ origin: dependencies.corsAllowedOrigin ?? "http://localhost:3001" }),
+  );
   app.use("*", timeout(dependencies.timeoutMs ?? 30_000));
   if (environment === "production") {
     app.use("*", compress());

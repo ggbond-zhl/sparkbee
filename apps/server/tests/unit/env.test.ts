@@ -28,4 +28,14 @@ describe("server config", () => {
       CHARGING_POINT_RUNTIME_LOG_DIRECTORY: "tmp/runtime-logs",
     }).runtimeLogDirectory).toBe("tmp/runtime-logs");
   });
+
+  test("loads the allowed web origin with a local development default", async () => {
+    vi.resetModules();
+    const { loadServerConfig } = await import("../../src/config/env");
+
+    expect(loadServerConfig({}).corsAllowedOrigin).toBe("http://localhost:3001");
+    expect(loadServerConfig({
+      CORS_ALLOWED_ORIGIN: "https://sparkbee-test-web.pages.dev",
+    }).corsAllowedOrigin).toBe("https://sparkbee-test-web.pages.dev");
+  });
 });

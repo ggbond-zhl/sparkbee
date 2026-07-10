@@ -33,6 +33,8 @@ import {
   type UpdateConnectorRequest,
 } from "@spark-bee/contracts";
 
+import { toApiUrl } from "@/lib/apiUrl";
+
 export interface ListChargingPointsInput {
   keyword?: string;
   page?: number;
@@ -51,7 +53,7 @@ export async function listChargingPoints(
     search.set("keyword", keyword);
   }
 
-  const response = await fetch(`/api/charging-points?${search.toString()}`);
+  const response = await fetch(toApiUrl(`/api/charging-points?${search.toString()}`));
   if (!response.ok) {
     throw new Error("充电桩列表加载失败");
   }
@@ -62,7 +64,7 @@ export async function listChargingPoints(
 export async function createChargingPoint(
   input: CreateChargingPointRequest,
 ): Promise<ChargingPointDetailResponse> {
-  const response = await fetch("/api/charging-points", {
+  const response = await fetch(toApiUrl("/api/charging-points"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -80,7 +82,7 @@ export async function createChargingPoint(
 export async function getChargingPoint(
   id: string,
 ): Promise<ChargingPointDetailResponse> {
-  const response = await fetch(`/api/charging-points/${id}`);
+  const response = await fetch(toApiUrl(`/api/charging-points/${id}`));
   if (!response.ok) {
     throw new Error("桩实例详情加载失败");
   }
@@ -92,7 +94,7 @@ export async function updateChargingPoint(
   id: string,
   input: UpdateChargingPointRequest,
 ): Promise<ChargingPointDetailResponse> {
-  const response = await fetch(`/api/charging-points/${id}`, {
+  const response = await fetch(toApiUrl(`/api/charging-points/${id}`), {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -108,7 +110,7 @@ export async function updateChargingPoint(
 }
 
 export async function deleteChargingPoint(id: string): Promise<void> {
-  const response = await fetch(`/api/charging-points/${id}`, {
+  const response = await fetch(toApiUrl(`/api/charging-points/${id}`), {
     method: "DELETE",
   });
 
@@ -120,7 +122,7 @@ export async function deleteChargingPoint(id: string): Promise<void> {
 export async function getChargingPointRuntimeStatus(
   id: string,
 ): Promise<RuntimeOperationResponse> {
-  const response = await fetch(`/api/charging-points/${id}/status`);
+  const response = await fetch(toApiUrl(`/api/charging-points/${id}/status`));
   if (!response.ok) {
     throw new Error("桩实例运行状态加载失败");
   }
@@ -131,7 +133,7 @@ export async function getChargingPointRuntimeStatus(
 export async function getChargingPointRuntimeSnapshot(
   id: string,
 ): Promise<RuntimeSnapshotResponse> {
-  const response = await fetch(`/api/charging-points/${id}/runtime-snapshot`);
+  const response = await fetch(toApiUrl(`/api/charging-points/${id}/runtime-snapshot`));
   if (!response.ok) {
     throw new Error("桩实例运行状态快照加载失败");
   }
@@ -143,7 +145,7 @@ async function applyChargingPointRuntimeOperation(
   id: string,
   operation: "start" | "stop",
 ): Promise<RuntimeOperationResponse> {
-  const response = await fetch(`/api/charging-points/${id}/${operation}`, {
+  const response = await fetch(toApiUrl(`/api/charging-points/${id}/${operation}`), {
     method: "POST",
   });
   if (!response.ok) {
@@ -167,7 +169,7 @@ async function applyConnectorRuntimeAction(
   action: "plug" | "unplug",
 ): Promise<ChargingPointConnectorActionResponse> {
   const response = await fetch(
-    `/api/charging-points/${chargingPointId}/connectors/${connectorId}/${action}`,
+    toApiUrl(`/api/charging-points/${chargingPointId}/connectors/${connectorId}/${action}`),
     { method: "POST" },
   );
   if (!response.ok) {
@@ -197,7 +199,7 @@ export async function authorizeConnector(
   input: RuntimeAuthorizeRequest,
 ): Promise<RuntimeAuthorizeResponse> {
   const response = await fetch(
-    `/api/charging-points/${chargingPointId}/connectors/${connectorId}/authorize`,
+    toApiUrl(`/api/charging-points/${chargingPointId}/connectors/${connectorId}/authorize`),
     {
       method: "POST",
       headers: {
@@ -219,7 +221,9 @@ export async function startConnectorTransaction(
   input: RuntimeStartTransactionRequest,
 ): Promise<RuntimeStartTransactionResponse> {
   const response = await fetch(
-    `/api/charging-points/${chargingPointId}/connectors/${connectorId}/start-transaction`,
+    toApiUrl(
+      `/api/charging-points/${chargingPointId}/connectors/${connectorId}/start-transaction`,
+    ),
     {
       method: "POST",
       headers: {
@@ -278,7 +282,9 @@ export async function stopConnectorTransaction(
   input: RuntimeStopTransactionRequest,
 ): Promise<RuntimeStopTransactionResponse> {
   const response = await fetch(
-    `/api/charging-points/${chargingPointId}/connectors/${connectorId}/stop-transaction`,
+    toApiUrl(
+      `/api/charging-points/${chargingPointId}/connectors/${connectorId}/stop-transaction`,
+    ),
     {
       method: "POST",
       headers: {
@@ -303,7 +309,7 @@ export function subscribeChargingPointEvents(
   id: string,
   handlers: ChargingPointEventSubscriptionHandlers,
 ): () => void {
-  const source = new EventSource(`/api/charging-points/${id}/events`);
+  const source = new EventSource(toApiUrl(`/api/charging-points/${id}/events`));
   const listeners = chargingPointEventStreamTypes.map((eventType) => {
     const listener = (event: MessageEvent<string>) => {
       handlers.onEvent(
@@ -334,7 +340,7 @@ export async function listConnectors(
   chargingPointId: string,
 ): Promise<ConnectorResponse[]> {
   const response = await fetch(
-    `/api/charging-points/${chargingPointId}/connectors`,
+    toApiUrl(`/api/charging-points/${chargingPointId}/connectors`),
   );
   if (!response.ok) {
     throw new Error("枪口列表加载失败");
@@ -347,13 +353,16 @@ export async function createConnector(
   chargingPointId: string,
   input: CreateConnectorRequest,
 ): Promise<ConnectorResponse> {
-  const response = await fetch(`/api/charging-points/${chargingPointId}/connectors`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await fetch(
+    toApiUrl(`/api/charging-points/${chargingPointId}/connectors`),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  });
+  );
 
   if (!response.ok) {
     throw new Error("枪口创建失败");
@@ -368,7 +377,7 @@ export async function updateConnector(
   input: UpdateConnectorRequest,
 ): Promise<ConnectorResponse> {
   const response = await fetch(
-    `/api/charging-points/${chargingPointId}/connectors/${connectorId}`,
+    toApiUrl(`/api/charging-points/${chargingPointId}/connectors/${connectorId}`),
     {
       method: "PATCH",
       headers: {
@@ -390,7 +399,7 @@ export async function deleteConnector(
   connectorId: string,
 ): Promise<void> {
   const response = await fetch(
-    `/api/charging-points/${chargingPointId}/connectors/${connectorId}`,
+    toApiUrl(`/api/charging-points/${chargingPointId}/connectors/${connectorId}`),
     {
       method: "DELETE",
     },

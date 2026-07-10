@@ -280,6 +280,7 @@ describe("charging point detail header model", () => {
   });
 
   test("uses runtime events for session, point, connector and transaction summaries", () => {
+    const localHeartbeatAt = new Date(2026, 6, 4, 17, 0, 4);
     const runtimeEventState = buildRuntimeEventState({
       sessionStatus: {
         currentStatus: "online",
@@ -311,7 +312,7 @@ describe("charging point detail header model", () => {
           occurredAt: "2026-07-04T09:00:03.000Z",
         },
       ],
-      lastHeartbeatAt: "2026-07-04T09:00:04.000Z",
+      lastHeartbeatAt: localHeartbeatAt.toISOString(),
     });
 
     const model = buildChargingPointDetailHeaderModel({

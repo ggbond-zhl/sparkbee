@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: sparkbee-test-api
+    runtime: node
+    plan: free
+    region: singapore
+    branch: develop
+    autoDeployTrigger: off
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @spark-bee/server start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGIN
+        sync: false
+      - key: CHARGING_POINT_RUNTIME_LOG_DIRECTORY
+        value: /tmp/sparkbee/runtime

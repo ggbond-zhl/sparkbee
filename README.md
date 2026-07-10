@@ -53,6 +53,7 @@ pnpm dev
 
 - 前端调试台：http://localhost:3001
 - 后端 API：http://localhost:3000/api
+- 后端就绪检查：http://localhost:3000/api/ready
 - OpenAPI JSON：http://localhost:3000/api/openapi.json
 - Scalar API 文档：http://localhost:3000/api/docs
 
@@ -65,7 +66,10 @@ pnpm dev
 ```env
 PORT=3000
 DATABASE_URL=postgres://sparkbee:sparkbee@localhost:5432/sparkbee
+CORS_ALLOWED_ORIGIN=http://localhost:3001
 ```
+
+Cloudflare Pages 构建前端时通过 `VITE_API_BASE_URL` 指向 Render 后端；本地未配置时继续使用 Vite 的 `/api` proxy。
 
 ## 常用命令
 
