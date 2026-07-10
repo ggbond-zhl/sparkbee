@@ -254,7 +254,7 @@ export const runtimeSnapshotResponseSchema = z.object({
         connectorId: z.number().int().positive().describe("交易所属 OCPP 枪口编号。"),
         currentStatus: runtimeTransactionStatusSchema.describe("当前交易状态。"),
         reason: z.string().optional().describe("交易状态原因。"),
-        meterWh: z.number().int().nonnegative().optional().describe("最近电表读数，单位 Wh。"),
+        meterWh: z.number().nonnegative().optional().describe("最近电表读数，单位 Wh。"),
         powerW: z.number().nonnegative().optional().describe("最近功率采样值，单位 W。"),
         currentA: z.number().nonnegative().optional().describe("最近电流采样值，单位 A。"),
         voltageV: z.number().nonnegative().optional().describe("最近电压采样值，单位 V。"),
