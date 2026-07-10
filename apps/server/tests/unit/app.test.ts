@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { createApp } from "../../src/app";
+import { createTestDatabase } from "../support/testDatabase";
 
 describe("createApp", () => {
   afterEach(() => {
@@ -22,6 +23,25 @@ describe("createApp", () => {
     const response = await app.request("/health");
 
     expect(response.status).toBe(404);
+  });
+
+  test("reports ready when the database is available", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+
+    const response = await app.request("/api/ready");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ status: "ready" });
+  });
+
+  test("reports unavailable when the database is not configured", async () => {
+    const app = createApp();
+
+    const response = await app.request("/api/ready");
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ status: "unavailable" });
   });
 
   test("adds a request id response header", async () => {
@@ -72,13 +92,31 @@ describe("createApp", () => {
       method: "OPTIONS",
       headers: {
         "Access-Control-Request-Method": "GET",
-        Origin: "https://admin.sparkbee.local",
+        Origin: "http://localhost:3001",
       },
     });
 
     expect(response.status).toBe(204);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+      "http://localhost:3001",
+    );
     expect(response.headers.get("Access-Control-Allow-Methods")).toContain("GET");
+  });
+
+  test("restricts CORS responses to the configured web origin", async () => {
+    const app = createApp({
+      corsAllowedOrigin: "https://sparkbee-test-web.pages.dev",
+    });
+
+    const response = await app.request("/api/health", {
+      headers: {
+        Origin: "https://sparkbee-test-web.pages.dev",
+      },
+    });
+
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://sparkbee-test-web.pages.dev",
+    );
   });
 
   test("compresses large compressible responses in production", async () => {
@@ -148,6 +186,7 @@ describe("createApp", () => {
       },
     });
     expect(document.paths).toHaveProperty("/api/health");
+    expect(document.paths).toHaveProperty("/api/ready");
   });
 
   test("documents the health check in Chinese", async () => {
@@ -165,6 +204,26 @@ describe("createApp", () => {
       healthOperation.responses["200"].content["application/json"].schema.properties.status
         .description,
     ).toBe("服务健康状态。");
+  });
+
+  test("documents the readiness check in Chinese", async () => {
+    const app = createApp();
+
+    const response = await app.request("/api/openapi.json");
+
+    expect(response.status).toBe(200);
+    const document = await response.json();
+    const readinessOperation = document.paths["/api/ready"].get;
+    expect(readinessOperation.summary).toBe("就绪检查");
+    expect(readinessOperation.description).toBe(
+      "检查后端服务是否能够连接数据库并处理业务请求。",
+    );
+    expect(readinessOperation.responses["200"].description).toBe(
+      "后端服务及数据库已就绪。",
+    );
+    expect(readinessOperation.responses["503"].description).toBe(
+      "后端服务尚未就绪。",
+    );
   });
 
   test("serves the Scalar API reference", async () => {

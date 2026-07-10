@@ -23,6 +23,7 @@ import {
 describe("chargingPoints API client", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   test("sends requested page and page size", async () => {
@@ -43,6 +44,32 @@ describe("chargingPoints API client", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/charging-points?page=2&pageSize=50&keyword=CP",
+    );
+  });
+
+  test("sends requests to the configured API origin", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "https://sparkbee-test-api.onrender.com/");
+    vi.resetModules();
+    const { listChargingPoints: listChargingPointsFromConfiguredOrigin } = await import(
+      "../../src/features/charging-points/api/chargingPoints"
+    );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [],
+          page: 1,
+          pageSize: 20,
+          total: 0,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listChargingPointsFromConfiguredOrigin();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://sparkbee-test-api.onrender.com/api/charging-points?page=1&pageSize=20",
     );
   });
 
@@ -82,6 +109,44 @@ describe("chargingPoints API client", () => {
         },
         body: JSON.stringify({ name: "更新后的桩" }),
       },
+    );
+  });
+
+  test("sends mutations to the configured API origin", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "https://sparkbee-test-api.onrender.com");
+    vi.resetModules();
+    const { updateChargingPoint: updateFromConfiguredOrigin } = await import(
+      "../../src/features/charging-points/api/chargingPoints"
+    );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "00000000-0000-4000-8000-000000000001",
+          name: "更新后的桩",
+          description: null,
+          identity: "CP_001",
+          protocol: "OCPP16J",
+          centralSystemUrl: "ws://localhost:9000/ocpp",
+          vendor: "SparkBee",
+          model: "Simulator",
+          firmwareVersion: null,
+          serialNumber: null,
+          connectors: [],
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateFromConfiguredOrigin("00000000-0000-4000-8000-000000000001", {
+      name: "更新后的桩",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://sparkbee-test-api.onrender.com/api/charging-points/00000000-0000-4000-8000-000000000001",
+      expect.objectContaining({ method: "PATCH" }),
     );
   });
 
@@ -500,6 +565,35 @@ describe("chargingPoints API client", () => {
 
     expect(source.closed).toBe(true);
     expect(source.listeners.size).toBe(0);
+  });
+
+  test("subscribes to runtime events from the configured API origin", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "https://sparkbee-test-api.onrender.com/");
+    vi.resetModules();
+    const { subscribeChargingPointEvents: subscribeFromConfiguredOrigin } = await import(
+      "../../src/features/charging-points/api/chargingPoints"
+    );
+    const createdUrls: string[] = [];
+    class FakeEventSource {
+      onerror: ((event: Event) => void) | null = null;
+
+      constructor(readonly url: string) {
+        createdUrls.push(url);
+      }
+
+      addEventListener() {}
+      removeEventListener() {}
+      close() {}
+    }
+    vi.stubGlobal("EventSource", FakeEventSource);
+
+    subscribeFromConfiguredOrigin("00000000-0000-4000-8000-000000000001", {
+      onEvent: vi.fn(),
+    });
+
+    expect(createdUrls).toEqual([
+      "https://sparkbee-test-api.onrender.com/api/charging-points/00000000-0000-4000-8000-000000000001/events",
+    ]);
   });
 
   test("rejects invalid charging point event payloads before notifying", () => {

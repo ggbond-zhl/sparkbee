@@ -26,7 +26,7 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
       ),
     });
 
-  routes.route("/", createHealthRoute());
+  routes.route("/", createHealthRoute(dependencies.database));
   if (dependencies.database !== undefined) {
     routes.route(
       "/charging-points",

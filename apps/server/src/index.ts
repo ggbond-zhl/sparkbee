@@ -8,6 +8,7 @@ const config = loadServerConfig();
 const database = createPostgresDatabase(config.databaseUrl);
 const app = createApp({
   database,
+  corsAllowedOrigin: config.corsAllowedOrigin,
   runtimeLogDirectory: config.runtimeLogDirectory,
 });
 
