@@ -103,6 +103,11 @@ jobs:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
+          if [[ ! "${RENDER_DEPLOY_HOOK_URL}" =~ ^https://api[.]render[.]com/deploy/[^?]+[?]key=.+$ ]]; then
+            echo 'Render Deploy Hook URL 格式无效，请重新从 Render Settings 复制完整 URL。' >&2
+            exit 1
+          fi
+
           separator='?'
           if [[ "${RENDER_DEPLOY_HOOK_URL}" == *'?'* ]]; then
             separator='&'
@@ -161,6 +166,7 @@ jobs:
         if: >-
           failure() &&
           steps.previous_render.outputs.deploy_id != '' &&
+          steps.deploy_render.outputs.deploy_id != '' &&
           steps.deploy_render.outcome != 'skipped'
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
