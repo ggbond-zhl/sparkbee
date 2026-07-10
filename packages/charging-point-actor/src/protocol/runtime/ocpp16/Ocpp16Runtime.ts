@@ -31,6 +31,10 @@ import {
   getOcpp16TransactionDelivery,
   type Ocpp16TransactionDelivery,
 } from "./Ocpp16TransactionDelivery";
+import {
+  emitChargingPointAvailabilitySnapshot,
+  emitConnectorAvailabilitySnapshot,
+} from "./events";
 import type {
   Ocpp16BootResult,
   Ocpp16AuthorizeInput,
@@ -121,6 +125,16 @@ export class Ocpp16Runtime {
 
   reportChargingPointStatus(): Promise<Ocpp16StatusNotificationResult> {
     return reportChargingPointStatusAction(this.context);
+  }
+
+  publishChargingPointAvailabilitySnapshot(): void {
+    emitChargingPointAvailabilitySnapshot(this.context, {});
+  }
+
+  publishConnectorAvailabilitySnapshot(
+    input: Ocpp16ConnectorActionInput,
+  ): void {
+    emitConnectorAvailabilitySnapshot(this.context, input);
   }
 
   startHeartbeatLoop(options: Ocpp16HeartbeatLoopOptions = {}): void {

@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   apiErrorResponseSchema,
   chargingPointConnectorActionResponseSchema,
+  chargingPointEventStreamMessageSchema,
   runtimeAuthorizeRequestSchema,
   runtimeAuthorizeResponseSchema,
   runtimeOperationResponseSchema,
@@ -13,8 +14,7 @@ import {
 } from "@spark-bee/contracts";
 
 import type { ServerDatabase } from "../../db";
-import { ChargingPointActorRegistry } from "../../lib/chargingPointActorRegistry";
-import { ChargingPointEventStreamHub } from "../../lib/chargingPointEventStreamHub";
+import type { ChargingPointStreamEvent } from "../../lib/chargingPointEventStreamHub";
 import { ValidationError } from "../../utils/errors";
 import {
   createRuntimeOperationService,
@@ -337,15 +337,7 @@ export function createRuntimeOperationRoute(
       }
     },
   });
-  const chargingPointActorRegistry =
-    dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry();
-  const chargingPointEventStreamHub =
-    dependencies.chargingPointEventStreamHub ?? new ChargingPointEventStreamHub();
-  const service = createRuntimeOperationService(database, {
-    ...dependencies,
-    chargingPointActorRegistry,
-    chargingPointEventStreamHub,
-  });
+  const service = createRuntimeOperationService(database, dependencies);
 
   route.openapi(startChargingPointRoute, async (context) => {
     const { id } = context.req.valid("param");
@@ -397,18 +389,38 @@ export function createRuntimeOperationRoute(
 
   route.openapi(getChargingPointEventsRoute, async (context) => {
     const { id } = context.req.valid("param");
-    const snapshot = await service.getRuntimeSnapshot(id);
-    let unsubscribe: () => void = () => undefined;
+    const bufferedEvents: ChargingPointStreamEvent[] = [];
+    let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let closed = false;
+    const emit = (event: ChargingPointStreamEvent) => {
+      if (controller === undefined) {
+        bufferedEvents.push(event);
+        return;
+      }
+
+      controller.enqueue(encodeSseEvent(event.event, event.data));
+      if (event.close === true) {
+        closed = true;
+        unsubscribe();
+        controller.close();
+      }
+    };
+    const subscription = await service.subscribeToEvents(id, emit);
+    const { unsubscribe } = subscription;
+    const snapshotMessage = chargingPointEventStreamMessageSchema.parse({
+      event: "snapshot",
+      data: subscription.snapshot,
+    });
     const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encodeSseEvent("snapshot", snapshot));
-        unsubscribe = chargingPointEventStreamHub.subscribe(id, (event) => {
-          controller.enqueue(encodeSseEvent(event.event, event.data));
-          if (event.close === true) {
-            unsubscribe();
-            controller.close();
+      start(streamController) {
+        controller = streamController;
+        controller.enqueue(encodeSseEvent(snapshotMessage.event, snapshotMessage.data));
+        for (const event of bufferedEvents.splice(0)) {
+          if (closed) {
+            break;
           }
-        });
+          emit(event);
+        }
       },
       cancel() {
         unsubscribe();

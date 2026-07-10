@@ -61,10 +61,34 @@ describe("server architecture", () => {
 
     expect(libFiles).toEqual([
       "chargingPointActor.ts",
-      "chargingPointActorRegistry.ts",
+      "chargingPointActorHost.ts",
       "chargingPointEventStreamHub.ts",
       "chargingPointRuntimeLogFileWriter.ts",
+      "chargingPointRuntimeProjection.ts",
     ]);
+  });
+
+  test("keeps the charging point event stream separate from the runtime snapshot projection", () => {
+    const eventStreamHubSource = readFileSync(
+      join(srcRoot, "lib", "chargingPointEventStreamHub.ts"),
+      "utf8",
+    );
+    const projectionPath = join(
+      srcRoot,
+      "lib",
+      "chargingPointRuntimeProjection.ts",
+    );
+    const projectionSource = existsSync(projectionPath)
+      ? readFileSync(projectionPath, "utf8")
+      : "";
+
+    expect(existsSync(projectionPath)).toBe(true);
+    expect(eventStreamHubSource).not.toContain("RuntimeProjection");
+    expect(eventStreamHubSource).not.toContain("getRuntimeSnapshot");
+    expect(eventStreamHubSource).toContain("chargingPointEventStreamMessageSchema");
+    expect(eventStreamHubSource).not.toContain("data: unknown");
+    expect(projectionSource).toContain("ChargingPointRuntimeProjection");
+    expect(projectionSource).toContain("getRuntimeSnapshot");
   });
 
   test("keeps charging point actor package behind server actor library code", () => {
@@ -76,7 +100,6 @@ describe("server architecture", () => {
 
     const allowedActorPackageFiles = new Set([
       join(srcRoot, "lib/chargingPointActor.ts"),
-      join(srcRoot, "lib/chargingPointActorRegistry.ts"),
     ]);
     const matches = sourceFiles()
       .filter((filePath) => !allowedActorPackageFiles.has(filePath))
@@ -90,17 +113,16 @@ describe("server architecture", () => {
     expect(matches).toEqual([]);
   });
 
-  test("keeps business modules behind route and service boundaries", () => {
+  test("keeps business modules behind route and deep optional module seams", () => {
     const modules = moduleDirectories();
 
-    const missingBoundaryFiles = modules.flatMap((modulePath) => {
+    const missingRouteFiles = modules.flatMap((modulePath) => {
       const moduleName = modulePath.split(/[\\/]/).at(-1);
       if (moduleName === undefined) {
         return [];
       }
 
-      return [`${moduleName}.route.ts`, `${moduleName}.service.ts`]
-        .map((fileName) => join(modulePath, fileName))
+      return [join(modulePath, `${moduleName}.route.ts`)]
         .filter((filePath) => !existsSync(filePath))
         .map((filePath) => relative(serverRoot, filePath));
     });
@@ -117,12 +139,21 @@ describe("server architecture", () => {
         .map((filePath) => relative(serverRoot, filePath));
     });
 
-    const routeRepoImports = modules.flatMap((modulePath) =>
-      walk(modulePath)
+    const crossModuleRouteRepoImports = modules.flatMap((modulePath) => {
+      const moduleName = modulePath.split(/[\\/]/).at(-1);
+      if (moduleName === undefined) {
+        return [];
+      }
+
+      return walk(modulePath)
         .filter((filePath) => filePath.endsWith(".route.ts"))
-        .filter((filePath) => readFileSync(filePath, "utf8").includes(".repo"))
-        .map((filePath) => relative(serverRoot, filePath)),
-    );
+        .filter((filePath) => {
+          const source = readFileSync(filePath, "utf8");
+          return source.includes(".repo") &&
+            !source.includes(`./${moduleName}.repo`);
+        })
+        .map((filePath) => relative(serverRoot, filePath));
+    });
 
     const crossModuleServiceRepoImports = modules.flatMap((modulePath) =>
       walk(modulePath)
@@ -131,10 +162,16 @@ describe("server architecture", () => {
         .map((filePath) => relative(serverRoot, filePath)),
     );
 
-    expect(missingBoundaryFiles).toEqual([]);
+    expect(missingRouteFiles).toEqual([]);
     expect(misnamedRepoFiles).toEqual([]);
-    expect(routeRepoImports).toEqual([]);
+    expect(crossModuleRouteRepoImports).toEqual([]);
     expect(crossModuleServiceRepoImports).toEqual([]);
+    expect(existsSync(join(srcRoot, "modules/chargingPoint/chargingPoint.service.ts")))
+      .toBe(false);
+    expect(existsSync(join(srcRoot, "modules/connector/connector.service.ts")))
+      .toBe(false);
+    expect(existsSync(join(srcRoot, "modules/runtimeOperation/runtimeOperation.service.ts")))
+      .toBe(true);
   });
 
   test("keeps connector management in its own module", () => {
@@ -166,7 +203,6 @@ describe("server architecture", () => {
 
     expect(operationFiles).toEqual([
       "chargingPointActorOptions.ts",
-      "runtimeOperation.command.ts",
       "runtimeOperation.repo.ts",
       "runtimeOperation.route.ts",
       "runtimeOperation.service.ts",
@@ -182,10 +218,17 @@ describe("server architecture", () => {
       join(operationModule, "runtimeOperation.service.ts"),
       "utf8",
     );
-    expect(serviceSource).toContain("RuntimeOperationCommandExecutor");
-    expect(serviceSource).not.toContain("toAuthorizeResponse");
-    expect(serviceSource).not.toContain("toStartTransactionResponse");
-    expect(serviceSource).not.toContain("toStopTransactionResponse");
+    expect(existsSync(join(operationModule, "runtimeOperation.command.ts"))).toBe(
+      false,
+    );
+    expect(serviceSource).not.toContain("RuntimeOperationCommandExecutor");
+    expect(serviceSource).toContain("ChargingPointActorHost");
+    expect(serviceSource).not.toContain("ChargingPointActorRegistry");
+    expect(serviceSource).not.toContain("ChargingPointEventStreamHub");
+    expect(serviceSource).not.toContain("ChargingPointRuntimeProjection");
+    expect(serviceSource).toContain("toAuthorizeResponse");
+    expect(serviceSource).toContain("toStartTransactionResponse");
+    expect(serviceSource).toContain("toStopTransactionResponse");
   });
 
   test("keeps Drizzle migrations under apps/server", () => {

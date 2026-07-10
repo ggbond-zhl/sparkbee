@@ -17,7 +17,7 @@ const connector: ConnectorResponse = {
   chargingPointId,
   evseId: 1,
   connectorId: 1,
-  type: "Type2",
+  type: "IEC_62196_T2",
   format: "socket",
   powerType: "ac",
   maxVoltage: null,
@@ -39,11 +39,19 @@ function runtimeStatus(
 
 function createRuntimeState(input: {
   connectorStatus: "available" | "occupied" | "unavailable" | "faulted";
+  connectorAvailability?: {
+    currentAvailability: "operative" | "inoperative";
+    requestedAvailability?: "operative" | "inoperative";
+  } | null;
   transaction?: {
     status: "active" | "rejected";
     meterWh?: number;
   };
 }) {
+  const connectorAvailability = input.connectorAvailability === undefined
+    ? { currentAvailability: "operative" as const }
+    : input.connectorAvailability;
+
   return reduceChargingPointRuntimeEventState(createChargingPointRuntimeEventState(), {
     event: "snapshot",
     data: {
@@ -51,6 +59,7 @@ function createRuntimeState(input: {
       runtimeStatus: runtimeStatus("running"),
       sessionStatus: null,
       chargingPointStatus: null,
+      chargingPointAvailability: null,
       evseStatuses: [],
       connectorStatuses: [
         {
@@ -60,6 +69,22 @@ function createRuntimeState(input: {
           occurredAt: "2026-07-04T09:00:00.000Z",
         },
       ],
+      connectorAvailabilities: connectorAvailability === null
+        ? []
+        : [
+            {
+              evseId: 1,
+              connectorId: 1,
+              currentAvailability: connectorAvailability.currentAvailability,
+              ...(connectorAvailability.requestedAvailability === undefined
+                ? {}
+                : {
+                    requestedAvailability:
+                      connectorAvailability.requestedAvailability,
+                  }),
+              occurredAt: "2026-07-04T09:00:00.500Z",
+            },
+          ],
       transactionStatuses: input.transaction === undefined
         ? []
         : [
@@ -98,15 +123,52 @@ describe("charging point connector cards", () => {
       runtimeEventState: state,
     });
 
-    expect(model?.statusBadge.label).toBe("可用");
     expect(model?.connector).toBe(connector);
+    expect(model?.description).toBe("EVSE 1 · 欧标交流 Type 2 · 插座型 · 交流");
     expect(model?.fields).toEqual([
-      { label: "枪口状态", value: "可用", tone: "success" },
-      { label: "插枪状态", value: "未插枪", tone: "success" },
+      { label: "枪口状态", value: "可用 / 未插枪", tone: "success", span: "full" },
       { label: "交易状态", value: "无交易", tone: "neutral" },
-      { label: "最近表值", value: "--" },
+      { label: "可用性", value: "可用", tone: "success" },
     ]);
+    expect(model?.fields.map((field) => field.label)).not.toContain("插枪状态");
     expect(model?.actions.map((action) => action.kind)).toEqual(["plug"]);
+  });
+
+  test("describes connector format and power type in Chinese", () => {
+    const state = createRuntimeState({ connectorStatus: "available" });
+
+    const models = buildConnectorCardModels({
+      connectors: [
+        connector,
+        {
+          ...connector,
+          id: "00000000-0000-4000-8000-000000000003",
+          connectorId: 2,
+          type: "IEC_62196_T2_COMBO",
+          format: "cable",
+          powerType: "dc",
+          sortOrder: 2,
+        },
+        {
+          ...connector,
+          id: "00000000-0000-4000-8000-000000000004",
+          connectorId: 3,
+          type: "SAE_J3400",
+          format: "unknown",
+          powerType: "unknown",
+          sortOrder: 3,
+        },
+      ],
+      runtimeStatus: runtimeStatus("running"),
+      runtimeEventState: state,
+    });
+
+    expect(models.map((model) => model.description)).toEqual([
+      "EVSE 1 · 欧标交流 Type 2 · 插座型 · 交流",
+      "EVSE 1 · 欧标直流 CCS2 · 线缆型 · 直流",
+      "EVSE 1 · 北美 NACS · 未知形态 · 未知供电",
+    ]);
+    expect(models[2]?.description).not.toContain("unknown");
   });
 
   test("shows unplug and start charging actions for a plugged connector without transaction", () => {
@@ -118,10 +180,16 @@ describe("charging point connector cards", () => {
       runtimeEventState: state,
     });
 
-    expect(model?.fields[1]).toEqual({
-      label: "插枪状态",
-      value: "已插枪",
+    expect(model?.fields[0]).toEqual({
+      label: "枪口状态",
+      value: "占用 / 已插枪",
       tone: "waiting",
+      span: "full",
+    });
+    expect(model?.fields[2]).toEqual({
+      label: "可用性",
+      value: "可用",
+      tone: "success",
     });
     expect(model?.actions.map((action) => action.kind)).toEqual([
       "unplug",
@@ -144,12 +212,16 @@ describe("charging point connector cards", () => {
       runtimeEventState: state,
     });
 
-    expect(model?.fields[2]).toEqual({
+    expect(model?.fields[1]).toEqual({
       label: "交易状态",
       value: "进行中",
       tone: "waiting",
     });
-    expect(model?.fields[3]).toEqual({ label: "最近表值", value: "1200.000 Wh" });
+    expect(model?.fields[2]).toEqual({
+      label: "可用性",
+      value: "可用",
+      tone: "success",
+    });
     expect(model?.actions).toEqual([
       {
         kind: "stopCharging",
@@ -168,16 +240,48 @@ describe("charging point connector cards", () => {
       runtimeEventState: state,
     });
 
-    expect(model?.statusBadge.label).toBe("未运行");
+    expect(model?.fields[0]).toEqual({
+      label: "枪口状态",
+      value: "未运行",
+      tone: "neutral",
+      span: "full",
+    });
+    expect(model?.fields.some((field) => field.value === "--")).toBe(false);
     expect(model?.actions).toEqual([]);
   });
 
-  test("formats meter value with 3 decimal places", () => {
+  test("shows unavailable connector availability without meter value", () => {
+    const state = createRuntimeState({
+      connectorStatus: "unavailable",
+      connectorAvailability: { currentAvailability: "inoperative" },
+    });
+
+    const [model] = buildConnectorCardModels({
+      connectors: [connector],
+      runtimeStatus: runtimeStatus("running"),
+      runtimeEventState: state,
+    });
+
+    expect(model?.fields[0]).toEqual({
+      label: "枪口状态",
+      value: "不可用",
+      tone: "warning",
+      span: "full",
+    });
+    expect(model?.fields[2]).toEqual({
+      label: "可用性",
+      value: "不可用",
+      tone: "warning",
+    });
+    expect(model?.fields.some((field) => field.value === "--")).toBe(false);
+  });
+
+  test("shows pending connector availability separately from connector status", () => {
     const state = createRuntimeState({
       connectorStatus: "occupied",
-      transaction: {
-        status: "active",
-        meterWh: 116.66666666666667,
+      connectorAvailability: {
+        currentAvailability: "operative",
+        requestedAvailability: "inoperative",
       },
     });
 
@@ -187,7 +291,34 @@ describe("charging point connector cards", () => {
       runtimeEventState: state,
     });
 
-    expect(model?.fields[3]).toEqual({ label: "最近表值", value: "116.667 Wh" });
+    expect(model?.fields[0]).toMatchObject({
+      label: "枪口状态",
+      value: "占用 / 已插枪",
+    });
+    expect(model?.fields[2]).toEqual({
+      label: "可用性",
+      value: "可用 · 待切换为不可用",
+      tone: "warning",
+    });
+  });
+
+  test("waits for connector availability when only connector status is known", () => {
+    const state = createRuntimeState({
+      connectorStatus: "available",
+      connectorAvailability: null,
+    });
+
+    const [model] = buildConnectorCardModels({
+      connectors: [connector],
+      runtimeStatus: runtimeStatus("running"),
+      runtimeEventState: state,
+    });
+
+    expect(model?.fields[2]).toEqual({
+      label: "可用性",
+      value: "等待同步",
+      tone: "waiting",
+    });
   });
 
   test("shows connector issue without exposing unavailable actions", () => {
@@ -199,6 +330,13 @@ describe("charging point connector cards", () => {
       runtimeEventState: state,
     });
 
+    expect(model?.fields[0]).toEqual({
+      label: "枪口状态",
+      value: "故障",
+      tone: "destructive",
+      span: "full",
+    });
+    expect(model?.fields.some((field) => field.value === "--")).toBe(false);
     expect(model?.issue).toEqual({
       label: "枪口 1 故障",
       tone: "destructive",
@@ -220,7 +358,7 @@ describe("charging point connector cards", () => {
       runtimeEventState: state,
     });
 
-    expect(model?.fields[2]).toEqual({
+    expect(model?.fields[1]).toEqual({
       label: "交易状态",
       value: "无交易",
       tone: "neutral",

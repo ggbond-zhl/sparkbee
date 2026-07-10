@@ -13,9 +13,13 @@ import type {
   Ocpp16MeterValuesResult,
 } from "../types";
 import {
-  getOcpp16TransactionDelivery,
+  calculateNextMeterWh,
+  isOfflineDeliveryError,
+  prepareMeterValueDelivery,
+  recordMeterValueForOfflineDelivery,
   resolveConnectorMeasurements,
-} from "../Ocpp16TransactionDelivery";
+  shouldQueueTransactionDelivery,
+} from "../transactionDeliveryState";
 
 type MeterValueReadingContext = "Sample.Periodic" | "Trigger";
 
@@ -90,12 +94,13 @@ async function reportMeterValueWithContext(
   },
 ): Promise<Ocpp16MeterValuesResult> {
   const at = input.sampledAt ?? context.clock();
-  const transactionDelivery = getOcpp16TransactionDelivery(context);
-  const updatedTransaction = transactionDelivery.recordTransactionMeterValue(input);
-  const deliveryBinding = transactionDelivery.resolveBinding(updatedTransaction);
+  const {
+    binding: deliveryBinding,
+    measurements,
+    transaction: updatedTransaction,
+  } = prepareMeterValueDelivery(context, input);
   if (deliveryBinding.status === "offline") {
-    const measurements = transactionDelivery.resolveTransactionMeasurements(updatedTransaction);
-    return transactionDelivery.recordOfflineMeterValue({
+    return recordMeterValueForOfflineDelivery(context, {
       transaction: updatedTransaction,
       ocppConnectorId: null,
       ocppTransactionId: null,
@@ -107,9 +112,8 @@ async function reportMeterValueWithContext(
 
   const ocppTransactionId = deliveryBinding.ocppTransactionId;
   const connectorId = requireOcppConnectorId(context, updatedTransaction);
-  const measurements = transactionDelivery.resolveTransactionMeasurements(updatedTransaction);
-  if (transactionDelivery.shouldQueue(input.transactionId)) {
-    return transactionDelivery.recordOfflineMeterValue({
+  if (shouldQueueTransactionDelivery(context, input.transactionId)) {
+    return recordMeterValueForOfflineDelivery(context, {
       transaction: updatedTransaction,
       ocppConnectorId: connectorId,
       ocppTransactionId,
@@ -153,6 +157,7 @@ async function reportMeterValueWithContext(
       connectorId,
       ocppTransactionId,
       meterWh: input.meterWh,
+      measurements,
       sampledAt: at,
       sentAt,
       payload: result.payload,
@@ -161,8 +166,8 @@ async function reportMeterValueWithContext(
 
     return meterValuesResult;
   } catch (cause) {
-    if (transactionDelivery.isOfflineDeliveryError(cause)) {
-      return transactionDelivery.recordOfflineMeterValue({
+    if (isOfflineDeliveryError(cause)) {
+      return recordMeterValueForOfflineDelivery(context, {
         transaction: updatedTransaction,
         ocppConnectorId: connectorId,
         ocppTransactionId,
@@ -190,6 +195,11 @@ function recordMeterValuesSuccess(
     connectorId: number;
     ocppTransactionId: number;
     meterWh: number;
+    measurements: {
+      powerW: number;
+      currentA: number;
+      voltageV: number;
+    };
     sampledAt: Date;
     sentAt: Date;
     payload: unknown;
@@ -204,6 +214,9 @@ function recordMeterValuesSuccess(
     connectorId: input.connectorId,
     ocppTransactionId: input.ocppTransactionId,
     meterWh: input.meterWh,
+    powerW: input.measurements.powerW,
+    currentA: input.measurements.currentA,
+    voltageV: input.measurements.voltageV,
     sampledAt: cloneDate(input.sampledAt),
     sentAt: cloneDate(input.sentAt),
     receivedAt,
@@ -229,6 +242,9 @@ function emitAcceptedMeterValue(
     connectorId: target.connectorId,
     transactionId: result.transactionId,
     meterWh: result.meterWh,
+    powerW: result.powerW,
+    currentA: result.currentA,
+    voltageV: result.voltageV,
     sampledAt: result.sampledAt,
     occurredAt: result.receivedAt,
   });
@@ -308,7 +324,7 @@ async function reportPeriodicMeterValue(
     const sampledAt = context.clock();
     await reportMeterValue(context, {
         transactionId,
-        meterWh: getOcpp16TransactionDelivery(context).calculateNextMeterWh({
+        meterWh: calculateNextMeterWh(context, {
           transaction,
           intervalSec: loop.intervalSec,
       }),

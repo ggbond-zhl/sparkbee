@@ -117,6 +117,16 @@ export class Ocpp16EventEnvelope {
 
   private readonly routeRuntimeEvent = (event: Ocpp16RuntimeEvent): void => {
     switch (event.type) {
+      case "chargingPoint.availability":
+        this.publisher.publish("chargingPoint.availability", {
+          resource: event.resource,
+          previousAvailability: event.previousAvailability,
+          currentAvailability: event.currentAvailability,
+          ...(event.requestedAvailability === undefined
+            ? {}
+            : { requestedAvailability: event.requestedAvailability }),
+        }, event.occurredAt);
+        return;
       case "chargingPoint.status":
         this.publisher.publish("chargingPoint.status", {
           resource: event.resource,
@@ -131,6 +141,16 @@ export class Ocpp16EventEnvelope {
           previousStatus: event.previousStatus,
           currentStatus: event.currentStatus,
           ...(event.error === undefined ? {} : { error: event.error }),
+        }, event.occurredAt);
+        return;
+      case "connector.availability":
+        this.publisher.publish("connector.availability", {
+          resource: event.resource,
+          previousAvailability: event.previousAvailability,
+          currentAvailability: event.currentAvailability,
+          ...(event.requestedAvailability === undefined
+            ? {}
+            : { requestedAvailability: event.requestedAvailability }),
         }, event.occurredAt);
         return;
       case "connector.status":
@@ -164,6 +184,9 @@ export class Ocpp16EventEnvelope {
         this.publisher.publish("transaction.meterValue", {
           resource: event.resource,
           meterWh: event.meterWh,
+          powerW: event.powerW,
+          currentA: event.currentA,
+          voltageV: event.voltageV,
           sampledAt: event.sampledAt.toISOString(),
         }, event.occurredAt);
         return;

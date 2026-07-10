@@ -3,8 +3,21 @@ import { z } from "zod";
 import { paginatedResponseSchema, paginationQuerySchema } from "../pagination";
 
 export const chargingPointProtocolSchema = z.enum(["OCPP16J"]);
+export const connectorTypeSchema = z.enum([
+  "GBT_AC",
+  "GBT_DC",
+  "IEC_62196_T2",
+  "IEC_62196_T2_COMBO",
+  "IEC_62196_T1",
+  "IEC_62196_T1_COMBO",
+  "CHADEMO",
+  "SAE_J3400",
+]);
 export const connectorFormatSchema = z.enum(["socket", "cable", "unknown"]);
 export const connectorPowerTypeSchema = z.enum(["ac", "dc", "unknown"]);
+
+const connectorTypeDescription =
+  "枪口类型。支持 GBT_AC: 国标交流；GBT_DC: 国标直流；IEC_62196_T2: 欧标交流 Type 2；IEC_62196_T2_COMBO: 欧标直流 CCS2；IEC_62196_T1: 美标交流 Type 1 / J1772；IEC_62196_T1_COMBO: 美标直流 CCS1；CHADEMO: 日标直流；SAE_J3400: 北美 NACS。";
 
 const trimmedRequiredString = z.string().trim().min(1);
 const trimmedRequiredIdTag = z.string().trim().min(1).max(20);
@@ -56,7 +69,7 @@ export const createConnectorRequestSchema = z.object({
     .int()
     .positive()
     .describe("枪口在所属桩实例内的 connectorId。"),
-  type: trimmedRequiredString.describe("枪口类型，例如 Type2 或 CCS2。"),
+  type: connectorTypeSchema.describe(connectorTypeDescription),
   format: connectorFormatSchema.describe("枪口线缆形态。"),
   powerType: connectorPowerTypeSchema.describe("枪口供电类型。"),
   maxVoltage: requiredNonNegativeIntegerSchema.describe("枪口额定电压，单位 V。"),
@@ -74,7 +87,7 @@ export const connectorResponseSchema = z.object({
     .int()
     .positive()
     .describe("枪口在所属桩实例内的 connectorId。"),
-  type: z.string().describe("枪口类型，例如 Type2 或 CCS2。"),
+  type: connectorTypeSchema.describe(connectorTypeDescription),
   format: connectorFormatSchema.describe("枪口线缆形态。"),
   powerType: connectorPowerTypeSchema.describe("枪口供电类型。"),
   maxVoltage: z.number().int().nonnegative().nullable().describe("枪口额定电压，单位 V。"),
@@ -136,6 +149,11 @@ export const runtimeAvailabilityStatusSchema = z.enum([
   "faulted",
 ]);
 
+export const runtimeAvailabilitySchema = z.enum([
+  "operative",
+  "inoperative",
+]);
+
 export const runtimeEvseStatusSchema = z.enum([
   "available",
   "occupied",
@@ -186,6 +204,16 @@ export const runtimeSnapshotResponseSchema = z.object({
     })
     .nullable()
     .describe("OCPP 运行时中的整桩可用性状态。"),
+  chargingPointAvailability: z
+    .object({
+      currentAvailability: runtimeAvailabilitySchema.describe("当前整桩可用性。"),
+      requestedAvailability: runtimeAvailabilitySchema
+        .optional()
+        .describe("等待应用的整桩可用性。"),
+      occurredAt: z.string().datetime().describe("整桩可用性最后更新时间。"),
+    })
+    .nullable()
+    .describe("ChangeAvailability 影响的整桩可用性。"),
   evseStatuses: z
     .array(
       z.object({
@@ -205,6 +233,19 @@ export const runtimeSnapshotResponseSchema = z.object({
       }),
     )
     .describe("按枪口汇总的当前运行状态。"),
+  connectorAvailabilities: z
+    .array(
+      z.object({
+        evseId: z.number().int().positive().describe("枪口所属 EVSE 编号。"),
+        connectorId: z.number().int().positive().describe("OCPP 枪口编号。"),
+        currentAvailability: runtimeAvailabilitySchema.describe("当前枪口可用性。"),
+        requestedAvailability: runtimeAvailabilitySchema
+          .optional()
+          .describe("等待应用的枪口可用性。"),
+        occurredAt: z.string().datetime().describe("枪口可用性最后更新时间。"),
+      }),
+    )
+    .describe("按枪口汇总的 ChangeAvailability 可用性。"),
   transactionStatuses: z
     .array(
       z.object({
@@ -214,6 +255,9 @@ export const runtimeSnapshotResponseSchema = z.object({
         currentStatus: runtimeTransactionStatusSchema.describe("当前交易状态。"),
         reason: z.string().optional().describe("交易状态原因。"),
         meterWh: z.number().int().nonnegative().optional().describe("最近电表读数，单位 Wh。"),
+        powerW: z.number().nonnegative().optional().describe("最近功率采样值，单位 W。"),
+        currentA: z.number().nonnegative().optional().describe("最近电流采样值，单位 A。"),
+        voltageV: z.number().nonnegative().optional().describe("最近电压采样值，单位 V。"),
         sampledAt: z.string().datetime().optional().describe("最近电表采样时间。"),
         occurredAt: z.string().datetime().describe("交易状态最后更新时间。"),
       }),

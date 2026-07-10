@@ -11,6 +11,10 @@ import type {
   Ocpp16StatusNotificationResult,
 } from "../types";
 import {
+  captureConnectorAvailabilitySnapshot,
+  emitConnectorAvailabilitySnapshot,
+} from "../events";
+import {
   captureConnectorStatusTransition,
   emitConnectorStatusTransition,
   publishConnectorStatusTransition,
@@ -158,6 +162,7 @@ export async function applyRequestedAvailabilityWhenNoActiveTransaction(
   }
 
   const transition = captureConnectorStatusTransition(context, input);
+  const availability = captureConnectorAvailabilitySnapshot(context, input);
   context.chargingPoint = context.chargingPoint.updateEvse(input.evseId, (evse) =>
     evse
       .applyRequestedAvailability(at)
@@ -171,5 +176,11 @@ export async function applyRequestedAvailabilityWhenNoActiveTransaction(
     transition,
     at,
   );
+  emitConnectorAvailabilitySnapshot(context, {
+    evseId: input.evseId,
+    connectorId: input.connectorId,
+    previousAvailability: availability.availability,
+    occurredAt: at,
+  });
   return { applied: true, statusNotificationResult };
 }

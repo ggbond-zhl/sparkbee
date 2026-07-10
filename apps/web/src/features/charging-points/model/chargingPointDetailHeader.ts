@@ -4,6 +4,7 @@ import type {
 } from "@spark-bee/contracts";
 
 import type {
+  ChargingPointAvailabilitySnapshot,
   ChargingPointRuntimeEventState,
   HeaderTone,
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
@@ -272,11 +273,10 @@ function toRuntimeSummaryItems(
     statusQueryState,
     runtimeEventState,
   );
-  const recentIssue = toRecentIssue(runtimeEventState);
 
   const runtimeLogs: HeaderMetricItem[] = [
     {
-      label: "Boot",
+      label: "Boot 状态",
       value: toBootSummaryItemValue(runtimeStatus, statusQueryState),
       tone: toBootSummaryTone(runtimeStatus, statusQueryState),
     },
@@ -285,11 +285,16 @@ function toRuntimeSummaryItems(
       value: sessionSummaryItem.value,
       tone: sessionSummaryItem.tone,
     },
-    {
-      label: "最近异常",
-      value: recentIssue?.label ?? "无",
-      tone: recentIssue?.tone,
-    },
+    toChargingPointAvailabilitySummaryItem(
+      runtimeStatus,
+      statusQueryState,
+      runtimeEventState?.chargingPointAvailability,
+    ),
+    toChargingPointStatusSummaryItem(
+      runtimeStatus,
+      statusQueryState,
+      runtimeEventState?.chargingPointStatus,
+    ),
   ];
   return runtimeLogs;
 }
@@ -378,6 +383,117 @@ function toBootSummaryTone(
   }
 
   return "neutral";
+}
+
+function toChargingPointAvailabilitySummaryItem(
+  runtimeStatus: RuntimeOperationResponse | undefined,
+  statusQueryState: RuntimeStatusQueryState,
+  availability: ChargingPointAvailabilitySnapshot | null | undefined,
+): HeaderMetricItem {
+  if (runtimeStatus === undefined) {
+    return {
+      label: "可用性",
+      value: statusQueryState === "loading" ? "状态获取中" : "状态未知",
+      tone: statusQueryState === "loading" ? "waiting" : "warning",
+    };
+  }
+
+  if (runtimeStatus.status === "stopped") {
+    return {
+      label: "可用性",
+      value: "未运行",
+      tone: "neutral",
+    };
+  }
+
+  if (availability === undefined || availability === null) {
+    return {
+      label: "可用性",
+      value: "等待同步",
+      tone: "waiting",
+    };
+  }
+
+  return {
+    label: "可用性",
+    value: formatRuntimeAvailabilityDetail(availability),
+    tone: availability.requestedAvailability === undefined
+      ? toRuntimeAvailabilityTone(availability.currentAvailability)
+      : "warning",
+  };
+}
+
+function toChargingPointStatusSummaryItem(
+  runtimeStatus: RuntimeOperationResponse | undefined,
+  statusQueryState: RuntimeStatusQueryState,
+  chargingPointStatus: ChargingPointRuntimeEventState["chargingPointStatus"] | undefined,
+): HeaderMetricItem {
+  if (runtimeStatus === undefined) {
+    return {
+      label: "充电桩状态",
+      value: statusQueryState === "loading" ? "状态获取中" : "状态未知",
+      tone: statusQueryState === "loading" ? "waiting" : "warning",
+    };
+  }
+
+  if (runtimeStatus.status === "stopped") {
+    return {
+      label: "充电桩状态",
+      value: "未运行",
+      tone: "neutral",
+    };
+  }
+
+  if (chargingPointStatus === undefined || chargingPointStatus === null) {
+    return {
+      label: "充电桩状态",
+      value: "等待同步",
+      tone: "waiting",
+    };
+  }
+
+  if (chargingPointStatus.currentStatus === "available") {
+    return {
+      label: "充电桩状态",
+      value: "可用",
+      tone: "success",
+    };
+  }
+
+  if (chargingPointStatus.currentStatus === "unavailable") {
+    return {
+      label: "充电桩状态",
+      value: "不可用",
+      tone: "warning",
+    };
+  }
+
+  return {
+    label: "充电桩状态",
+    value: "故障",
+    tone: "destructive",
+  };
+}
+
+function formatRuntimeAvailabilityDetail(availability: ChargingPointAvailabilitySnapshot) {
+  const currentLabel = formatRuntimeAvailability(availability.currentAvailability);
+  return availability.requestedAvailability === undefined
+    ? currentLabel
+    : `${currentLabel} · 待切换为${formatRuntimeAvailability(
+        availability.requestedAvailability,
+      )}`;
+}
+
+function formatRuntimeAvailability(
+  availability: ChargingPointAvailabilitySnapshot["currentAvailability"],
+) {
+  return availability === "operative" ? "可用" : "不可用";
+}
+
+function toRuntimeAvailabilityTone(
+  availability: ChargingPointAvailabilitySnapshot["currentAvailability"],
+): HeaderTone {
+  return availability === "operative" ? "success" : "warning";
 }
 
 function formatSessionLogEntryValue(

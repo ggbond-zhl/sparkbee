@@ -8,7 +8,7 @@ import {
 
 import type { ServerDatabase } from "../../db";
 import { ValidationError } from "../../utils/errors";
-import { createConnectorService } from "./connector.service";
+import { ConnectorRepository } from "./connector.repo";
 
 const jsonContent = <TSchema extends z.ZodType>(schema: TSchema) => ({
   "application/json": { schema },
@@ -154,34 +154,37 @@ export function createConnectorRoute(database: ServerDatabase) {
       }
     },
   });
-  const service = createConnectorService(database);
+  const repository = new ConnectorRepository(database);
 
   route.openapi(createConnectorRouteDefinition, async (context) => {
     const { id: chargingPointId } = context.req.valid("param");
     const input = context.req.valid("json");
-    const connector = await service.create(chargingPointId, input);
+    const connector = await repository.create(chargingPointId, input);
     return context.json(connector, 201);
   });
 
   route.openapi(listConnectorsRoute, async (context) => {
     const { id: chargingPointId } = context.req.valid("param");
-    return context.json(await service.list(chargingPointId), 200);
+    return context.json(await repository.list(chargingPointId), 200);
   });
 
   route.openapi(getConnectorRoute, async (context) => {
     const { id: chargingPointId, connectorId } = context.req.valid("param");
-    return context.json(await service.get(chargingPointId, connectorId), 200);
+    return context.json(await repository.get(chargingPointId, connectorId), 200);
   });
 
   route.openapi(updateConnectorRouteDefinition, async (context) => {
     const { id: chargingPointId, connectorId } = context.req.valid("param");
     const input = context.req.valid("json");
-    return context.json(await service.update(chargingPointId, connectorId, input), 200);
+    return context.json(
+      await repository.update(chargingPointId, connectorId, input),
+      200,
+    );
   });
 
   route.openapi(deleteConnectorRoute, async (context) => {
     const { id: chargingPointId, connectorId } = context.req.valid("param");
-    await service.softDelete(chargingPointId, connectorId);
+    await repository.softDelete(chargingPointId, connectorId);
     return context.body(null, 204);
   });
 

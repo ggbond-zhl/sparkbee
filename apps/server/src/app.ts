@@ -8,9 +8,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { timeout } from "hono/timeout";
 
 import type { ServerDatabase } from "./db";
-import { ChargingPointActorRegistry } from "./lib/chargingPointActorRegistry";
-import { ChargingPointRuntimeLogFileWriter } from "./lib/chargingPointRuntimeLogFileWriter";
-import { ChargingPointEventStreamHub } from "./lib/chargingPointEventStreamHub";
+import type { ChargingPointActorHost } from "./lib/chargingPointActorHost";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type { ChargingPointActorFactory } from "./modules/runtimeOperation/runtimeOperation.service";
 import { createRoutes } from "./routes";
@@ -19,10 +17,8 @@ export interface AppDependencies {
   database?: ServerDatabase;
   environment?: string;
   timeoutMs?: number;
-  chargingPointActorRegistry?: ChargingPointActorRegistry;
+  chargingPointActorHost?: ChargingPointActorHost;
   runtimeLogDirectory?: string;
-  chargingPointRuntimeLogFileWriter?: ChargingPointRuntimeLogFileWriter;
-  chargingPointEventStreamHub?: ChargingPointEventStreamHub;
   createChargingPointActor?: ChargingPointActorFactory;
 }
 
@@ -45,15 +41,6 @@ export function createApp(dependencies: AppDependencies = {}) {
     "/api",
     createRoutes({
       ...dependencies,
-      chargingPointActorRegistry:
-        dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry(),
-      chargingPointRuntimeLogFileWriter:
-        dependencies.chargingPointRuntimeLogFileWriter ??
-        new ChargingPointRuntimeLogFileWriter(
-          dependencies.runtimeLogDirectory ?? "logs/runtime",
-        ),
-      chargingPointEventStreamHub:
-        dependencies.chargingPointEventStreamHub ?? new ChargingPointEventStreamHub(),
     }),
   );
   app.doc31("/api/openapi.json", {

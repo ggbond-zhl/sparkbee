@@ -37,8 +37,10 @@ import {
 const ALL_CHARGING_POINT_ACTOR_EVENT_TYPES = [
   "chargingPoint.lifecycle",
   "session.status",
+  "chargingPoint.availability",
   "chargingPoint.status",
   "evse.status",
+  "connector.availability",
   "connector.status",
   "authorization.status",
   "transaction.status",
@@ -149,6 +151,10 @@ class FakeProtocolRuntime {
   runtimeStopped = false;
   private readonly runtimeEventListeners = new Set<Ocpp16RuntimeEventListener>();
   private evseStatus: "available" | "occupied" = "available";
+  private chargingPointAvailability: "operative" | "inoperative" = "operative";
+  private readonly connectorAvailabilities = new Map<string, "operative" | "inoperative">([
+    ["1/1", "operative"],
+  ]);
   private readonly connectorStatuses = new Map<string, "available" | "occupied">([
     ["1/1", "available"],
   ]);
@@ -266,6 +272,39 @@ class FakeProtocolRuntime {
     };
   }
 
+  publishChargingPointAvailabilitySnapshot() {
+    this.calls.push("publishChargingPointAvailabilitySnapshot");
+    this.emitRuntimeEvent({
+      type: "chargingPoint.availability",
+      resource: { scope: "chargingPoint" },
+      previousAvailability: null,
+      currentAvailability: this.chargingPointAvailability,
+      occurredAt: now(),
+    });
+  }
+
+  publishConnectorAvailabilitySnapshot(input: {
+    evseId: number;
+    connectorId: number;
+  }) {
+    this.calls.push(
+      `publishConnectorAvailabilitySnapshot:${input.evseId}/${input.connectorId}`,
+    );
+    this.emitRuntimeEvent({
+      type: "connector.availability",
+      resource: {
+        scope: "connector",
+        evseId: input.evseId,
+        connectorId: input.connectorId,
+      },
+      previousAvailability: null,
+      currentAvailability: this.connectorAvailabilities.get(
+        `${input.evseId}/${input.connectorId}`,
+      ) ?? "operative",
+      occurredAt: now(),
+    });
+  }
+
   listConnectorRefs() {
     return [...this.connectorStatuses.keys()].map((key) => {
       const [evseId, connectorId] = key.split("/").map(Number);
@@ -279,6 +318,9 @@ class FakeProtocolRuntime {
     status: "available" | "occupied",
   ): void {
     this.connectorStatuses.set(`${evseId}/${connectorId}`, status);
+    if (!this.connectorAvailabilities.has(`${evseId}/${connectorId}`)) {
+      this.connectorAvailabilities.set(`${evseId}/${connectorId}`, "operative");
+    }
   }
 
   startHeartbeatLoop(): void {
@@ -474,6 +516,9 @@ class FakeProtocolRuntime {
         transactionId: input.transactionId,
       },
       meterWh: 100,
+      powerW: 7200,
+      currentA: 32,
+      voltageV: 225,
       sampledAt: now(),
       occurredAt: now(),
     });
@@ -483,6 +528,9 @@ class FakeProtocolRuntime {
       connectorId: 1,
       ocppTransactionId: 1001,
       meterWh: 100,
+      powerW: 7200,
+      currentA: 32,
+      voltageV: 225,
       sampledAt: new Date("2026-01-01T00:00:00.000Z"),
       sentAt: new Date("2026-01-01T00:00:00.000Z"),
       receivedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -1042,7 +1090,9 @@ describe("Ocpp16ChargingPointActor", () => {
     protocolRuntime.setConnectorStatus(2, 2, "available");
     const events = collectChargingPointActorEvents(actor, [
       "chargingPoint.lifecycle",
+      "chargingPoint.availability",
       "chargingPoint.status",
+      "connector.availability",
       "connector.status",
     ]);
 
@@ -1056,10 +1106,22 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(protocolRuntime.calls).toEqual([
       "boot",
       "startHeartbeatLoop",
+      "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
+      "publishConnectorAvailabilitySnapshot:1/1",
       "reportConnectorStatus:1",
+      "publishConnectorAvailabilitySnapshot:2/2",
       "reportConnectorStatus:2",
     ]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "chargingPoint.availability",
+      chargingPointId: "cp-1",
+      protocol: "OCPP16J",
+      resource: { scope: "chargingPoint" },
+      previousAvailability: null,
+      currentAvailability: "operative",
+      occurredAt: "2026-01-01T00:00:00.000Z",
+    }));
     expect(events).toContainEqual(expect.objectContaining({
       type: "chargingPoint.status",
       chargingPointId: "cp-1",
@@ -1067,6 +1129,15 @@ describe("Ocpp16ChargingPointActor", () => {
       resource: { scope: "chargingPoint" },
       previousStatus: null,
       currentStatus: "available",
+      occurredAt: "2026-01-01T00:00:00.000Z",
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "connector.availability",
+      chargingPointId: "cp-1",
+      protocol: "OCPP16J",
+      resource: { scope: "connector", evseId: 1, connectorId: 1 },
+      previousAvailability: null,
+      currentAvailability: "operative",
       occurredAt: "2026-01-01T00:00:00.000Z",
     }));
     expect(events).toContainEqual(expect.objectContaining({
@@ -1112,7 +1183,9 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(protocolRuntime.calls).toEqual([
       "boot",
       "startHeartbeatLoop",
+      "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
+      "publishConnectorAvailabilitySnapshot:1/1",
       "reportConnectorStatus:1",
     ]);
   });
@@ -1207,7 +1280,9 @@ describe("Ocpp16ChargingPointActor", () => {
       "boot",
       "boot",
       "startHeartbeatLoop",
+      "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
+      "publishConnectorAvailabilitySnapshot:1/1",
       "reportConnectorStatus:1",
     ]);
   });
@@ -1283,7 +1358,9 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(protocolRuntime.calls).toEqual([
       "boot",
       "startHeartbeatLoop",
+      "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
+      "publishConnectorAvailabilitySnapshot:1/1",
       "reportConnectorStatus:1",
     ]);
   });
@@ -1499,12 +1576,16 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(protocolRuntime.calls).toEqual([
       "boot",
       "startHeartbeatLoop",
+      "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
+      "publishConnectorAvailabilitySnapshot:1/1",
       "reportConnectorStatus:1",
       "stopRuntime",
       "boot",
       "startHeartbeatLoop",
+      "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
+      "publishConnectorAvailabilitySnapshot:1/1",
       "reportConnectorStatus:1",
     ]);
     expect(protocolRuntime.disposed).toBe(false);
@@ -1842,6 +1923,7 @@ describe("Ocpp16ChargingPointActor", () => {
 
     await actor.start();
     const events = collectChargingPointActorEvents(actor, [
+      "connector.availability",
       "evse.status",
       "connector.status",
     ]);
@@ -1854,6 +1936,16 @@ describe("Ocpp16ChargingPointActor", () => {
     await flushRemoteCommand();
 
     expect(request.responses).toEqual([{ status: "Accepted" }]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "connector.availability",
+      resource: {
+        scope: "connector",
+        evseId: 1,
+        connectorId: 1,
+      },
+      previousAvailability: "operative",
+      currentAvailability: "inoperative",
+    }));
     expect(events).toContainEqual(expect.objectContaining({
       type: "connector.status",
       resource: {
@@ -1869,6 +1961,46 @@ describe("Ocpp16ChargingPointActor", () => {
       resource: { scope: "evse", evseId: 1 },
       previousStatus: "available",
       currentStatus: "unavailable",
+    }));
+  });
+
+  test("emits actor availability events when ChangeAvailability changes the charging point", async () => {
+    const { actor, session } = createRuntimeHarness([
+      runtimeBootAccepted(),
+      runtimeResponse("StatusNotification", {}),
+      runtimeResponse("StatusNotification", {}),
+      runtimeResponse("StatusNotification", {}),
+    ]);
+
+    await actor.start();
+    const events = collectChargingPointActorEvents(actor, [
+      "chargingPoint.availability",
+      "connector.availability",
+    ]);
+    const request = new RuntimeFakeInboundRequest("ChangeAvailability", {
+      connectorId: 0,
+      type: "Inoperative",
+    });
+
+    session.emitInboundRequest(request);
+    await flushRemoteCommand();
+
+    expect(request.responses).toEqual([{ status: "Accepted" }]);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "chargingPoint.availability",
+      resource: { scope: "chargingPoint" },
+      previousAvailability: "operative",
+      currentAvailability: "inoperative",
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "connector.availability",
+      resource: {
+        scope: "connector",
+        evseId: 1,
+        connectorId: 1,
+      },
+      previousAvailability: "operative",
+      currentAvailability: "inoperative",
     }));
   });
 

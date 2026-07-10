@@ -40,7 +40,7 @@ export type ConnectorManagementFormValues = CreateConnectorRequest;
 
 export const connectorManagementFormDefaultValues = {
   connectorId: "1",
-  type: "Type2",
+  type: "IEC_62196_T2",
   format: "socket",
   powerType: "ac",
   maxVoltage: "230",

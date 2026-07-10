@@ -5537,6 +5537,7 @@ describe("Ocpp16Runtime", () => {
       response("StatusNotification", {}),
     ]);
     await boot(protocolRuntime);
+    const events = collectRuntimeEvents(protocolRuntime);
     const request = new FakeInboundRequest("ChangeAvailability", {
       connectorId: 1,
       type: "Inoperative",
@@ -5559,6 +5560,16 @@ describe("Ocpp16Runtime", () => {
     expect(evse?.availability).toBe("inoperative");
     expect(connector?.availability).toBe("inoperative");
     expect(connector?.status).toBe("unavailable");
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "connector.availability",
+      resource: {
+        scope: "connector",
+        evseId: 1,
+        connectorId: 1,
+      },
+      previousAvailability: "operative",
+      currentAvailability: "inoperative",
+    }));
   });
 
   test("accepts ChangeAvailability for a plugged connector without active transaction", async () => {
@@ -5614,6 +5625,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    const events = collectRuntimeEvents(protocolRuntime);
     const request = new FakeInboundRequest("ChangeAvailability", {
       connectorId: 1,
       type: "Inoperative",
@@ -5629,6 +5641,17 @@ describe("Ocpp16Runtime", () => {
     expect(connector?.availability).toBe("operative");
     expect(connector?.requestedAvailability).toBe("inoperative");
     expect(connector?.status).toBe("occupied");
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "connector.availability",
+      resource: {
+        scope: "connector",
+        evseId: 1,
+        connectorId: 1,
+      },
+      previousAvailability: "operative",
+      currentAvailability: "operative",
+      requestedAvailability: "inoperative",
+    }));
 
     await protocolRuntime.stopTransaction({
       transactionId: "1001",
@@ -5649,6 +5672,16 @@ describe("Ocpp16Runtime", () => {
       connectorId: 1,
       status: "Unavailable",
     });
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "connector.availability",
+      resource: {
+        scope: "connector",
+        evseId: 1,
+        connectorId: 1,
+      },
+      previousAvailability: "operative",
+      currentAvailability: "inoperative",
+    }));
   });
 
   test("accepts operative ChangeAvailability while busy and clears pending availability", async () => {
@@ -5761,6 +5794,7 @@ describe("Ocpp16Runtime", () => {
       meterStartWh: 100,
     });
     await protocolRuntime.plugConnector({ evseId: 3, connectorId: 3 });
+    const events = collectRuntimeEvents(protocolRuntime);
     const request = new FakeInboundRequest("ChangeAvailability", {
       connectorId: 0,
       type: "Inoperative",
@@ -5776,6 +5810,12 @@ describe("Ocpp16Runtime", () => {
     ]);
     let state = runtimeState(protocolRuntime);
     expect(state.chargingPoint.availability).toBe("inoperative");
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "chargingPoint.availability",
+      resource: { scope: "chargingPoint" },
+      previousAvailability: "operative",
+      currentAvailability: "inoperative",
+    }));
     let [busyEvse, reservedEvse, pluggedEvse] = state.chargingPoint.evses;
     let [busyConnector] = busyEvse?.listConnectors() ?? [];
     let [reservedConnector] = reservedEvse?.listConnectors() ?? [];
@@ -5784,6 +5824,17 @@ describe("Ocpp16Runtime", () => {
     expect(busyEvse?.requestedAvailability).toBe("inoperative");
     expect(busyConnector?.availability).toBe("operative");
     expect(busyConnector?.requestedAvailability).toBe("inoperative");
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "connector.availability",
+      resource: {
+        scope: "connector",
+        evseId: 1,
+        connectorId: 1,
+      },
+      previousAvailability: "operative",
+      currentAvailability: "operative",
+      requestedAvailability: "inoperative",
+    }));
     expect(reservedEvse?.activeReservationId).toBeNull();
     expect(reservedEvse?.availability).toBe("inoperative");
     expect(reservedConnector?.availability).toBe("inoperative");
@@ -5811,6 +5862,16 @@ describe("Ocpp16Runtime", () => {
       connectorId: 1,
       status: "Unavailable",
     });
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "connector.availability",
+      resource: {
+        scope: "connector",
+        evseId: 1,
+        connectorId: 1,
+      },
+      previousAvailability: "operative",
+      currentAvailability: "inoperative",
+    }));
   });
 
   test("rejects ChangeAvailability before registration or for unknown connectors", async () => {

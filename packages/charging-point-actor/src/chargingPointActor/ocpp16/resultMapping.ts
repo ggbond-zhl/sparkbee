@@ -124,6 +124,9 @@ export function toChargingPointActorMeterValueResult(
       status: "accepted",
       transactionId: result.transactionId,
       meterWh: result.meterWh,
+      powerW: result.powerW,
+      currentA: result.currentA,
+      voltageV: result.voltageV,
       sampledAt: result.sampledAt,
     };
   }

@@ -8,8 +8,14 @@ import {
 } from "../events";
 import { mapConnectorFlowStatus, mapStopReason } from "../mappings";
 import {
-  getOcpp16TransactionDelivery,
-} from "../Ocpp16TransactionDelivery";
+  bindOfflineTransactionStart,
+  completeTransactionDelivery,
+  getOfflineTransactionRecord,
+  listPendingOfflineTransactions,
+  markOfflineMeterValueReplayed,
+  markOfflineStopReplayed,
+  recordOcppTransactionBinding,
+} from "../transactionDeliveryState";
 import { createMeterValue, createStopTransactionPayload } from "../payloadBuilders";
 import type { Ocpp16RuntimeContext } from "../state";
 import type { Ocpp16StartTransactionCallResult } from "../types";
@@ -33,8 +39,7 @@ export async function replayOfflineTransactions(
 
   context.offlineTransactionReplayInProgress = true;
   try {
-    const transactionDelivery = getOcpp16TransactionDelivery(context);
-    for (const record of transactionDelivery.listPendingOfflineTransactions()) {
+    for (const record of listPendingOfflineTransactions(context)) {
       const replayStartResult = await replayOfflineStartTransaction(
         context,
         record,
@@ -66,7 +71,7 @@ export async function replayOfflineTransactions(
         if (context.configurationFacts.shouldStopTransactionOnInvalidId()) {
           recordDeauthorizedStop(context, record);
           const latestRecord =
-            transactionDelivery.getOfflineTransactionRecord(record.localTransactionId) ??
+            getOfflineTransactionRecord(context, record.localTransactionId) ??
             record;
           const replayed = await replayOfflineStopTransaction(
             context,
@@ -109,7 +114,7 @@ export async function replayOfflineTransactions(
           return;
         }
 
-        transactionDelivery.markMeterValueReplayed(record.localTransactionId, index);
+        markOfflineMeterValueReplayed(context, record.localTransactionId, index);
       }
       if (record.stop !== null && !record.stop.replayed) {
         const replayed = await replayOfflineStopTransaction(
@@ -149,7 +154,7 @@ async function replayOfflineStartTransaction(
     if (record.ocppTransactionId === null) {
       return null;
     }
-    getOcpp16TransactionDelivery(context).recordOcppBinding(record.localTransactionId, {
+    recordOcppTransactionBinding(context, record.localTransactionId, {
       ocppTransactionId: record.ocppTransactionId,
     });
 
@@ -170,7 +175,7 @@ async function replayOfflineStartTransaction(
     return null;
   }
 
-  getOcpp16TransactionDelivery(context).bindOfflineStart(record.localTransactionId, {
+  bindOfflineTransactionStart(context, record.localTransactionId, {
     ocppTransactionId: startTransactionResult.ocppTransactionId,
   });
 
@@ -210,7 +215,7 @@ async function replayOfflineStopTransaction(
     return false;
   }
 
-  getOcpp16TransactionDelivery(context).markStopReplayed(record.localTransactionId);
+  markOfflineStopReplayed(context, record.localTransactionId);
   await sendStatusNotification(context, {
     connectorId: record.ocppConnectorId,
     status: getCurrentConnectorStatus(context, record),
@@ -233,7 +238,8 @@ function recordDeauthorizedStop(
     evseId: record.evseId,
     connectorId: record.connectorId,
   });
-  const delivery = getOcpp16TransactionDelivery(context).recordOfflineStop({
+  const delivery = completeTransactionDelivery(context, {
+    queueOffline: true,
     transaction,
     connectorRef: record,
     reason: "deauthorized",

@@ -1,6 +1,7 @@
 import type {
   AuthorizationSource,
   AuthorizationStatus,
+  Availability,
   ChargingPointStatus,
   ConnectorStatus,
   EVSEStatus,
@@ -18,6 +19,76 @@ export type ConnectorStatusSnapshot = {
   evseStatus: EVSEStatus | null;
   connectorStatus: ConnectorStatus | null;
 };
+
+export type ConnectorAvailabilitySnapshot = {
+  availability: Availability | null;
+};
+
+export function captureConnectorAvailabilitySnapshot(
+  context: Ocpp16RuntimeContext,
+  input: { evseId: number; connectorId: number },
+): ConnectorAvailabilitySnapshot {
+  return {
+    availability: context.chargingPoint.getConnector(
+      input.evseId,
+      input.connectorId,
+    )?.availability ?? null,
+  };
+}
+
+export function emitChargingPointAvailabilitySnapshot(
+  context: Ocpp16RuntimeContext,
+  input: {
+    previousAvailability?: Availability | null;
+    occurredAt?: Date;
+  },
+): void {
+  const requestedAvailability = context.chargingPoint.requestedAvailability;
+  emitRuntimeEvent(context, {
+    type: "chargingPoint.availability",
+    resource: { scope: "chargingPoint" },
+    previousAvailability: input.previousAvailability ?? null,
+    currentAvailability: context.chargingPoint.availability,
+    ...(requestedAvailability === null
+      ? {}
+      : { requestedAvailability }),
+    occurredAt: input.occurredAt ?? context.clock(),
+  });
+}
+
+export function emitConnectorAvailabilitySnapshot(
+  context: Ocpp16RuntimeContext,
+  input: {
+    evseId: number;
+    connectorId: number;
+    previousAvailability?: Availability | null;
+    occurredAt?: Date;
+  },
+): void {
+  const connector = context.chargingPoint.getConnector(
+    input.evseId,
+    input.connectorId,
+  );
+  if (connector === undefined) {
+    return;
+  }
+
+  const requestedAvailability = connector.requestedAvailability;
+  emitRuntimeEvent(context, {
+    type: "connector.availability",
+    resource: {
+      scope: "connector",
+      evseId: input.evseId,
+      connectorId: input.connectorId,
+    },
+    previousAvailability: input.previousAvailability ?? null,
+    currentAvailability: connector.availability,
+    ...(requestedAvailability === null
+      ? {}
+      : { requestedAvailability }),
+    occurredAt: input.occurredAt ?? context.clock(),
+  });
+}
 
 export function captureConnectorStatusSnapshot(
   context: Ocpp16RuntimeContext,
@@ -231,6 +302,9 @@ export function emitTransactionMeterValue(
     connectorId: number;
     transactionId: string;
     meterWh: number;
+    powerW: number;
+    currentA: number;
+    voltageV: number;
     sampledAt: Date;
     occurredAt?: Date;
   },
@@ -244,6 +318,9 @@ export function emitTransactionMeterValue(
       transactionId: input.transactionId,
     },
     meterWh: input.meterWh,
+    powerW: input.powerW,
+    currentA: input.currentA,
+    voltageV: input.voltageV,
     sampledAt: cloneDate(input.sampledAt),
     occurredAt: input.occurredAt ?? context.clock(),
   });

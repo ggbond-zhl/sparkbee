@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  chargingPointEventStreamMessageSchema,
   chargingPointConnectorActionResponseSchema,
   createChargingPointRequestSchema,
   createConnectorRequestSchema,
@@ -16,6 +17,48 @@ import {
 } from "../../src";
 
 describe("chargingPoint contract schemas", () => {
+  test("validates the complete charging point event stream interface", () => {
+    const chargingPointId = "00000000-0000-4000-8000-000000000001";
+    const meterValueMessage = {
+      event: "transaction.meterValue",
+      data: {
+        id: "event-1",
+        sequence: 1,
+        type: "transaction.meterValue",
+        chargingPointId,
+        protocol: "OCPP16J",
+        resource: {
+          scope: "transaction",
+          evseId: 1,
+          connectorId: 1,
+          transactionId: "transaction-1",
+        },
+        occurredAt: "2026-07-10T00:00:00.000Z",
+        meterWh: 100,
+        powerW: 7360,
+        currentA: 32,
+        voltageV: 230,
+        sampledAt: "2026-07-10T00:00:00.000Z",
+      },
+    } as const;
+
+    expect(chargingPointEventStreamMessageSchema.parse(meterValueMessage)).toEqual(
+      meterValueMessage,
+    );
+    expect(
+      chargingPointEventStreamMessageSchema.safeParse({
+        ...meterValueMessage,
+        data: { ...meterValueMessage.data, sampledAt: "not-a-date" },
+      }).success,
+    ).toBe(false);
+    expect(
+      chargingPointEventStreamMessageSchema.parse({
+        event: "deleted",
+        data: { chargingPointId },
+      }),
+    ).toEqual({ event: "deleted", data: { chargingPointId } });
+  });
+
   test("normalizes chargingPoint create input", () => {
     expect(
       createChargingPointRequestSchema.parse({
@@ -77,7 +120,7 @@ describe("chargingPoint contract schemas", () => {
       createConnectorRequestSchema.parse({
         evseId: 1,
         connectorId: 1,
-        type: " Type2 ",
+        type: "IEC_62196_T2",
         format: "socket",
         powerType: "ac",
         maxVoltage: 230,
@@ -87,7 +130,7 @@ describe("chargingPoint contract schemas", () => {
     ).toEqual({
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
       maxVoltage: 230,
@@ -98,7 +141,7 @@ describe("chargingPoint contract schemas", () => {
       createConnectorRequestSchema.parse({
         evseId: 1,
         connectorId: 1,
-        type: "Type2",
+        type: "IEC_62196_T2",
         format: "socket",
         powerType: "ac",
         maxCurrent: 32,
@@ -108,13 +151,44 @@ describe("chargingPoint contract schemas", () => {
       createConnectorRequestSchema.parse({
         evseId: 1,
         connectorId: 1,
-        type: "Type2",
+        type: "IEC_62196_T2",
         format: "socket",
         powerType: "ac",
         maxVoltage: null,
         maxCurrent: 32,
       }),
     ).toThrow();
+  });
+
+  test("restricts connector type to supported standards and describes them", () => {
+    expect(
+      createConnectorRequestSchema.parse({
+        evseId: 1,
+        connectorId: 1,
+        type: "GBT_DC",
+        format: "cable",
+        powerType: "dc",
+        maxVoltage: 750,
+        maxCurrent: 250,
+      }),
+    ).toMatchObject({
+      type: "GBT_DC",
+    });
+
+    expect(() =>
+      createConnectorRequestSchema.parse({
+        evseId: 1,
+        connectorId: 1,
+        type: "Type2",
+        format: "socket",
+        powerType: "ac",
+        maxVoltage: 230,
+        maxCurrent: 32,
+      }),
+    ).toThrow();
+    expect(createConnectorRequestSchema.shape.type.description).toContain(
+      "IEC_62196_T2: 欧标交流 Type 2",
+    );
   });
 
   test("describes runtime operation response in Chinese", () => {
@@ -153,6 +227,10 @@ describe("chargingPoint contract schemas", () => {
           currentStatus: "available",
           occurredAt: "2026-07-04T09:00:01.000Z",
         },
+        chargingPointAvailability: {
+          currentAvailability: "operative",
+          occurredAt: "2026-07-04T09:00:01.000Z",
+        },
         evseStatuses: [
           {
             evseId: 1,
@@ -168,6 +246,15 @@ describe("chargingPoint contract schemas", () => {
             occurredAt: "2026-07-04T09:00:03.000Z",
           },
         ],
+        connectorAvailabilities: [
+          {
+            evseId: 1,
+            connectorId: 1,
+            currentAvailability: "operative",
+            requestedAvailability: "inoperative",
+            occurredAt: "2026-07-04T09:00:03.000Z",
+          },
+        ],
         transactionStatuses: [
           {
             transactionId: "tx-1",
@@ -175,6 +262,9 @@ describe("chargingPoint contract schemas", () => {
             connectorId: 1,
             currentStatus: "active",
             meterWh: 1200,
+            powerW: 7200,
+            currentA: 32,
+            voltageV: 225,
             sampledAt: "2026-07-04T09:00:04.000Z",
             occurredAt: "2026-07-04T09:00:04.000Z",
           },
@@ -184,11 +274,18 @@ describe("chargingPoint contract schemas", () => {
       }),
     ).toMatchObject({
       sessionStatus: { currentStatus: "online" },
+      chargingPointAvailability: { currentAvailability: "operative" },
+      connectorAvailabilities: [{
+        currentAvailability: "operative",
+        requestedAvailability: "inoperative",
+      }],
       connectorStatuses: [{ currentStatus: "occupied" }],
     });
     expect(runtimeSnapshotResponseSchema.shape.sessionStatus.description).toBe(
       "桩实例当前会话状态；没有运行态事件时为 null。",
     );
+    expect(runtimeSnapshotResponseSchema.shape.chargingPointAvailability.description)
+      .toContain("整桩可用性");
   });
 
   test("describes connector action response with business and protocol ids", () => {

@@ -32,7 +32,7 @@ import type {
 } from "@spark-bee/charging-point-actor";
 
 import { createApp } from "../../src/app";
-import { ChargingPointActorRegistry } from "../../src/lib/chargingPointActorRegistry";
+import { ChargingPointActorHost } from "../../src/lib/chargingPointActorHost";
 import { createTestDatabase } from "../support/testDatabase";
 
 describe("chargingPoint management API", () => {
@@ -317,7 +317,7 @@ describe("chargingPoint management API", () => {
     const firstConnector = await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
       maxVoltage: 230,
@@ -326,7 +326,7 @@ describe("chargingPoint management API", () => {
     const secondConnector = await createConnector(app, chargingPoint.id, {
       evseId: 2,
       connectorId: 2,
-      type: "CCS2",
+      type: "IEC_62196_T2_COMBO",
       format: "cable",
       powerType: "dc",
       maxVoltage: 750,
@@ -369,7 +369,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -382,7 +382,7 @@ describe("chargingPoint management API", () => {
         body: JSON.stringify({
           evseId: 10,
           connectorId: 20,
-          type: "CCS2",
+          type: "IEC_62196_T2_COMBO",
           format: "cable",
           powerType: "dc",
           maxVoltage: 750,
@@ -398,7 +398,7 @@ describe("chargingPoint management API", () => {
       id: connector.id,
       evseId: 10,
       connectorId: 20,
-      type: "CCS2",
+      type: "IEC_62196_T2_COMBO",
       format: "cable",
       powerType: "dc",
       maxVoltage: 750,
@@ -432,7 +432,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -443,7 +443,7 @@ describe("chargingPoint management API", () => {
       body: JSON.stringify({
         evseId: 1,
         connectorId: 2,
-        type: "CCS2",
+        type: "IEC_62196_T2_COMBO",
         format: "cable",
         powerType: "dc",
         maxVoltage: 750,
@@ -503,7 +503,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, firstChargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -566,7 +566,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
       maxVoltage: 230,
@@ -653,7 +653,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -674,28 +674,51 @@ describe("chargingPoint management API", () => {
     actor.publish({
       id: "event-2",
       sequence: 2,
-      type: "chargingPoint.status",
+      type: "chargingPoint.availability",
       chargingPointId: chargingPoint.id,
       protocol: "OCPP16J",
       resource: { scope: "chargingPoint" },
       occurredAt: "2026-07-04T09:00:01.000Z",
-      previousStatus: null,
-      currentStatus: "available",
+      previousAvailability: "operative",
+      currentAvailability: "operative",
     });
     actor.publish({
       id: "event-3",
       sequence: 3,
-      type: "connector.status",
+      type: "chargingPoint.status",
       chargingPointId: chargingPoint.id,
       protocol: "OCPP16J",
-      resource: { scope: "connector", evseId: 1, connectorId: 1 },
+      resource: { scope: "chargingPoint" },
       occurredAt: "2026-07-04T09:00:02.000Z",
       previousStatus: null,
-      currentStatus: "occupied",
+      currentStatus: "available",
     });
     actor.publish({
       id: "event-4",
       sequence: 4,
+      type: "connector.availability",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: { scope: "connector", evseId: 1, connectorId: 1 },
+      occurredAt: "2026-07-04T09:00:03.000Z",
+      previousAvailability: "operative",
+      currentAvailability: "operative",
+      requestedAvailability: "inoperative",
+    });
+    actor.publish({
+      id: "event-5",
+      sequence: 5,
+      type: "connector.status",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: { scope: "connector", evseId: 1, connectorId: 1 },
+      occurredAt: "2026-07-04T09:00:04.000Z",
+      previousStatus: null,
+      currentStatus: "occupied",
+    });
+    actor.publish({
+      id: "event-6",
+      sequence: 6,
       type: "transaction.status",
       chargingPointId: chargingPoint.id,
       protocol: "OCPP16J",
@@ -705,13 +728,13 @@ describe("chargingPoint management API", () => {
         connectorId: 1,
         transactionId: "tx-1",
       },
-      occurredAt: "2026-07-04T09:00:03.000Z",
+      occurredAt: "2026-07-04T09:00:05.000Z",
       previousStatus: "starting",
       currentStatus: "active",
     });
     actor.publish({
-      id: "event-5",
-      sequence: 5,
+      id: "event-7",
+      sequence: 7,
       type: "transaction.meterValue",
       chargingPointId: chargingPoint.id,
       protocol: "OCPP16J",
@@ -721,22 +744,25 @@ describe("chargingPoint management API", () => {
         connectorId: 1,
         transactionId: "tx-1",
       },
-      occurredAt: "2026-07-04T09:00:04.000Z",
+      occurredAt: "2026-07-04T09:00:06.000Z",
       meterWh: 1200,
-      sampledAt: "2026-07-04T09:00:04.000Z",
+      powerW: 7200,
+      currentA: 32,
+      voltageV: 225,
+      sampledAt: "2026-07-04T09:00:06.000Z",
     });
     actor.publish({
-      id: "event-6",
-      sequence: 6,
+      id: "event-8",
+      sequence: 8,
       type: "protocol.message",
       chargingPointId: chargingPoint.id,
       protocol: "OCPP16J",
       resource: { scope: "protocol" },
-      occurredAt: "2026-07-04T09:00:05.000Z",
+      occurredAt: "2026-07-04T09:00:07.000Z",
       direction: "received",
       action: "Heartbeat",
       messageId: "message-1",
-      body: { currentTime: "2026-07-04T09:00:05.000Z" },
+      body: { currentTime: "2026-07-04T09:00:07.000Z" },
     });
 
     const expectedSnapshot = {
@@ -748,6 +774,10 @@ describe("chargingPoint management API", () => {
       },
       chargingPointStatus: {
         currentStatus: "available",
+        occurredAt: "2026-07-04T09:00:02.000Z",
+      },
+      chargingPointAvailability: {
+        currentAvailability: "operative",
         occurredAt: "2026-07-04T09:00:01.000Z",
       },
       connectorStatuses: [
@@ -755,7 +785,16 @@ describe("chargingPoint management API", () => {
           evseId: 1,
           connectorId: 1,
           currentStatus: "occupied",
-          occurredAt: "2026-07-04T09:00:02.000Z",
+          occurredAt: "2026-07-04T09:00:04.000Z",
+        },
+      ],
+      connectorAvailabilities: [
+        {
+          evseId: 1,
+          connectorId: 1,
+          currentAvailability: "operative",
+          requestedAvailability: "inoperative",
+          occurredAt: "2026-07-04T09:00:03.000Z",
         },
       ],
       transactionStatuses: [
@@ -765,11 +804,14 @@ describe("chargingPoint management API", () => {
           connectorId: 1,
           currentStatus: "active",
           meterWh: 1200,
-          sampledAt: "2026-07-04T09:00:04.000Z",
-          occurredAt: "2026-07-04T09:00:04.000Z",
+          powerW: 7200,
+          currentA: 32,
+          voltageV: 225,
+          sampledAt: "2026-07-04T09:00:06.000Z",
+          occurredAt: "2026-07-04T09:00:06.000Z",
         },
       ],
-      lastHeartbeatAt: "2026-07-04T09:00:05.000Z",
+      lastHeartbeatAt: "2026-07-04T09:00:07.000Z",
     };
 
     const snapshotResponse = await app.request(
@@ -831,7 +873,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -864,13 +906,6 @@ describe("chargingPoint management API", () => {
       event: "protocol.message",
       data: actorEvent,
     });
-    await expect(readSseEvent(reader)).resolves.toEqual({
-      event: "snapshot",
-      data: {
-        ...expectedRuntimeSnapshot(chargingPoint.id, "running"),
-        lastHeartbeatAt: null,
-      },
-    });
     await reader.cancel();
   });
 
@@ -899,7 +934,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -930,16 +965,19 @@ describe("chargingPoint management API", () => {
       event: "session.status",
       data: actorEvent,
     });
+    const nextActorEvent = {
+      ...actorEvent,
+      id: "event-2",
+      sequence: 2,
+      occurredAt: "2026-06-28T00:00:01.000Z",
+      previousStatus: "online",
+      currentStatus: "offline",
+    } satisfies ChargingPointActorEvent;
+    actor.publish(nextActorEvent);
+
     await expect(readSseEvent(reader)).resolves.toEqual({
-      event: "snapshot",
-      data: {
-        ...expectedRuntimeSnapshot(chargingPoint.id, "running"),
-        sessionStatus: {
-          currentStatus: "online",
-          occurredAt: "2026-06-28T00:00:00.000Z",
-          connectionUrl: "ws://localhost:9000/ocpp/CP001",
-        },
-      },
+      event: "session.status",
+      data: nextActorEvent,
     });
     await reader.cancel();
   });
@@ -1012,7 +1050,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1044,17 +1082,6 @@ describe("chargingPoint management API", () => {
     await expect(readSseEvent(reader)).resolves.toEqual({
       event: "session.status",
       data: restartedEvent,
-    });
-    await expect(readSseEvent(reader)).resolves.toEqual({
-      event: "snapshot",
-      data: {
-        ...expectedRuntimeSnapshot(chargingPoint.id, "running"),
-        sessionStatus: {
-          currentStatus: "online",
-          occurredAt: "2026-06-28T00:00:01.000Z",
-          connectionUrl: "ws://localhost:9000/ocpp/CP001",
-        },
-      },
     });
     await reader.cancel();
   });
@@ -1114,7 +1141,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1167,7 +1194,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 2,
       connectorId: 7,
-      type: "CCS2",
+      type: "IEC_62196_T2_COMBO",
       format: "cable",
       powerType: "dc",
     });
@@ -1233,7 +1260,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 2,
       connectorId: 7,
-      type: "CCS2",
+      type: "IEC_62196_T2_COMBO",
       format: "cable",
       powerType: "dc",
     });
@@ -1301,7 +1328,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1374,7 +1401,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 2,
       connectorId: 7,
-      type: "CCS2",
+      type: "IEC_62196_T2_COMBO",
       format: "cable",
       powerType: "dc",
     });
@@ -1448,7 +1475,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1513,7 +1540,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 2,
       connectorId: 7,
-      type: "CCS2",
+      type: "IEC_62196_T2_COMBO",
       format: "cable",
       powerType: "dc",
     });
@@ -1582,7 +1609,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1620,7 +1647,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1653,7 +1680,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1702,7 +1729,7 @@ describe("chargingPoint management API", () => {
     const connector = await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1749,7 +1776,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1790,7 +1817,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1829,7 +1856,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1871,11 +1898,11 @@ describe("chargingPoint management API", () => {
 
   test("removes and disposes the actor when start fails", async () => {
     const database = await createTestDatabase();
-    const registry = new ChargingPointActorRegistry();
+    const actorHost = new ChargingPointActorHost();
     const actor = createActorDouble({ startError: new Error("boom") });
     const app = createApp({
       database,
-      chargingPointActorRegistry: registry,
+      chargingPointActorHost: actorHost,
       createChargingPointActor: (options) => {
         actor.id = options.id;
         return actor;
@@ -1891,7 +1918,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1906,17 +1933,17 @@ describe("chargingPoint management API", () => {
         code: "CHARGING_POINT_START_FAILED",
       },
     });
-    expect(registry.get(chargingPoint.id)).toBeUndefined();
+    expect(actorHost.get(chargingPoint.id)).toBeUndefined();
     expect(actor.disposeCalls).toBe(1);
   });
 
   test("stops a running chargingPoint and removes its actor", async () => {
     const database = await createTestDatabase();
-    const registry = new ChargingPointActorRegistry();
+    const actorHost = new ChargingPointActorHost();
     const actor = createActorDouble();
     const app = createApp({
       database,
-      chargingPointActorRegistry: registry,
+      chargingPointActorHost: actorHost,
       createChargingPointActor: (options) => {
         actor.id = options.id;
         actor.startResult = {
@@ -1941,7 +1968,7 @@ describe("chargingPoint management API", () => {
     await createConnector(app, chargingPoint.id, {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
     });
@@ -1956,7 +1983,7 @@ describe("chargingPoint management API", () => {
       chargingPointId: chargingPoint.id,
       status: "stopped",
     });
-    expect(registry.get(chargingPoint.id)).toBeUndefined();
+    expect(actorHost.get(chargingPoint.id)).toBeUndefined();
     expect(actor.stopCalls).toBe(1);
     expect(actor.disposeCalls).toBe(1);
   });
@@ -2221,8 +2248,10 @@ function expectedRuntimeSnapshot(
     runtimeStatus,
     sessionStatus: null,
     chargingPointStatus: null,
+    chargingPointAvailability: null,
     evseStatuses: [],
     connectorStatuses: [],
+    connectorAvailabilities: [],
     transactionStatuses: [],
     lastHeartbeatAt: null,
     recentIssue: null,

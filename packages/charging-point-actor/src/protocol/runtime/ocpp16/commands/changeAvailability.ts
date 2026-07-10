@@ -2,7 +2,13 @@ import type { Availability } from "../../../../model";
 import type { InboundRequest } from "../../../session/types";
 import type { Ocpp16RequestOf, Ocpp16ResponseOf } from "../../../validator/Ocpp16";
 import { sendStatusNotification } from "../actions/statusNotification";
-import { emitChangedChargingPointStatus } from "../events";
+import {
+  captureConnectorAvailabilitySnapshot,
+  emitChangedChargingPointStatus,
+  emitChargingPointAvailabilitySnapshot,
+  emitConnectorAvailabilitySnapshot,
+  type ConnectorAvailabilitySnapshot,
+} from "../events";
 import { mapChargingPointStatus } from "../mappings";
 import {
   hasActiveTransactionOnConnector,
@@ -20,6 +26,11 @@ type ChangeAvailabilityStatus = Ocpp16ResponseOf<"ChangeAvailability">["status"]
 type ConnectorRef = {
   evseId: number;
   connectorId: number;
+};
+
+type ConnectorChange = ConnectorRef & {
+  availability: ConnectorAvailabilitySnapshot;
+  status: ConnectorStatusTransition;
 };
 
 export async function handleChangeAvailability(
@@ -48,6 +59,12 @@ export async function handleChangeAvailability(
   const change = captureConnectorChange(context, target);
   const status = applyConnectorAvailability(context, target, availability, at);
   await respond(request, status);
+  emitConnectorAvailabilitySnapshot(context, {
+    evseId: change.evseId,
+    connectorId: change.connectorId,
+    previousAvailability: change.availability.availability,
+    occurredAt: at,
+  });
   await reportConnectorChange(context, change, at);
 }
 
@@ -58,6 +75,7 @@ async function handleChargingPointAvailability(
   at: Date,
 ): Promise<void> {
   const previousChargingPointStatus = context.chargingPoint.status;
+  const previousChargingPointAvailability = context.chargingPoint.availability;
   const previousOcppStatus = mapChargingPointStatus(previousChargingPointStatus);
   const connectorChanges = listConnectorRefs(context)
     .map((target) => captureConnectorChange(context, target));
@@ -80,6 +98,10 @@ async function handleChargingPointAvailability(
   }
 
   await respond(request, status);
+  emitChargingPointAvailabilitySnapshot(context, {
+    previousAvailability: previousChargingPointAvailability,
+    occurredAt: at,
+  });
 
   const nextOcppStatus = mapChargingPointStatus(context.chargingPoint.status);
   if (nextOcppStatus !== previousOcppStatus) {
@@ -95,6 +117,12 @@ async function handleChargingPointAvailability(
   }
 
   for (const change of connectorChanges) {
+    emitConnectorAvailabilitySnapshot(context, {
+      evseId: change.evseId,
+      connectorId: change.connectorId,
+      previousAvailability: change.availability.availability,
+      occurredAt: at,
+    });
     await reportConnectorChange(context, change, at);
   }
 }
@@ -131,17 +159,21 @@ function applyConnectorAvailability(
 
 async function reportConnectorChange(
   context: Ocpp16RuntimeContext,
-  change: ConnectorStatusTransition,
+  change: ConnectorChange,
   at: Date,
 ): Promise<void> {
-  await publishConnectorStatusTransition(context, change, at);
+  await publishConnectorStatusTransition(context, change.status, at);
 }
 
 function captureConnectorChange(
   context: Ocpp16RuntimeContext,
   target: ConnectorRef,
-): ConnectorStatusTransition {
-  return captureConnectorStatusTransition(context, target);
+): ConnectorChange {
+  return {
+    ...target,
+    availability: captureConnectorAvailabilitySnapshot(context, target),
+    status: captureConnectorStatusTransition(context, target),
+  };
 }
 
 function findConnectorRef(

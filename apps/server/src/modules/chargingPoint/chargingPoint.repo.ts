@@ -8,6 +8,7 @@ import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import type { ServerDatabase } from "../../db";
 import { chargingPoints, connectors } from "../../db/schema";
 import { AppError } from "../../utils/errors";
+import { toConnectorType } from "../connector/connectorType";
 import { normalizeCentralSystemUrl } from "./centralSystemUrl";
 
 type ChargingPointRow = typeof chargingPoints.$inferSelect;
@@ -233,7 +234,7 @@ export class ChargingPointRepository {
       chargingPointId: connector.chargingPointId,
       evseId: connector.evseId,
       connectorId: connector.connectorId,
-      type: connector.type,
+      type: toConnectorType(connector.type),
       format: connector.format,
       powerType: connector.powerType,
       maxVoltage: connector.maxVoltage,

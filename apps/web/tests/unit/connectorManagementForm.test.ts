@@ -6,7 +6,7 @@ describe("connector management form", () => {
   test("converts text inputs to connector payload values", () => {
     const values = connectorManagementFormSchema.parse({
       connectorId: "2",
-      type: " Type2 ",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
       maxVoltage: "230",
@@ -16,7 +16,7 @@ describe("connector management form", () => {
     expect(values).toEqual({
       evseId: 2,
       connectorId: 2,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
       maxVoltage: 230,
@@ -28,7 +28,7 @@ describe("connector management form", () => {
     expect(() =>
       connectorManagementFormSchema.parse({
         connectorId: "0",
-        type: "Type2",
+        type: "IEC_62196_T2",
         format: "socket",
         powerType: "ac",
         maxVoltage: "",
@@ -39,10 +39,23 @@ describe("connector management form", () => {
     expect(() =>
       connectorManagementFormSchema.parse({
         connectorId: "1",
-        type: "Type2",
+        type: "IEC_62196_T2",
         format: "socket",
         powerType: "ac",
         maxVoltage: "",
+        maxCurrent: "32",
+      }),
+    ).toThrow();
+  });
+
+  test("rejects legacy free-text connector type values", () => {
+    expect(() =>
+      connectorManagementFormSchema.parse({
+        connectorId: "1",
+        type: "Type2",
+        format: "socket",
+        powerType: "ac",
+        maxVoltage: "230",
         maxCurrent: "32",
       }),
     ).toThrow();

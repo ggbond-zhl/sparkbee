@@ -1,6 +1,7 @@
 import type {
   AuthorizationSource,
   AuthorizationStatus,
+  Availability,
   ChargingPoint,
   ChargingPointOptions,
   ChargingPointStatus,
@@ -86,6 +87,16 @@ export interface ChargingPointStatusEvent
   error?: ChargingPointActorEventError;
 }
 
+export interface ChargingPointAvailabilityEvent
+  extends ChargingPointActorEventBase<
+    "chargingPoint.availability",
+    Extract<ChargingPointActorResourceRef, { scope: "chargingPoint" }>
+  > {
+  previousAvailability: Availability | null;
+  currentAvailability: Availability;
+  requestedAvailability?: Availability;
+}
+
 export interface EVSEStatusEvent
   extends ChargingPointActorEventBase<
     "evse.status",
@@ -94,6 +105,16 @@ export interface EVSEStatusEvent
   previousStatus: EVSEStatus | null;
   currentStatus: EVSEStatus;
   error?: ChargingPointActorEventError;
+}
+
+export interface ConnectorAvailabilityEvent
+  extends ChargingPointActorEventBase<
+    "connector.availability",
+    Extract<ChargingPointActorResourceRef, { scope: "connector" }>
+  > {
+  previousAvailability: Availability | null;
+  currentAvailability: Availability;
+  requestedAvailability?: Availability;
 }
 
 export interface ConnectorStatusEvent
@@ -133,6 +154,9 @@ export interface TransactionMeterValueEvent
     Extract<ChargingPointActorResourceRef, { scope: "transaction" }>
   > {
   meterWh: number;
+  powerW: number;
+  currentA: number;
+  voltageV: number;
   sampledAt: string;
 }
 
@@ -163,8 +187,10 @@ export interface SessionStatusEvent
 export type ChargingPointActorEventMap = {
   "chargingPoint.lifecycle": ChargingPointLifecycleEvent;
   "session.status": SessionStatusEvent;
+  "chargingPoint.availability": ChargingPointAvailabilityEvent;
   "chargingPoint.status": ChargingPointStatusEvent;
   "evse.status": EVSEStatusEvent;
+  "connector.availability": ConnectorAvailabilityEvent;
   "connector.status": ConnectorStatusEvent;
   "authorization.status": AuthorizationStatusEvent;
   "transaction.status": TransactionStatusEvent;
@@ -243,6 +269,9 @@ export type ChargingPointActorMeterValueResult =
       status: "accepted";
       transactionId: string;
       meterWh: number;
+      powerW: number;
+      currentA: number;
+      voltageV: number;
       sampledAt: Date;
     }
   | ChargingPointActorFailedOperationResult;

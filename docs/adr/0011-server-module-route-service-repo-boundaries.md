@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0024
+---
+
 # 后端业务模块采用 route、service 和可选 repo 边界
 
 后端业务模块默认由 `route` 和 `service` 组成；只要模块访问数据库，就必须通过本模块的 `repo`。`route` 负责 HTTP 和 OpenAPI 适配，`service` 负责用例编排、业务规则和错误映射，`repo` 负责本模块需要的数据访问视图。

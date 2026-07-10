@@ -9,9 +9,9 @@ import {
 } from "@spark-bee/contracts";
 
 import type { ServerDatabase } from "../../db";
-import type { ChargingPointEventStreamHub } from "../../lib/chargingPointEventStreamHub";
+import type { ChargingPointActorHost } from "../../lib/chargingPointActorHost";
 import { ValidationError } from "../../utils/errors";
-import { createChargingPointService } from "./chargingPoint.service";
+import { ChargingPointRepository } from "./chargingPoint.repo";
 
 const jsonContent = <TSchema extends z.ZodType>(schema: TSchema) => ({
   "application/json": { schema },
@@ -32,7 +32,7 @@ const chargingPointIdParamSchema = z.object({
 });
 
 export interface ChargingPointRouteDependencies {
-  chargingPointEventStreamHub?: ChargingPointEventStreamHub;
+  chargingPointActorHost?: ChargingPointActorHost;
 }
 
 const listChargingPointsRoute = createRoute({
@@ -150,34 +150,34 @@ export function createChargingPointRoute(
       }
     },
   });
-  const service = createChargingPointService(database);
+  const repository = new ChargingPointRepository(database);
 
   route.openapi(createChargingPointRouteDefinition, async (context) => {
     const input = context.req.valid("json");
-    const chargingPoint = await service.create(input);
+    const chargingPoint = await repository.create(input);
     return context.json(chargingPoint, 201);
   });
 
   route.openapi(listChargingPointsRoute, async (context) => {
     const query = context.req.valid("query");
-    return context.json(await service.list(query), 200);
+    return context.json(await repository.list(query), 200);
   });
 
   route.openapi(getChargingPointRoute, async (context) => {
     const { id } = context.req.valid("param");
-    return context.json(await service.getById(id), 200);
+    return context.json(await repository.getById(id), 200);
   });
 
   route.openapi(updateChargingPointRouteDefinition, async (context) => {
     const { id } = context.req.valid("param");
     const input = context.req.valid("json");
-    return context.json(await service.update(id, input), 200);
+    return context.json(await repository.update(id, input), 200);
   });
 
   route.openapi(deleteChargingPointRoute, async (context) => {
     const { id } = context.req.valid("param");
-    await service.softDelete(id);
-    dependencies.chargingPointEventStreamHub?.delete(id);
+    await repository.softDelete(id);
+    await dependencies.chargingPointActorHost?.delete(id);
     return context.body(null, 204);
   });
 

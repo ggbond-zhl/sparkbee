@@ -30,7 +30,7 @@ const baseDetail: ChargingPointDetailResponse = {
       chargingPointId: "00000000-0000-4000-8000-000000000001",
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
       maxVoltage: null,
@@ -65,8 +65,10 @@ function buildRuntimeEventState(
       runtimeStatus: buildRuntimeStatus({ status: "running", bootStatus: "Accepted" }),
       sessionStatus: null,
       chargingPointStatus: null,
+      chargingPointAvailability: null,
       evseStatuses: [],
       connectorStatuses: [],
+      connectorAvailabilities: [],
       transactionStatuses: [],
       lastHeartbeatAt: null,
       recentIssue: null,
@@ -110,6 +112,11 @@ describe("charging point detail header model", () => {
         currentStatus: "unavailable",
         occurredAt: "2026-07-04T09:00:01.000Z",
       },
+      chargingPointAvailability: {
+        currentAvailability: "operative",
+        requestedAvailability: "inoperative",
+        occurredAt: "2026-07-04T09:00:02.000Z",
+      },
       lastHeartbeatAt: "2026-07-04T09:00:04.000Z",
     });
 
@@ -136,18 +143,24 @@ describe("charging point detail header model", () => {
     );
 
     expect(Object.keys(summaryItemsByLabel)).toEqual([
-      "Boot",
+      "Boot 状态",
       "会话状态",
-      "最近异常",
+      "可用性",
+      "充电桩状态",
     ]);
-    expect(summaryItemsByLabel.Boot).toMatchObject({
+    expect(summaryItemsByLabel["Boot 状态"]).toMatchObject({
       value: "待接受 · 12 秒后再次上报",
     });
     expect(summaryItemsByLabel.会话状态).toMatchObject({
       value: "会话重连中 · 第 2 次",
     });
-    expect(summaryItemsByLabel.最近异常).toMatchObject({
-      value: "无",
+    expect(summaryItemsByLabel.可用性).toMatchObject({
+      value: "可用 · 待切换为不可用",
+      tone: "warning",
+    });
+    expect(summaryItemsByLabel.充电桩状态).toMatchObject({
+      value: "不可用",
+      tone: "warning",
     });
     expect(model.finalConnectionUrl).toBe("ws://localhost:9000/ocpp/CP_001");
   });
@@ -185,12 +198,10 @@ describe("charging point detail header model", () => {
     expect(sessionSummaryItem).toMatchObject({
       value: "会话离线 · 底层连接意外断开",
     });
-    expect(model.runtimeSummaryItems.find(
-      (item) => item.label === "最近异常",
-    )).toMatchObject({
-      value: "会话意外断开",
-      tone: "warning",
-    });
+    expect(model.recentIssue?.label).toBe("会话意外断开");
+    expect(model.runtimeSummaryItems.map((item) => item.label)).not.toContain(
+      "最近异常",
+    );
     expect(model.runtimeSummaryItems.map((item) => item.label)).not.toContain(
       "离线原因",
     );
@@ -279,6 +290,10 @@ describe("charging point detail header model", () => {
         currentStatus: "available",
         occurredAt: "2026-07-04T09:00:01.000Z",
       },
+      chargingPointAvailability: {
+        currentAvailability: "operative",
+        occurredAt: "2026-07-04T09:00:01.500Z",
+      },
       connectorStatuses: [
         {
           evseId: 1,
@@ -312,9 +327,58 @@ describe("charging point detail header model", () => {
 
     expect(model.sessionStatus.label).toBe("会话在线");
     expect(model.chargingPointStatus.label).toBe("桩可用");
+    expect(model.runtimeSummaryItems.find(
+      (item) => item.label === "可用性",
+    )).toMatchObject({
+      value: "可用",
+      tone: "success",
+    });
+    expect(model.runtimeSummaryItems.find(
+      (item) => item.label === "充电桩状态",
+    )).toMatchObject({
+      value: "可用",
+      tone: "success",
+    });
     expect(model.connectorSummary).toBe("1 枪 · 占用 1");
     expect(model.transactionSummary).toBe("进行中 1");
     expect(model.lastHeartbeatLabel).toBe("最后心跳 17:00:04");
+  });
+
+  test("shows faulted charging point status in the runtime summary", () => {
+    const runtimeEventState = buildRuntimeEventState({
+      chargingPointStatus: {
+        currentStatus: "faulted",
+        occurredAt: "2026-07-04T09:00:01.000Z",
+      },
+      chargingPointAvailability: {
+        currentAvailability: "inoperative",
+        occurredAt: "2026-07-04T09:00:01.500Z",
+      },
+    });
+
+    const model = buildChargingPointDetailHeaderModel({
+      detail: baseDetail,
+      runtimeStatus: buildRuntimeStatus({
+        status: "running",
+        bootStatus: "Accepted",
+      }),
+      statusQueryState: "success",
+      lastHeartbeatAt: null,
+      runtimeEventState,
+    });
+
+    expect(model.runtimeSummaryItems.find(
+      (item) => item.label === "可用性",
+    )).toMatchObject({
+      value: "不可用",
+      tone: "warning",
+    });
+    expect(model.runtimeSummaryItems.find(
+      (item) => item.label === "充电桩状态",
+    )).toMatchObject({
+      value: "故障",
+      tone: "destructive",
+    });
   });
 
   test("shows runtime event issues in the recent issue metric", () => {

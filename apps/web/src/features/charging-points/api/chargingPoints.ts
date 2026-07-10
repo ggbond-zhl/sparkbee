@@ -1,6 +1,9 @@
 import {
   chargingPointDetailResponseSchema,
+  chargingPointEventStreamMessageSchema,
+  chargingPointEventStreamTypes,
   chargingPointConnectorActionResponseSchema,
+  type ChargingPointEventStreamMessage,
   type ChargingPointConnectorActionResponse,
   type ChargingPointDetailResponse,
   connectorResponseSchema,
@@ -29,8 +32,6 @@ import {
   type UpdateChargingPointRequest,
   type UpdateConnectorRequest,
 } from "@spark-bee/contracts";
-
-import type { ChargingPointEventStreamMessage } from "@/features/charging-points/model/chargingPointRuntimeEvents";
 
 export interface ListChargingPointsInput {
   keyword?: string;
@@ -293,19 +294,6 @@ export async function stopConnectorTransaction(
   return runtimeStopTransactionResponseSchema.parse(await response.json());
 }
 
-const chargingPointEventStreamTypes = [
-  "snapshot",
-  "chargingPoint.lifecycle",
-  "session.status",
-  "chargingPoint.status",
-  "evse.status",
-  "connector.status",
-  "authorization.status",
-  "transaction.status",
-  "transaction.meterValue",
-  "protocol.message",
-] as const satisfies ChargingPointEventStreamMessage["event"][];
-
 export interface ChargingPointEventSubscriptionHandlers {
   onEvent(message: ChargingPointEventStreamMessage): void;
   onError?(event: Event): void;
@@ -318,10 +306,12 @@ export function subscribeChargingPointEvents(
   const source = new EventSource(`/api/charging-points/${id}/events`);
   const listeners = chargingPointEventStreamTypes.map((eventType) => {
     const listener = (event: MessageEvent<string>) => {
-      handlers.onEvent({
-        event: eventType,
-        data: JSON.parse(event.data),
-      } as ChargingPointEventStreamMessage);
+      handlers.onEvent(
+        chargingPointEventStreamMessageSchema.parse({
+          event: eventType,
+          data: JSON.parse(event.data),
+        }),
+      );
     };
     source.addEventListener(eventType, listener);
 

@@ -4,6 +4,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import type { ServerDatabase } from "../../db";
 import { chargingPoints, connectors } from "../../db/schema";
 import { AppError } from "../../utils/errors";
+import { toConnectorType } from "../connector/connectorType";
 
 type ChargingPointRow = typeof chargingPoints.$inferSelect;
 type ConnectorRow = typeof connectors.$inferSelect;
@@ -53,7 +54,7 @@ export class RuntimeOperationRepository {
         chargingPointId: connector.chargingPointId,
         evseId: connector.evseId,
         connectorId: connector.connectorId,
-        type: connector.type,
+        type: toConnectorType(connector.type),
         format: connector.format,
         powerType: connector.powerType,
         maxVoltage: connector.maxVoltage,

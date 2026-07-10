@@ -137,9 +137,11 @@ export class Ocpp16StartupLifecycle {
   }
 
   private async reportStartupStatuses(): Promise<void> {
+    this.options.runtime.publishChargingPointAvailabilitySnapshot();
     await this.options.runtime.reportChargingPointStatus();
 
     for (const connectorRef of this.options.runtime.listConnectorRefs()) {
+      this.options.runtime.publishConnectorAvailabilitySnapshot(connectorRef);
       await this.options.runtime.reportConnectorStatus({
         connectorId: connectorRef.connectorId,
       });

@@ -1,191 +1,84 @@
-import type { RuntimeSnapshotResponse } from "@spark-bee/contracts";
+import type {
+  AuthorizationRuntimeSource,
+  AuthorizationRuntimeStatus,
+  ChargingPointActorEvent,
+  ChargingPointActorEventError,
+  ChargingPointActorStatus,
+  ChargingPointAvailabilityEvent,
+  ChargingPointAvailabilityStatus,
+  ChargingPointEventStreamMessage,
+  ChargingPointLifecycleEvent,
+  ChargingPointSessionStatus,
+  ChargingPointStatusEvent,
+  ConnectorAvailabilityEvent,
+  ConnectorRuntimeStatus,
+  ConnectorStatusEvent,
+  EVSERuntimeStatus,
+  EVSEStatusEvent,
+  ProtocolMessageEvent,
+  RuntimeAvailability,
+  RuntimeSnapshotResponse,
+  SessionOfflineReason,
+  SessionStatusEvent,
+  TransactionMeterValueEvent,
+  TransactionRuntimeStatus,
+  TransactionStatusEvent,
+} from "@spark-bee/contracts";
+
+export type {
+  AuthorizationRuntimeSource,
+  AuthorizationRuntimeStatus,
+  ChargingPointActorEvent,
+  ChargingPointActorEventError,
+  ChargingPointActorStatus,
+  ChargingPointAvailabilityEvent,
+  ChargingPointAvailabilityStatus,
+  ChargingPointEventStreamMessage,
+  ChargingPointLifecycleEvent,
+  ChargingPointSessionStatus,
+  ChargingPointStatusEvent,
+  ConnectorAvailabilityEvent,
+  ConnectorRuntimeStatus,
+  ConnectorStatusEvent,
+  EVSERuntimeStatus,
+  EVSEStatusEvent,
+  ProtocolMessageEvent,
+  RuntimeAvailability,
+  SessionOfflineReason,
+  SessionStatusEvent,
+  TransactionMeterValueEvent,
+  TransactionRuntimeStatus,
+  TransactionStatusEvent,
+} from "@spark-bee/contracts";
 
 export type HeaderTone = "neutral" | "success" | "waiting" | "warning" | "destructive";
 
-export type ChargingPointActorStatus = "starting" | "running" | "stopped";
-export type ChargingPointSessionStatus = "online" | "reconnecting" | "offline";
-export type ChargingPointAvailabilityStatus =
-  | "available"
-  | "unavailable"
-  | "faulted";
-export type ConnectorRuntimeStatus =
-  | "available"
-  | "occupied"
-  | "unavailable"
-  | "faulted";
-export type EVSERuntimeStatus =
-  | "available"
-  | "occupied"
-  | "reserved"
-  | "unavailable"
-  | "faulted";
-export type AuthorizationRuntimeStatus =
-  | "accepted"
-  | "blocked"
-  | "expired"
-  | "invalid"
-  | "concurrent-transaction";
-export type AuthorizationRuntimeSource =
-  | "online"
-  | "local-list"
-  | "cache"
-  | "default-policy";
-export type TransactionRuntimeStatus =
-  | "starting"
-  | "active"
-  | "suspended"
-  | "ending"
-  | "ended"
-  | "rejected"
-  | "failed";
-export type SessionOfflineReason =
-  | "intentional"
-  | "unexpected_disconnect"
-  | "reconnect_exhausted";
-
-export interface ChargingPointActorEventError {
-  code: string;
-  message: string;
-}
-
-interface RuntimeEventBase<TType extends string, TResource> {
-  type: TType;
-  chargingPointId: string;
-  resource: TResource;
-  occurredAt: string;
-}
-
-export interface ChargingPointLifecycleEvent
-  extends RuntimeEventBase<
-    "chargingPoint.lifecycle",
-    { scope: "chargingPoint" }
-  > {
-  previousStatus: ChargingPointActorStatus | null;
-  currentStatus: ChargingPointActorStatus;
-  error?: ChargingPointActorEventError;
-}
-
-export interface SessionStatusEvent
-  extends RuntimeEventBase<"session.status", { scope: "session" }> {
-  previousStatus: ChargingPointSessionStatus | null;
-  currentStatus: ChargingPointSessionStatus;
-  connectionUrl: string;
-  attempt?: number;
-  reason?: SessionOfflineReason;
-  error?: ChargingPointActorEventError;
-}
-
-export interface ChargingPointStatusEvent
-  extends RuntimeEventBase<
-    "chargingPoint.status",
-    { scope: "chargingPoint" }
-  > {
-  previousStatus: ChargingPointAvailabilityStatus | null;
-  currentStatus: ChargingPointAvailabilityStatus;
-  error?: ChargingPointActorEventError;
-}
-
-export interface EVSEStatusEvent
-  extends RuntimeEventBase<
-    "evse.status",
-    { scope: "evse"; evseId: number }
-  > {
-  previousStatus: EVSERuntimeStatus | null;
-  currentStatus: EVSERuntimeStatus;
-  error?: ChargingPointActorEventError;
-}
-
-export interface ConnectorStatusEvent
-  extends RuntimeEventBase<
-    "connector.status",
-    { scope: "connector"; evseId: number; connectorId: number }
-  > {
-  previousStatus: ConnectorRuntimeStatus | null;
-  currentStatus: ConnectorRuntimeStatus;
-  error?: ChargingPointActorEventError;
-}
-
-export interface AuthorizationStatusEvent
-  extends RuntimeEventBase<
-    "authorization.status",
-    {
-      scope: "authorization";
-      idTag: string;
-      evseId?: number;
-      connectorId?: number;
-    }
-  > {
-  status: AuthorizationRuntimeStatus;
-  source: AuthorizationRuntimeSource;
-  protocolStatus?: string;
-}
-
-export interface TransactionStatusEvent
-  extends RuntimeEventBase<
-    "transaction.status",
-    {
-      scope: "transaction";
-      evseId: number;
-      connectorId: number;
-      transactionId?: string;
-    }
-  > {
-  previousStatus: TransactionRuntimeStatus | null;
-  currentStatus: TransactionRuntimeStatus;
-  reason?: string;
-  error?: ChargingPointActorEventError;
-}
-
-export interface TransactionMeterValueEvent
-  extends RuntimeEventBase<
-    "transaction.meterValue",
-    {
-      scope: "transaction";
-      evseId: number;
-      connectorId: number;
-      transactionId: string;
-    }
-  > {
-  meterWh: number;
-  sampledAt: string;
-}
-
-export interface ProtocolMessageEvent
-  extends RuntimeEventBase<"protocol.message", { scope: "protocol" }> {
-  direction: "sent" | "received";
-  action?: string;
-  messageId?: string;
-  body?: unknown;
-}
-
-export type ChargingPointActorEvent =
-  | ChargingPointLifecycleEvent
-  | SessionStatusEvent
-  | ChargingPointStatusEvent
-  | EVSEStatusEvent
-  | ConnectorStatusEvent
-  | AuthorizationStatusEvent
-  | TransactionStatusEvent
-  | TransactionMeterValueEvent
-  | ProtocolMessageEvent;
-
-export type ChargingPointEventStreamMessage =
-  | { event: "snapshot"; data: RuntimeSnapshotResponse }
-  | { event: "chargingPoint.lifecycle"; data: ChargingPointLifecycleEvent }
-  | { event: "session.status"; data: SessionStatusEvent }
-  | { event: "chargingPoint.status"; data: ChargingPointStatusEvent }
-  | { event: "evse.status"; data: EVSEStatusEvent }
-  | { event: "connector.status"; data: ConnectorStatusEvent }
-  | { event: "authorization.status"; data: AuthorizationStatusEvent }
-  | { event: "transaction.status"; data: TransactionStatusEvent }
-  | { event: "transaction.meterValue"; data: TransactionMeterValueEvent }
-  | { event: "protocol.message"; data: ProtocolMessageEvent };
+type RuntimeSessionStatusState = Omit<
+  SessionStatusEvent,
+  "id" | "sequence" | "protocol"
+>;
+type RuntimeChargingPointStatusState = Omit<
+  ChargingPointStatusEvent,
+  "id" | "sequence" | "protocol"
+>;
 
 export interface ConnectorRuntimeSnapshot {
   evseId: number;
   connectorId: number;
   currentStatus: ConnectorRuntimeStatus;
   occurredAt: string;
+}
+
+export interface ChargingPointAvailabilitySnapshot {
+  currentAvailability: RuntimeAvailability;
+  requestedAvailability?: RuntimeAvailability;
+  occurredAt: string;
+}
+
+export interface ConnectorRuntimeAvailabilitySnapshot
+  extends ChargingPointAvailabilitySnapshot {
+  evseId: number;
+  connectorId: number;
 }
 
 export interface EVSERuntimeSnapshot {
@@ -201,6 +94,9 @@ export interface TransactionRuntimeSnapshot {
   currentStatus: TransactionRuntimeStatus;
   reason?: string;
   meterWh?: number;
+  powerW?: number;
+  currentA?: number;
+  voltageV?: number;
   sampledAt?: string;
   occurredAt: string;
 }
@@ -212,10 +108,12 @@ export interface ChargingPointRuntimeIssue {
 }
 
 export interface ChargingPointRuntimeEventState {
-  sessionStatus: SessionStatusEvent | null;
-  chargingPointStatus: ChargingPointStatusEvent | null;
+  sessionStatus: RuntimeSessionStatusState | null;
+  chargingPointStatus: RuntimeChargingPointStatusState | null;
+  chargingPointAvailability: ChargingPointAvailabilitySnapshot | null;
   evseStatuses: Record<string, EVSERuntimeSnapshot>;
   connectorStatuses: Record<string, ConnectorRuntimeSnapshot>;
+  connectorAvailabilities: Record<string, ConnectorRuntimeAvailabilitySnapshot>;
   transactionStatuses: Record<string, TransactionRuntimeSnapshot>;
   lastHeartbeatAt: Date | null;
   recentIssue: ChargingPointRuntimeIssue | null;
@@ -224,7 +122,10 @@ export interface ChargingPointRuntimeEventState {
 export interface RuntimeEventLogEntry {
   id: string;
   occurredAt: string;
-  eventType: Exclude<ChargingPointEventStreamMessage["event"], "snapshot" | "protocol.message">;
+  eventType: Exclude<
+    ChargingPointEventStreamMessage["event"],
+    "snapshot" | "protocol.message" | "deleted"
+  >;
   resource: string;
   summary: string;
   detail: unknown;
@@ -249,8 +150,10 @@ export function createChargingPointRuntimeEventState(): ChargingPointRuntimeEven
   return {
     sessionStatus: null,
     chargingPointStatus: null,
+    chargingPointAvailability: null,
     evseStatuses: {},
     connectorStatuses: {},
+    connectorAvailabilities: {},
     transactionStatuses: {},
     lastHeartbeatAt: null,
     recentIssue: null,
@@ -268,18 +171,234 @@ export function reduceChargingPointRuntimeEventState(
   state: ChargingPointRuntimeEventState,
   message: ChargingPointEventStreamMessage,
 ): ChargingPointRuntimeEventState {
-  if (message.event === "snapshot") {
-    return createChargingPointRuntimeEventStateFromSnapshot(message.data);
-  }
+  switch (message.event) {
+    case "snapshot":
+      return createChargingPointRuntimeEventStateFromSnapshot(message.data);
+    case "deleted":
+      return createChargingPointRuntimeEventState();
+    case "chargingPoint.lifecycle":
+      if (message.data.currentStatus === "stopped") {
+        return createChargingPointRuntimeEventState();
+      }
 
-  return state;
+      return message.data.error === undefined
+        ? state
+        : withIssue(state, {
+            label: `运行状态切换失败: ${message.data.error.message}`,
+            tone: "destructive",
+            occurredAt: message.data.occurredAt,
+          });
+    case "session.status": {
+      const nextState = { ...state, sessionStatus: message.data };
+      if (message.data.error !== undefined) {
+        return withIssue(nextState, {
+          label: `${formatSessionStatus(message.data.currentStatus)}: ${message.data.error.message}`,
+          tone: message.data.currentStatus === "reconnecting" ? "warning" : "destructive",
+          occurredAt: message.data.occurredAt,
+        });
+      }
+
+      if (message.data.currentStatus !== "offline" || message.data.reason === undefined) {
+        return nextState;
+      }
+
+      if (message.data.reason === "intentional") {
+        return nextState;
+      }
+
+      return withIssue(nextState, {
+        label: message.data.reason === "reconnect_exhausted"
+          ? "会话重连耗尽"
+          : "会话意外断开",
+        tone: message.data.reason === "reconnect_exhausted" ? "destructive" : "warning",
+        occurredAt: message.data.occurredAt,
+      });
+    }
+    case "chargingPoint.status": {
+      const nextState = { ...state, chargingPointStatus: message.data };
+      if (message.data.error !== undefined) {
+        return withIssue(nextState, {
+          label: `桩状态异常: ${message.data.error.message}`,
+          tone: "destructive",
+          occurredAt: message.data.occurredAt,
+        });
+      }
+
+      return message.data.currentStatus === "faulted"
+        ? withIssue(nextState, {
+            label: "桩状态故障",
+            tone: "destructive",
+            occurredAt: message.data.occurredAt,
+          })
+        : nextState;
+    }
+    case "chargingPoint.availability":
+      return {
+        ...state,
+        chargingPointAvailability: {
+          currentAvailability: message.data.currentAvailability,
+          ...(message.data.requestedAvailability === undefined
+            ? {}
+            : { requestedAvailability: message.data.requestedAvailability }),
+          occurredAt: message.data.occurredAt,
+        },
+      };
+    case "evse.status": {
+      const nextState: ChargingPointRuntimeEventState = {
+        ...state,
+        evseStatuses: {
+          ...state.evseStatuses,
+          [String(message.data.resource.evseId)]: {
+            evseId: message.data.resource.evseId,
+            currentStatus: message.data.currentStatus,
+            occurredAt: message.data.occurredAt,
+          },
+        },
+      };
+      if (message.data.error !== undefined) {
+        return withIssue(nextState, {
+          label: `EVSE ${message.data.resource.evseId} 异常: ${message.data.error.message}`,
+          tone: "destructive",
+          occurredAt: message.data.occurredAt,
+        });
+      }
+
+      return message.data.currentStatus === "faulted"
+        ? withIssue(nextState, {
+            label: `EVSE ${message.data.resource.evseId} 故障`,
+            tone: "destructive",
+            occurredAt: message.data.occurredAt,
+          })
+        : nextState;
+    }
+    case "connector.status": {
+      const { connectorId, evseId } = message.data.resource;
+      const key = connectorKey(evseId, connectorId);
+      const nextState: ChargingPointRuntimeEventState = {
+        ...state,
+        connectorStatuses: {
+          ...state.connectorStatuses,
+          [key]: {
+            evseId,
+            connectorId,
+            currentStatus: message.data.currentStatus,
+            occurredAt: message.data.occurredAt,
+          },
+        },
+      };
+      if (message.data.error !== undefined) {
+        return withIssue(nextState, {
+          label: `枪口 ${key} 异常: ${message.data.error.message}`,
+          tone: "destructive",
+          occurredAt: message.data.occurredAt,
+        });
+      }
+
+      return message.data.currentStatus === "faulted"
+        ? withIssue(nextState, {
+            label: `枪口 ${key} 故障`,
+            tone: "destructive",
+            occurredAt: message.data.occurredAt,
+          })
+        : nextState;
+    }
+    case "connector.availability": {
+      const { connectorId, evseId } = message.data.resource;
+      return {
+        ...state,
+        connectorAvailabilities: {
+          ...state.connectorAvailabilities,
+          [connectorKey(evseId, connectorId)]: {
+            evseId,
+            connectorId,
+            currentAvailability: message.data.currentAvailability,
+            ...(message.data.requestedAvailability === undefined
+              ? {}
+              : { requestedAvailability: message.data.requestedAvailability }),
+            occurredAt: message.data.occurredAt,
+          },
+        },
+      };
+    }
+    case "authorization.status":
+      return state;
+    case "transaction.status": {
+      const { connectorId, evseId } = message.data.resource;
+      const transactionId = message.data.resource.transactionId ??
+        connectorKey(evseId, connectorId);
+      const previous = state.transactionStatuses[transactionId];
+      const nextState: ChargingPointRuntimeEventState = {
+        ...state,
+        transactionStatuses: {
+          ...state.transactionStatuses,
+          [transactionId]: {
+            transactionId,
+            evseId,
+            connectorId,
+            currentStatus: message.data.currentStatus,
+            ...(message.data.reason === undefined ? {} : { reason: message.data.reason }),
+            ...(previous?.meterWh === undefined ? {} : { meterWh: previous.meterWh }),
+            ...(previous?.powerW === undefined ? {} : { powerW: previous.powerW }),
+            ...(previous?.currentA === undefined ? {} : { currentA: previous.currentA }),
+            ...(previous?.voltageV === undefined ? {} : { voltageV: previous.voltageV }),
+            ...(previous?.sampledAt === undefined ? {} : { sampledAt: previous.sampledAt }),
+            occurredAt: message.data.occurredAt,
+          },
+        },
+      };
+      if (message.data.error !== undefined) {
+        return withIssue(nextState, {
+          label: `交易失败: ${message.data.error.message}`,
+          tone: "destructive",
+          occurredAt: message.data.occurredAt,
+        });
+      }
+
+      return message.data.currentStatus === "failed"
+        ? withIssue(nextState, {
+            label: message.data.reason === undefined
+              ? "交易失败"
+              : `交易失败: ${message.data.reason}`,
+            tone: "destructive",
+            occurredAt: message.data.occurredAt,
+          })
+        : nextState;
+    }
+    case "transaction.meterValue": {
+      const { connectorId, evseId, transactionId } = message.data.resource;
+      const previous = state.transactionStatuses[transactionId];
+      return {
+        ...state,
+        transactionStatuses: {
+          ...state.transactionStatuses,
+          [transactionId]: {
+            transactionId,
+            evseId,
+            connectorId,
+            currentStatus: previous?.currentStatus ?? "active",
+            ...(previous?.reason === undefined ? {} : { reason: previous.reason }),
+            meterWh: message.data.meterWh,
+            powerW: message.data.powerW,
+            currentA: message.data.currentA,
+            voltageV: message.data.voltageV,
+            sampledAt: message.data.sampledAt,
+            occurredAt: message.data.occurredAt,
+          },
+        },
+      };
+    }
+    case "protocol.message":
+      return message.data.direction === "received" && message.data.action === "Heartbeat"
+        ? { ...state, lastHeartbeatAt: new Date(message.data.occurredAt) }
+        : state;
+  }
 }
 
 export function reduceChargingPointRuntimeEventFeedState(
   state: ChargingPointRuntimeEventFeedState,
   message: ChargingPointEventStreamMessage,
 ): ChargingPointRuntimeEventFeedState {
-  if (message.event === "snapshot") {
+  if (message.event === "snapshot" || message.event === "deleted") {
     return state;
   }
 
@@ -330,6 +449,7 @@ function createChargingPointRuntimeEventStateFromSnapshot(
           previousStatus: null,
           currentStatus: snapshot.chargingPointStatus.currentStatus,
         },
+    chargingPointAvailability: snapshot.chargingPointAvailability,
     evseStatuses: Object.fromEntries(
       snapshot.evseStatuses.map((status) => [String(status.evseId), status]),
     ),
@@ -337,6 +457,12 @@ function createChargingPointRuntimeEventStateFromSnapshot(
       snapshot.connectorStatuses.map((status) => [
         connectorKey(status.evseId, status.connectorId),
         status,
+      ]),
+    ),
+    connectorAvailabilities: Object.fromEntries(
+      snapshot.connectorAvailabilities.map((availability) => [
+        connectorKey(availability.evseId, availability.connectorId),
+        availability,
       ]),
     ),
     transactionStatuses: Object.fromEntries(
@@ -364,7 +490,7 @@ function formatSessionStatus(status: ChargingPointSessionStatus) {
 function toRuntimeEventLogEntry(
   message: Exclude<
     ChargingPointEventStreamMessage,
-    { event: "snapshot" } | { event: "protocol.message" }
+    { event: "snapshot" } | { event: "protocol.message" } | { event: "deleted" }
   >,
 ): RuntimeEventLogEntry {
   return {
@@ -395,7 +521,7 @@ function toProtocolMessageLogEntry(event: ProtocolMessageEvent): ProtocolMessage
 function formatRuntimeEventSummary(
   message: Exclude<
     ChargingPointEventStreamMessage,
-    { event: "snapshot" } | { event: "protocol.message" }
+    { event: "snapshot" } | { event: "protocol.message" } | { event: "deleted" }
   >,
 ) {
   switch (message.event) {
@@ -405,6 +531,8 @@ function formatRuntimeEventSummary(
       return formatSessionStatus(message.data.currentStatus);
     case "chargingPoint.status":
       return `桩状态: ${formatAvailabilityStatus(message.data.currentStatus)}`;
+    case "chargingPoint.availability":
+      return `整桩可用性: ${formatRuntimeAvailabilityDetail(message.data)}`;
     case "evse.status":
       return `EVSE ${message.data.resource.evseId}: ${
         formatEVSEStatus(message.data.currentStatus)
@@ -415,6 +543,10 @@ function formatRuntimeEventSummary(
       }: ${
         formatConnectorStatus(message.data.currentStatus)
       }`;
+    case "connector.availability":
+      return `枪口 ${
+        connectorKey(message.data.resource.evseId, message.data.resource.connectorId)
+      } 可用性: ${formatRuntimeAvailabilityDetail(message.data)}`;
     case "authorization.status":
       return `idTag ${message.data.resource.idTag}: ${
         formatAuthorizationStatus(message.data.status)
@@ -484,6 +616,29 @@ function formatAvailabilityStatus(status: ChargingPointAvailabilityStatus) {
   }
 
   return "故障";
+}
+
+function withIssue(
+  state: ChargingPointRuntimeEventState,
+  recentIssue: ChargingPointRuntimeIssue,
+): ChargingPointRuntimeEventState {
+  return { ...state, recentIssue };
+}
+
+function formatRuntimeAvailabilityDetail(availability: {
+  currentAvailability: RuntimeAvailability;
+  requestedAvailability?: RuntimeAvailability;
+}) {
+  const currentLabel = formatRuntimeAvailability(availability.currentAvailability);
+  return availability.requestedAvailability === undefined
+    ? currentLabel
+    : `${currentLabel} · 待切换为${formatRuntimeAvailability(
+        availability.requestedAvailability,
+      )}`;
+}
+
+function formatRuntimeAvailability(availability: RuntimeAvailability) {
+  return availability === "operative" ? "可用" : "不可用";
 }
 
 function formatEVSEStatus(status: EVSERuntimeStatus) {

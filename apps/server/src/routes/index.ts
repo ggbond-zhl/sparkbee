@@ -1,9 +1,8 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 
 import type { ServerDatabase } from "../db";
-import { ChargingPointActorRegistry } from "../lib/chargingPointActorRegistry";
+import { ChargingPointActorHost } from "../lib/chargingPointActorHost";
 import { ChargingPointRuntimeLogFileWriter } from "../lib/chargingPointRuntimeLogFileWriter";
-import { ChargingPointEventStreamHub } from "../lib/chargingPointEventStreamHub";
 import type { ChargingPointActorFactory } from "../modules/runtimeOperation/runtimeOperation.service";
 import { createChargingPointRoute } from "../modules/chargingPoint/chargingPoint.route";
 import { createConnectorRoute } from "../modules/connector/connector.route";
@@ -12,37 +11,34 @@ import { createHealthRoute } from "./health.route";
 
 export interface RouteDependencies {
   database?: ServerDatabase;
-  chargingPointActorRegistry?: ChargingPointActorRegistry;
-  chargingPointRuntimeLogFileWriter?: ChargingPointRuntimeLogFileWriter;
-  chargingPointEventStreamHub?: ChargingPointEventStreamHub;
+  chargingPointActorHost?: ChargingPointActorHost;
+  runtimeLogDirectory?: string;
   createChargingPointActor?: ChargingPointActorFactory;
 }
 
 export function createRoutes(dependencies: RouteDependencies = {}) {
   const routes = new OpenAPIHono();
-  const chargingPointActorRegistry =
-    dependencies.chargingPointActorRegistry ?? new ChargingPointActorRegistry();
-  const chargingPointEventStreamHub =
-    dependencies.chargingPointEventStreamHub ?? new ChargingPointEventStreamHub();
-  const chargingPointRuntimeLogFileWriter =
-    dependencies.chargingPointRuntimeLogFileWriter ??
-    new ChargingPointRuntimeLogFileWriter("logs/runtime");
+  const chargingPointActorHost =
+    dependencies.chargingPointActorHost ??
+    new ChargingPointActorHost({
+      runtimeLogFileWriter: new ChargingPointRuntimeLogFileWriter(
+        dependencies.runtimeLogDirectory ?? "logs/runtime",
+      ),
+    });
 
   routes.route("/", createHealthRoute());
   if (dependencies.database !== undefined) {
     routes.route(
       "/charging-points",
       createChargingPointRoute(dependencies.database, {
-        chargingPointEventStreamHub,
+        chargingPointActorHost,
       }),
     );
     routes.route("/charging-points", createConnectorRoute(dependencies.database));
     routes.route(
       "/charging-points",
       createRuntimeOperationRoute(dependencies.database, {
-        chargingPointActorRegistry,
-        chargingPointRuntimeLogFileWriter,
-        chargingPointEventStreamHub,
+        chargingPointActorHost,
         createChargingPointActor: dependencies.createChargingPointActor,
       }),
     );

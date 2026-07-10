@@ -5,11 +5,17 @@ import type {
 
 import type {
   ChargingPointRuntimeEventState,
+  ConnectorRuntimeAvailabilitySnapshot,
   ConnectorRuntimeStatus,
   HeaderTone,
   TransactionRuntimeSnapshot,
   TransactionRuntimeStatus,
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
+import {
+  formatConnectorFormat,
+  formatConnectorPowerType,
+  formatConnectorType,
+} from "@/features/charging-points/model/connectorDisplay";
 
 export type ConnectorCardActionKind =
   | "plug"
@@ -21,6 +27,7 @@ export interface ConnectorCardStatusItem {
   label: string;
   value: string;
   tone?: HeaderTone;
+  span?: "full";
 }
 
 export interface ConnectorCardAction {
@@ -34,10 +41,6 @@ export interface ConnectorCardModel {
   connectorId: string;
   title: string;
   description: string;
-  statusBadge: {
-    label: string;
-    tone: HeaderTone;
-  };
   fields: ConnectorCardStatusItem[];
   actions: ConnectorCardAction[];
   issue: {
@@ -83,37 +86,29 @@ function buildConnectorCardModel({
   const connectorStatus =
     runtimeEventState.connectorStatuses[connectorKey(connector.evseId, connector.connectorId)]
       ?.currentStatus;
+  const connectorAvailability =
+    runtimeEventState.connectorAvailabilities[
+      connectorKey(connector.evseId, connector.connectorId)
+    ];
   const transaction = selectConnectorTransaction(
     runtimeEventState,
     connector.evseId,
     connector.connectorId,
   );
-  const statusBadge = toConnectorStatusBadge(runtimeStatus, connectorStatus);
-  const plugStatus = toPlugStatus(runtimeStatus, connectorStatus);
+  const connectorStatusField = toConnectorStatusField(runtimeStatus, connectorStatus);
   const transactionStatus = toTransactionStatus(transaction);
-  const meterValue = transaction?.meterWh === undefined
-    ? "--"
-    : formatMeterWh(transaction.meterWh);
+  const availability = toConnectorAvailability(runtimeStatus, connectorAvailability);
   const issue = toConnectorIssue(connector, connectorStatus, transaction);
 
   return {
     connector,
     connectorId: connector.id,
     title: `枪口 ${connector.connectorId}`,
-    description: `EVSE ${connector.evseId} · ${connector.type} · ${formatPowerType(connector.powerType)}`,
-    statusBadge,
+    description: `EVSE ${connector.evseId} · ${formatConnectorType(connector.type)} · ${formatConnectorFormat(connector.format)} · ${formatConnectorPowerType(connector.powerType)}`,
     fields: [
-      {
-        label: "枪口状态",
-        value: statusBadge.label,
-        tone: statusBadge.tone,
-      },
-      plugStatus,
+      connectorStatusField,
       transactionStatus,
-      {
-        label: "最近表值",
-        value: meterValue,
-      },
+      availability,
     ],
     actions: toConnectorActions(runtimeStatus, connectorStatus, transaction),
     issue,
@@ -156,83 +151,51 @@ function toConnectorActions(
   return [];
 }
 
-function toConnectorStatusBadge(
-  runtimeStatus: RuntimeOperationResponse | undefined,
-  connectorStatus: ConnectorRuntimeStatus | undefined,
-) {
-  if (runtimeStatus?.status === "stopped") {
-    return {
-      label: "未运行",
-      tone: "neutral" as const,
-    };
-  }
-
-  if (connectorStatus === undefined) {
-    return {
-      label: runtimeStatus?.status === "running" ? "等待同步" : "未同步",
-      tone: runtimeStatus?.status === "running" ? "waiting" as const : "neutral" as const,
-    };
-  }
-
-  if (connectorStatus === "available") {
-    return {
-      label: "可用",
-      tone: "success" as const,
-    };
-  }
-
-  if (connectorStatus === "occupied") {
-    return {
-      label: "占用",
-      tone: "waiting" as const,
-    };
-  }
-
-  if (connectorStatus === "unavailable") {
-    return {
-      label: "不可用",
-      tone: "warning" as const,
-    };
-  }
-
-  return {
-    label: "故障",
-    tone: "destructive" as const,
-  };
-}
-
-function toPlugStatus(
+function toConnectorStatusField(
   runtimeStatus: RuntimeOperationResponse | undefined,
   connectorStatus: ConnectorRuntimeStatus | undefined,
 ): ConnectorCardStatusItem {
   if (runtimeStatus?.status !== "running") {
     return {
-      label: "插枪状态",
-      value: "未运行",
+      label: "枪口状态",
+      value: runtimeStatus === undefined ? "未同步" : "未运行",
       tone: "neutral",
+      span: "full",
     };
   }
 
   if (connectorStatus === "available") {
     return {
-      label: "插枪状态",
-      value: "未插枪",
+      label: "枪口状态",
+      value: "可用 / 未插枪",
       tone: "success",
+      span: "full",
     };
   }
 
   if (connectorStatus === "occupied") {
     return {
-      label: "插枪状态",
-      value: "已插枪",
+      label: "枪口状态",
+      value: "占用 / 已插枪",
       tone: "waiting",
+      span: "full",
+    };
+  }
+
+  if (connectorStatus === "unavailable") {
+    return {
+      label: "枪口状态",
+      value: "不可用",
+      tone: "warning",
+      span: "full",
     };
   }
 
   return {
-    label: "插枪状态",
-    value: "--",
-    tone: connectorStatus === "faulted" ? "destructive" : "neutral",
+    label: "枪口状态",
+    value: connectorStatus === undefined ? "等待同步" : "故障",
+    tone: connectorStatus === undefined ? "waiting" : "destructive",
+    span: "full",
   };
 }
 
@@ -252,6 +215,66 @@ function toTransactionStatus(
     value: formatTransactionStatus(transaction.currentStatus),
     tone: toTransactionTone(transaction.currentStatus),
   };
+}
+
+function toConnectorAvailability(
+  runtimeStatus: RuntimeOperationResponse | undefined,
+  connectorAvailability: ConnectorRuntimeAvailabilitySnapshot | undefined,
+): ConnectorCardStatusItem {
+  if (runtimeStatus === undefined) {
+    return {
+      label: "可用性",
+      value: "未同步",
+      tone: "neutral",
+    };
+  }
+
+  if (runtimeStatus.status !== "running") {
+    return {
+      label: "可用性",
+      value: "未运行",
+      tone: "neutral",
+    };
+  }
+
+  if (connectorAvailability === undefined) {
+    return {
+      label: "可用性",
+      value: "等待同步",
+      tone: "waiting",
+    };
+  }
+
+  return {
+    label: "可用性",
+    value: formatRuntimeAvailabilityDetail(connectorAvailability),
+    tone: connectorAvailability.requestedAvailability === undefined
+      ? toRuntimeAvailabilityTone(connectorAvailability.currentAvailability)
+      : "warning",
+  };
+}
+
+function formatRuntimeAvailabilityDetail(
+  availability: ConnectorRuntimeAvailabilitySnapshot,
+) {
+  const currentLabel = formatRuntimeAvailability(availability.currentAvailability);
+  return availability.requestedAvailability === undefined
+    ? currentLabel
+    : `${currentLabel} · 待切换为${formatRuntimeAvailability(
+        availability.requestedAvailability,
+      )}`;
+}
+
+function formatRuntimeAvailability(
+  availability: ConnectorRuntimeAvailabilitySnapshot["currentAvailability"],
+) {
+  return availability === "operative" ? "可用" : "不可用";
+}
+
+function toRuntimeAvailabilityTone(
+  availability: ConnectorRuntimeAvailabilitySnapshot["currentAvailability"],
+): HeaderTone {
+  return availability === "operative" ? "success" : "warning";
 }
 
 function selectConnectorTransaction(
@@ -364,22 +387,6 @@ function formatTransactionStatus(status: TransactionRuntimeStatus) {
   }
 
   return "失败";
-}
-
-function formatPowerType(powerType: ConnectorResponse["powerType"]) {
-  if (powerType === "ac") {
-    return "交流";
-  }
-
-  if (powerType === "dc") {
-    return "直流";
-  }
-
-  return "未知供电";
-}
-
-function formatMeterWh(meterWh: number) {
-  return `${meterWh.toFixed(3)} Wh`;
 }
 
 function connectorKey(evseId: number, connectorId: number) {

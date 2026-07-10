@@ -144,6 +144,7 @@ describe("charging point actor package seam", () => {
       `${actorPackageRoot}/src/protocol/runtime/ocpp16/types/operations.ts`,
       `${actorPackageRoot}/src/protocol/runtime/ocpp16/types/options.ts`,
       `${actorPackageRoot}/src/protocol/runtime/ocpp16/TransactionDeliveryInternals.ts`,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/Ocpp16TransactionDeliveryInternals.ts`,
       `${actorPackageRoot}/src/protocol/runtime/ocpp16/Ocpp16RuntimeObservation.ts`,
       `${actorPackageRoot}/src/protocol/runtime/ocpp201/index.ts`,
       `${actorPackageRoot}/src/protocol/transport/websocket/socketEventDetails.ts`,
@@ -159,6 +160,10 @@ describe("charging point actor package seam", () => {
     ))).toBe(true);
     expect(existsSync(join(
       repoRoot,
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/transactionDeliveryState.ts`,
+    ))).toBe(true);
+    expect(existsSync(join(
+      repoRoot,
       `${actorPackageRoot}/src/protocol/runtime/ocpp16/types.ts`,
     ))).toBe(true);
     expect(existsSync(join(
@@ -167,7 +172,7 @@ describe("charging point actor package seam", () => {
     ))).toBe(true);
   });
 
-  test("ocpp16 actions use the transaction delivery module interface", () => {
+  test("ocpp16 transaction delivery exposes a small external interface", () => {
     const actionFiles = [
       `${actorPackageRoot}/src/protocol/runtime/ocpp16/actions/transactionStart.ts`,
       `${actorPackageRoot}/src/protocol/runtime/ocpp16/actions/stopTransaction.ts`,
@@ -188,12 +193,32 @@ describe("charging point actor package seam", () => {
 
     for (const relativePath of actionFiles) {
       const source = readSource(relativePath);
-      expect(source).toContain("getOcpp16TransactionDelivery");
+      expect(source).toContain("../transactionDeliveryState");
+      expect(source).not.toContain("getOcpp16TransactionDeliveryInternals");
+      expect(source).not.toContain("getOcpp16TransactionDelivery(context)");
       for (const helper of forbiddenHelperImports) {
         expect(source).not.toMatch(
           new RegExp(`import\\\\s*{[^}]*${helper}[^}]*}\\\\s*from\\\\s*["']\\.\\./Ocpp16TransactionDelivery["']`),
         );
       }
+    }
+
+    const publicSource = readSource(
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/Ocpp16TransactionDelivery.ts`,
+    );
+    const internalSource = readSource(
+      `${actorPackageRoot}/src/protocol/runtime/ocpp16/transactionDeliveryState.ts`,
+    );
+    expect(internalSource).not.toContain("class Ocpp16TransactionDeliveryInternals");
+    expect(internalSource).not.toContain("WeakMap");
+    for (const operation of [
+      "recordTransactionStart",
+      "resolveTransactionDelivery",
+      "completeTransactionDelivery",
+      "prepareMeterValueDelivery",
+    ]) {
+      expect(publicSource).not.toContain(operation);
+      expect(internalSource).toContain(`export function ${operation}`);
     }
   });
 

@@ -1,6 +1,7 @@
 import type {
   AuthorizationSource,
   AuthorizationStatus,
+  Availability,
   AuthorizationGrant,
   ChargingPoint,
   ChargingPointOptions,
@@ -132,6 +133,16 @@ export interface Ocpp16RuntimeChargingPointStatusEvent
   error?: { code: string; message: string };
 }
 
+export interface Ocpp16RuntimeChargingPointAvailabilityEvent
+  extends Ocpp16RuntimeEventBase<
+    "chargingPoint.availability",
+    Extract<Ocpp16RuntimeResourceRef, { scope: "chargingPoint" }>
+  > {
+  previousAvailability: Availability | null;
+  currentAvailability: Availability;
+  requestedAvailability?: Availability;
+}
+
 export interface Ocpp16RuntimeEvseStatusEvent
   extends Ocpp16RuntimeEventBase<
     "evse.status",
@@ -140,6 +151,16 @@ export interface Ocpp16RuntimeEvseStatusEvent
   previousStatus: EVSEStatus | null;
   currentStatus: EVSEStatus;
   error?: { code: string; message: string };
+}
+
+export interface Ocpp16RuntimeConnectorAvailabilityEvent
+  extends Ocpp16RuntimeEventBase<
+    "connector.availability",
+    Extract<Ocpp16RuntimeResourceRef, { scope: "connector" }>
+  > {
+  previousAvailability: Availability | null;
+  currentAvailability: Availability;
+  requestedAvailability?: Availability;
 }
 
 export interface Ocpp16RuntimeConnectorStatusEvent
@@ -184,12 +205,17 @@ export interface Ocpp16RuntimeTransactionMeterValueEvent
     Extract<Ocpp16RuntimeResourceRef, { scope: "transaction" }>
   > {
   meterWh: number;
+  powerW: number;
+  currentA: number;
+  voltageV: number;
   sampledAt: Date;
 }
 
 export type Ocpp16RuntimeEventMap = {
+  "chargingPoint.availability": Ocpp16RuntimeChargingPointAvailabilityEvent;
   "chargingPoint.status": Ocpp16RuntimeChargingPointStatusEvent;
   "evse.status": Ocpp16RuntimeEvseStatusEvent;
+  "connector.availability": Ocpp16RuntimeConnectorAvailabilityEvent;
   "connector.status": Ocpp16RuntimeConnectorStatusEvent;
   "authorization.status": Ocpp16RuntimeAuthorizationStatusEvent;
   "transaction.status": Ocpp16RuntimeTransactionStatusEvent;
@@ -385,6 +411,9 @@ export type Ocpp16MeterValuesResult =
       connectorId: number;
       ocppTransactionId: number | null;
       meterWh: number;
+      powerW: number;
+      currentA: number;
+      voltageV: number;
       sampledAt: Date;
       sentAt: Date;
       receivedAt: Date;

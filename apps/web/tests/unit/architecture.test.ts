@@ -12,19 +12,36 @@ function readSource(...paths: string[]) {
 }
 
 describe("web architecture", () => {
-  test("charging point workbench seam exposes grouped view models", () => {
-    const workbenchPath = join(srcRoot, "useChargingPointWorkbench.ts");
-    const workbenchSource = readFileSync(workbenchPath, "utf8");
+  test("charging point detail renders through the feature workbench seam", () => {
+    const legacyWorkbenchPath = join(srcRoot, "useChargingPointWorkbench.ts");
+    const workbenchPath = join(
+      srcRoot,
+      "features",
+      "charging-points",
+      "model",
+      "useChargingPointWorkbench.ts",
+    );
+    const detailPageSource = readSource(
+      "features",
+      "charging-points",
+      "ui",
+      "ChargingPointDetailPage.tsx",
+    );
+    const workbenchSource = existsSync(workbenchPath)
+      ? readFileSync(workbenchPath, "utf8")
+      : "";
 
+    expect(existsSync(legacyWorkbenchPath)).toBe(false);
     expect(existsSync(workbenchPath)).toBe(true);
-    expect(workbenchSource).toContain("authPanel");
-    expect(workbenchSource).toContain("chargingPointList");
-    expect(workbenchSource).toContain("chargingPointEditor");
-    expect(workbenchSource).toContain("chargingPointDetail");
-    expect(workbenchSource).toContain("transactionPanel");
-    expect(workbenchSource).toContain("eventTimeline");
-    expect(workbenchSource).not.toContain("station");
-    expect(existsSync(join(srcRoot, "useStationWorkbench.ts"))).toBe(false);
+    expect(detailPageSource).toContain("useChargingPointWorkbench");
+    expect(detailPageSource).not.toContain("useQuery");
+    expect(detailPageSource).not.toContain("useMutation");
+    expect(detailPageSource).not.toContain("api/chargingPoints");
+    expect(detailPageSource).not.toContain("chargingPointQueries");
+    expect(detailPageSource).not.toContain("useChargingPointRuntimeEvents");
+    expect(workbenchSource).toContain("useQuery");
+    expect(workbenchSource).toContain("useMutation");
+    expect(workbenchSource).toContain("useChargingPointRuntimeEvents");
   });
 
   test("app shell only wires providers and router", () => {
@@ -105,6 +122,22 @@ describe("web architecture", () => {
     const formFieldsPath = join(featureRoot, "ui", "ChargingPointFormFields.tsx");
     const apiPath = join(featureRoot, "api", "chargingPoints.ts");
     const queryPath = join(featureRoot, "model", "chargingPointQueries.ts");
+    const workbenchPath = join(
+      featureRoot,
+      "model",
+      "useChargingPointWorkbench.ts",
+    );
+    const workbenchModelPath = join(
+      featureRoot,
+      "model",
+      "chargingPointWorkbench.ts",
+    );
+    const workbenchTestPath = join(
+      webRoot,
+      "tests",
+      "unit",
+      "chargingPointWorkbench.test.ts",
+    );
     const detailHeaderModelPath = join(
       featureRoot,
       "model",
@@ -115,16 +148,23 @@ describe("web architecture", () => {
       "model",
       "chargingPointConnectorCards.ts",
     );
+    const connectorDisplayModelPath = join(
+      featureRoot,
+      "model",
+      "connectorDisplay.ts",
+    );
     const formPath = join(featureRoot, "model", "chargingPointListForm.ts");
     const createFormPath = join(featureRoot, "model", "chargingPointCreateForm.ts");
     const storePath = join(featureRoot, "model", "chargingPointListStore.ts");
     const dataTablePath = join(srcRoot, "components", "data-table", "DataTable.tsx");
+    const chartPath = join(srcRoot, "components", "ui", "chart.tsx");
     const routerSource = readFileSync(routerPath, "utf8");
     const routeSource = readFileSync(routePath, "utf8");
     const pageSource = readFileSync(pagePath, "utf8");
     const detailPageSource = existsSync(detailPagePath)
       ? readFileSync(detailPagePath, "utf8")
       : "";
+    const chartSource = existsSync(chartPath) ? readFileSync(chartPath, "utf8") : "";
     const createDialogSource = readFileSync(createDialogPath, "utf8");
     const editDialogSource = readFileSync(editDialogPath, "utf8");
     const connectorDialogSource = readFileSync(connectorDialogPath, "utf8");
@@ -137,11 +177,20 @@ describe("web architecture", () => {
     const formFieldsSource = readFileSync(formFieldsPath, "utf8");
     const apiSource = readFileSync(apiPath, "utf8");
     const querySource = readFileSync(queryPath, "utf8");
+    const workbenchSource = existsSync(workbenchPath)
+      ? readFileSync(workbenchPath, "utf8")
+      : "";
+    const workbenchModelSource = existsSync(workbenchModelPath)
+      ? readFileSync(workbenchModelPath, "utf8")
+      : "";
     const detailHeaderModelSource = existsSync(detailHeaderModelPath)
       ? readFileSync(detailHeaderModelPath, "utf8")
       : "";
     const connectorCardsModelSource = existsSync(connectorCardsModelPath)
       ? readFileSync(connectorCardsModelPath, "utf8")
+      : "";
+    const connectorDisplayModelSource = existsSync(connectorDisplayModelPath)
+      ? readFileSync(connectorDisplayModelPath, "utf8")
       : "";
     const formSource = readFileSync(formPath, "utf8");
     const createFormSource = readFileSync(createFormPath, "utf8");
@@ -161,8 +210,12 @@ describe("web architecture", () => {
     expect(existsSync(formFieldsPath)).toBe(true);
     expect(existsSync(apiPath)).toBe(true);
     expect(existsSync(queryPath)).toBe(true);
+    expect(existsSync(workbenchPath)).toBe(true);
+    expect(existsSync(workbenchModelPath)).toBe(true);
+    expect(existsSync(workbenchTestPath)).toBe(true);
     expect(existsSync(detailHeaderModelPath)).toBe(true);
     expect(existsSync(connectorCardsModelPath)).toBe(true);
+    expect(existsSync(connectorDisplayModelPath)).toBe(true);
     expect(existsSync(formPath)).toBe(true);
     expect(existsSync(createFormPath)).toBe(true);
     expect(existsSync(storePath)).toBe(true);
@@ -255,28 +308,43 @@ describe("web architecture", () => {
     expect(connectorEditDialogSource).not.toContain("AlertDialog");
     expect(connectorFormFieldsSource).toContain("FieldGroup");
     expect(connectorFormFieldsSource).toContain("data-dialog-select-content");
+    expect(connectorFormFieldsSource).toContain("CONNECTOR_TYPE_OPTIONS");
+    expect(connectorFormFieldsSource).toContain("CONNECTOR_FORMAT_OPTIONS");
+    expect(connectorFormFieldsSource).toContain("CONNECTOR_POWER_TYPE_OPTIONS");
+    expect(connectorFormFieldsSource).not.toContain('placeholder="Type2 / CCS2"');
+    expect(connectorFormFieldsSource).not.toContain(
+      '<SelectItem value="socket">socket</SelectItem>',
+    );
+    expect(connectorFormFieldsSource).not.toContain(
+      '<SelectItem value="cable">cable</SelectItem>',
+    );
+    expect(connectorFormFieldsSource).not.toContain(
+      '<SelectItem value="ac">ac</SelectItem>',
+    );
+    expect(connectorFormFieldsSource).not.toContain(
+      '<SelectItem value="dc">dc</SelectItem>',
+    );
     expect(connectorFormFieldsSource).not.toContain("maxPower");
     expect(connectorFormFieldsSource).not.toContain("功率 W");
-    expect(detailPageSource).toContain("useQuery");
-    expect(detailPageSource).toContain("useMutation");
-    expect(detailPageSource).toContain("buildChargingPointDetailHeaderModel");
-    expect(detailPageSource).toContain("buildConnectorCardModels");
-    expect(detailPageSource).toContain("chargingPointDetailQueryOptions");
-    expect(detailPageSource).toContain("chargingPointRuntimeStatusQueryOptions");
-    expect(detailPageSource).toContain("startChargingPoint");
-    expect(detailPageSource).toContain("stopChargingPoint");
-    expect(detailPageSource).toContain("plugConnector");
-    expect(detailPageSource).toContain("unplugConnector");
-    expect(detailPageSource).toContain("authorizeAndStartConnectorTransaction");
-    expect(detailPageSource).toContain("stopConnectorTransaction");
+    expect(detailPageSource).toContain("useChargingPointWorkbench");
+    expect(detailPageSource).not.toContain("useQuery");
+    expect(detailPageSource).not.toContain("useMutation");
+    expect(workbenchSource).toContain("createReadyChargingPointWorkbench");
+    expect(workbenchModelSource).not.toContain("useQuery");
+    expect(workbenchModelSource).not.toContain("useMutation");
+    expect(workbenchModelSource).not.toContain("api/chargingPoints");
+    expect(detailPageSource).toContain("ChartContainer");
+    expect(detailPageSource).toContain("LineChart");
+    expect(chartSource).toContain("RechartsPrimitive.ResponsiveContainer");
+    expect(chartSource).toContain("ChartTooltipContent");
+    expect(workbenchSource).toContain("chargingPointDetailQueryOptions");
+    expect(workbenchSource).toContain("chargingPointRuntimeStatusQueryOptions");
     expect(detailPageSource).toContain("ChargingPointEditDialog");
     expect(detailPageSource).toContain("ChargingPointConnectorEditDialog");
-    expect(detailPageSource).toContain("connectorEditTarget");
-    expect(detailPageSource).toContain("onEdit={() => setConnectorEditTarget(model.connector)}");
-    expect(detailPageSource).toContain("setQueryData<ChargingPointDetailResponse>");
-    expect(detailPageSource).toContain("connectors: current.connectors.map");
-    expect(detailPageSource).toContain("请先停止桩实例再编辑枪口配置。");
-    expect(detailPageSource).toContain("运行摘要");
+    expect(detailPageSource).toContain("connectorEditor.target");
+    expect(detailPageSource).toContain("onEdit={() => connectorEditor.open(model.connector)}");
+    expect(detailPageSource).not.toContain("运行摘要");
+    expect(detailPageSource).not.toContain(">运行状态</span>");
     expect(detailPageSource).toContain("@tanstack/react-virtual");
     expect(detailPageSource).toContain("useVirtualizer");
     expect(detailPageSource).toContain("VirtualRuntimeLogList");
@@ -300,7 +368,40 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("headerModel.finalConnectionUrl");
     expect(detailPageSource).toContain("col-span-full");
     expect(detailPageSource).toContain("gap-x-3 gap-y-1");
-    expect(detailPageSource).toContain("md:grid-cols-3");
+    expect(
+      detailPageSource.match(/<CardAction className="flex flex-wrap justify-end gap-2">/g)
+        ?.length,
+    ).toBe(2);
+    expect(detailPageSource).toContain(
+      "xl:grid-cols-[13rem_minmax(20rem,1fr)_minmax(20rem,1fr)]",
+    );
+    expect(detailPageSource).toContain("ConnectorElectricalChart");
+    expect(detailPageSource).toContain("ConnectorEnergyChart");
+    expect(detailPageSource).toContain("功率 / 电流 / 电压曲线");
+    expect(detailPageSource).toContain("电量曲线");
+    expect(detailPageSource).toContain("暂无充电采样");
+    expect(detailPageSource).toContain("ELECTRICAL_CHART_SERIES.map");
+    expect(detailPageSource).toContain("ConnectorElectricalMetricChart");
+    expect(detailPageSource).toContain("formatElectricalMetricValue");
+    expect(detailPageSource).toContain('label: "功率 kW"');
+    expect(detailPageSource).toContain('unit: "kW"');
+    expect(detailPageSource).toContain("numericValue / 1000");
+    expect(detailPageSource).toContain("minimumFractionDigits: 2");
+    expect(detailPageSource).toContain("getElectricalMetricDomain");
+    expect(detailPageSource).toContain("toEnergyChartSamples");
+    expect(detailPageSource).toContain('dataKey="meterKwh"');
+    expect(detailPageSource).toContain("tickFormatter={formatEnergyAxisTick}");
+    expect(detailPageSource).toContain("formatEnergyTooltipValue");
+    expect(detailPageSource).toContain("getEnergyChartDomain");
+    expect(detailPageSource).toContain("domain={getEnergyChartDomain(samples)}");
+    expect(detailPageSource).toContain('className="flex h-40 flex-col gap-2"');
+    expect(detailPageSource).toContain('<div className="grid gap-2">');
+    expect(detailPageSource).not.toContain('<div className="grid grid-cols-2 gap-2">');
+    expect(detailPageSource).toContain('field.span === "full" && "col-span-full"');
+    expect(detailPageSource).not.toContain('yAxisId="powerW"');
+    expect(detailPageSource).not.toContain('yAxisId="currentA"');
+    expect(detailPageSource).not.toContain('yAxisId="voltageV"');
+    expect(detailPageSource).toContain("md:grid-cols-4");
     expect(detailPageSource).toContain("activeObservationTab");
     expect(detailPageSource).toContain('value={activeObservationTab}');
     expect(detailPageSource.indexOf('value="messages"')).toBeLessThan(
@@ -308,7 +409,16 @@ describe("web architecture", () => {
     );
     expect(detailPageSource).not.toContain("最终连接目标");
     expect(detailPageSource).not.toContain("headerModel.staticDetails");
-    expect(detailHeaderModelSource).toContain("最近异常");
+    expect(detailHeaderModelSource).toContain("Boot 状态");
+    expect(detailHeaderModelSource).toContain("会话状态");
+    expect(detailHeaderModelSource).toContain("可用性");
+    expect(detailHeaderModelSource).toContain("充电桩状态");
+    expect(detailHeaderModelSource).toContain("chargingPointAvailability");
+    expect(connectorCardsModelSource).toContain("connectorAvailabilities");
+    expect(detailHeaderModelSource).not.toContain("最近异常");
+    expect(detailPageSource).not.toContain(
+      "<StatusBadge item={headerModel.chargingPointStatus}",
+    );
     expect(detailPageSource).toContain(
       "grid-cols-[5.5rem_minmax(8rem,0.9fr)_minmax(6rem,0.7fr)_minmax(8rem,1fr)_minmax(0,1.4fr)]",
     );
@@ -341,7 +451,30 @@ describe("web architecture", () => {
     expect(detailHeaderModelSource).toContain("Boot 待接受");
     expect(detailHeaderModelSource).not.toContain("staticDetails");
     expect(connectorCardsModelSource).toContain("buildConnectorCardModels");
-    expect(connectorCardsModelSource).toContain("插枪状态");
+    expect(connectorCardsModelSource).not.toContain("statusBadge");
+    expect(connectorCardsModelSource).toContain('span?: "full"');
+    expect(connectorCardsModelSource).toContain("toConnectorStatusField");
+    expect(connectorCardsModelSource).toContain("可用 / 未插枪");
+    expect(connectorCardsModelSource).toContain("占用 / 已插枪");
+    expect(connectorCardsModelSource).not.toContain("插枪状态");
+    expect(connectorCardsModelSource).toContain("toConnectorAvailability");
+    expect(connectorCardsModelSource).toContain("可用性");
+    expect(connectorCardsModelSource).not.toContain("最近表值");
+    expect(connectorCardsModelSource).toContain("formatConnectorType");
+    expect(connectorCardsModelSource).toContain("formatConnectorFormat");
+    expect(connectorCardsModelSource).toContain("formatConnectorPowerType");
+    expect(connectorDisplayModelSource).toContain("GBT_AC");
+    expect(connectorDisplayModelSource).toContain("国标交流");
+    expect(connectorDisplayModelSource).toContain("IEC_62196_T2_COMBO");
+    expect(connectorDisplayModelSource).toContain("欧标直流 CCS2");
+    expect(connectorDisplayModelSource).toContain("SAE_J3400");
+    expect(connectorDisplayModelSource).toContain("北美 NACS");
+    expect(connectorDisplayModelSource).toContain("插座型");
+    expect(connectorDisplayModelSource).toContain("线缆型");
+    expect(connectorDisplayModelSource).toContain("交流");
+    expect(connectorDisplayModelSource).toContain("直流");
+    expect(connectorDisplayModelSource).toContain("未知形态");
+    expect(connectorDisplayModelSource).toContain("未知供电");
     expect(connectorCardsModelSource).toContain("startCharging");
     expect(connectorCardsModelSource).not.toContain("authorize");
     expect(formFieldsSource).toContain("协议版本");

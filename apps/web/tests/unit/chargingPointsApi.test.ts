@@ -148,8 +148,10 @@ describe("chargingPoints API client", () => {
           },
           sessionStatus: null,
           chargingPointStatus: null,
+          chargingPointAvailability: null,
           evseStatuses: [],
           connectorStatuses: [],
+          connectorAvailabilities: [],
           transactionStatuses: [],
           lastHeartbeatAt: null,
           recentIssue: null,
@@ -461,8 +463,10 @@ describe("chargingPoints API client", () => {
         },
         sessionStatus: null,
         chargingPointStatus: null,
+        chargingPointAvailability: null,
         evseStatuses: [],
         connectorStatuses: [],
+        connectorAvailabilities: [],
         transactionStatuses: [],
         lastHeartbeatAt: null,
         recentIssue: null,
@@ -482,8 +486,10 @@ describe("chargingPoints API client", () => {
         },
         sessionStatus: null,
         chargingPointStatus: null,
+        chargingPointAvailability: null,
         evseStatuses: [],
         connectorStatuses: [],
+        connectorAvailabilities: [],
         transactionStatuses: [],
         lastHeartbeatAt: null,
         recentIssue: null,
@@ -496,6 +502,45 @@ describe("chargingPoints API client", () => {
     expect(source.listeners.size).toBe(0);
   });
 
+  test("rejects invalid charging point event payloads before notifying", () => {
+    const createdSources: FakeEventSource[] = [];
+    class FakeEventSource {
+      readonly listeners = new Map<string, (event: MessageEvent<string>) => void>();
+      onerror: ((event: Event) => void) | null = null;
+
+      constructor(readonly url: string) {
+        createdSources.push(this);
+      }
+
+      addEventListener(
+        type: string,
+        listener: (event: MessageEvent<string>) => void,
+      ) {
+        this.listeners.set(type, listener);
+      }
+
+      removeEventListener(type: string) {
+        this.listeners.delete(type);
+      }
+
+      close() {}
+    }
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const onEvent = vi.fn();
+
+    subscribeChargingPointEvents(
+      "00000000-0000-4000-8000-000000000001",
+      { onEvent },
+    );
+
+    expect(() =>
+      createdSources[0].listeners.get("transaction.meterValue")?.({
+        data: JSON.stringify({ sampledAt: "not-a-date" }),
+      } as MessageEvent<string>),
+    ).toThrow();
+    expect(onEvent).not.toHaveBeenCalled();
+  });
+
   test("lists connectors for a charging point", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -505,7 +550,7 @@ describe("chargingPoints API client", () => {
             chargingPointId: "00000000-0000-4000-8000-000000000001",
             evseId: 1,
             connectorId: 1,
-            type: "Type2",
+            type: "IEC_62196_T2",
             format: "socket",
             powerType: "ac",
             maxVoltage: null,
@@ -536,7 +581,7 @@ describe("chargingPoints API client", () => {
           chargingPointId: "00000000-0000-4000-8000-000000000001",
           evseId: 1,
           connectorId: 1,
-          type: "Type2",
+          type: "IEC_62196_T2",
           format: "socket",
           powerType: "ac",
           maxVoltage: 230,
@@ -554,7 +599,7 @@ describe("chargingPoints API client", () => {
     await createConnector("00000000-0000-4000-8000-000000000001", {
       evseId: 1,
       connectorId: 1,
-      type: "Type2",
+      type: "IEC_62196_T2",
       format: "socket",
       powerType: "ac",
       maxVoltage: 230,
@@ -571,7 +616,7 @@ describe("chargingPoints API client", () => {
         body: JSON.stringify({
           evseId: 1,
           connectorId: 1,
-          type: "Type2",
+          type: "IEC_62196_T2",
           format: "socket",
           powerType: "ac",
           maxVoltage: 230,
@@ -589,7 +634,7 @@ describe("chargingPoints API client", () => {
           chargingPointId: "00000000-0000-4000-8000-000000000001",
           evseId: 1,
           connectorId: 2,
-          type: "CCS2",
+          type: "IEC_62196_T2_COMBO",
           format: "cable",
           powerType: "dc",
           maxVoltage: 750,
@@ -607,7 +652,7 @@ describe("chargingPoints API client", () => {
     await updateConnector(
       "00000000-0000-4000-8000-000000000001",
       "00000000-0000-4000-8000-000000000002",
-      { connectorId: 2, type: "CCS2" },
+      { connectorId: 2, type: "IEC_62196_T2_COMBO" },
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -617,7 +662,7 @@ describe("chargingPoints API client", () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ connectorId: 2, type: "CCS2" }),
+        body: JSON.stringify({ connectorId: 2, type: "IEC_62196_T2_COMBO" }),
       },
     );
   });

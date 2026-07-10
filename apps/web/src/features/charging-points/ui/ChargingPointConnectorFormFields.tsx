@@ -20,6 +20,11 @@ import type {
   ConnectorManagementFormInput,
   ConnectorManagementFormValues,
 } from "@/features/charging-points/model/connectorManagementForm";
+import {
+  CONNECTOR_FORMAT_OPTIONS,
+  CONNECTOR_POWER_TYPE_OPTIONS,
+  CONNECTOR_TYPE_OPTIONS,
+} from "@/features/charging-points/model/connectorDisplay";
 
 interface ChargingPointConnectorFormFieldsProps {
   connectorIdReadOnly: boolean;
@@ -36,6 +41,7 @@ export function ChargingPointConnectorFormFields({
   form,
   idPrefix,
 }: ChargingPointConnectorFormFieldsProps) {
+  const [typeSelectOpen, setTypeSelectOpen] = useState(false);
   const [formatSelectOpen, setFormatSelectOpen] = useState(false);
   const [powerTypeSelectOpen, setPowerTypeSelectOpen] = useState(false);
   const formErrors = form.formState.errors;
@@ -57,11 +63,40 @@ export function ChargingPointConnectorFormFields({
       </Field>
       <Field data-invalid={Boolean(formErrors.type)}>
         <FieldLabel htmlFor={`${idPrefix}-type`}>类型</FieldLabel>
-        <Input
-          id={`${idPrefix}-type`}
-          aria-invalid={Boolean(formErrors.type)}
-          placeholder="Type2 / CCS2"
-          {...form.register("type")}
+        <Controller
+          control={form.control}
+          name="type"
+          render={({ field }) => (
+            <Select
+              open={typeSelectOpen}
+              value={field.value}
+              onOpenChange={setTypeSelectOpen}
+              onValueChange={field.onChange}
+            >
+              <SelectTrigger
+                id={`${idPrefix}-type`}
+                ref={field.ref}
+                aria-invalid={Boolean(formErrors.type)}
+                className="w-full"
+                onBlur={field.onBlur}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                data-dialog-select-content
+                position="popper"
+                className="z-[100]"
+              >
+                <SelectGroup>
+                  {CONNECTOR_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
         />
         <FieldError errors={[formErrors.type]} />
       </Field>
@@ -92,9 +127,11 @@ export function ChargingPointConnectorFormFields({
                 className="z-[100]"
               >
                 <SelectGroup>
-                  <SelectItem value="socket">socket</SelectItem>
-                  <SelectItem value="cable">cable</SelectItem>
-                  <SelectItem value="unknown">unknown</SelectItem>
+                  {CONNECTOR_FORMAT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -129,9 +166,11 @@ export function ChargingPointConnectorFormFields({
                 className="z-[100]"
               >
                 <SelectGroup>
-                  <SelectItem value="ac">ac</SelectItem>
-                  <SelectItem value="dc">dc</SelectItem>
-                  <SelectItem value="unknown">unknown</SelectItem>
+                  {CONNECTOR_POWER_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>

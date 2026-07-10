@@ -1,11 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type {
-  ChargingPointDetailResponse,
-  ConnectorResponse,
-  RuntimeOperationResponse,
-} from "@spark-bee/contracts";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -27,6 +21,13 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { toast } from "sonner";
 
 import {
@@ -50,6 +51,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import {
   Dialog,
   DialogContent,
@@ -81,23 +88,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  authorizeAndStartConnectorTransaction,
-  plugConnector,
-  startChargingPoint,
-  stopConnectorTransaction,
-  stopChargingPoint,
-  unplugConnector,
-} from "@/features/charging-points/api/chargingPoints";
-import {
-  buildConnectorCardModels,
   type ConnectorCardAction,
   type ConnectorCardModel,
 } from "@/features/charging-points/model/chargingPointConnectorCards";
 import {
-  buildChargingPointDetailHeaderModel,
+  type ChargingSamplePoint,
+} from "@/features/charging-points/model/chargingPointChargingSamples";
+import {
   type ChargingPointDetailHeaderModel,
   type HeaderMetricItem,
-  type RuntimeStatusQueryState,
 } from "@/features/charging-points/model/chargingPointDetailHeader";
 import type {
   ProtocolMessageLogEntry,
@@ -112,13 +111,7 @@ import {
   type RuntimeLogTimeFilter,
   type RuntimeLogTypeFilterOption,
 } from "@/features/charging-points/model/chargingPointRuntimeLogFilters";
-import {
-  chargingPointDetailQueryOptions,
-  chargingPointDetailQueryKey,
-  chargingPointRuntimeStatusQueryKey,
-  chargingPointRuntimeStatusQueryOptions,
-} from "@/features/charging-points/model/chargingPointQueries";
-import { useChargingPointRuntimeEvents } from "@/features/charging-points/model/useChargingPointRuntimeEvents";
+import { useChargingPointWorkbench } from "@/features/charging-points/model/useChargingPointWorkbench";
 import { ChargingPointConnectorEditDialog } from "@/features/charging-points/ui/ChargingPointConnectorEditDialog";
 import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingPointEditDialog";
 import { cn } from "@/lib/utils";
@@ -127,141 +120,27 @@ export function ChargingPointDetailPage() {
   const { chargingPointId } = useParams({
     from: "/charging-points/$chargingPointId",
   });
-  const [editOpen, setEditOpen] = useState(false);
-  const [connectorEditTarget, setConnectorEditTarget] =
-    useState<ConnectorResponse | null>(null);
-  const queryClient = useQueryClient();
-  const detailQuery = useQuery(chargingPointDetailQueryOptions(chargingPointId));
-  const detailQueryKey = chargingPointDetailQueryKey(chargingPointId);
-  const runtimeStatusQuery = useQuery(
-    chargingPointRuntimeStatusQueryOptions(chargingPointId),
-  );
-  const runtimeStatusQueryState = toRuntimeStatusQueryState(runtimeStatusQuery);
-  const syncRuntimeStatus = useCallback((runtimeStatus: RuntimeOperationResponse) => {
-    queryClient.setQueryData<RuntimeOperationResponse>(
-      chargingPointRuntimeStatusQueryKey(chargingPointId),
-      runtimeStatus,
-    );
-  }, [chargingPointId, queryClient]);
-  const { eventFeedState, runtimeEventState } = useChargingPointRuntimeEvents(chargingPointId, {
-    enabled: detailQuery.isSuccess,
-    onRuntimeStatus: syncRuntimeStatus,
-  });
-  const startMutation = useMutation({
-    mutationFn: () => startChargingPoint(chargingPointId),
-    onSuccess: (runtimeStatus) => {
-      queryClient.setQueryData(
-        chargingPointRuntimeStatusQueryKey(chargingPointId),
-        runtimeStatus,
-      );
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "桩实例启动失败");
-    },
-  });
-  const stopMutation = useMutation({
-    mutationFn: () => stopChargingPoint(chargingPointId),
-    onSuccess: (runtimeStatus) => {
-      queryClient.setQueryData(
-        chargingPointRuntimeStatusQueryKey(chargingPointId),
-        runtimeStatus,
-      );
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "桩实例停止失败");
-    },
-  });
-  const plugMutation = useMutation({
-    mutationFn: (connectorId: string) => plugConnector(chargingPointId, connectorId),
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "插枪失败");
-    },
-  });
-  const unplugMutation = useMutation({
-    mutationFn: (connectorId: string) => unplugConnector(chargingPointId, connectorId),
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "拔枪失败");
-    },
-  });
-  const startTransactionMutation = useMutation({
-    mutationFn: ({ connectorId, idTag }: { connectorId: string; idTag: string }) =>
-      authorizeAndStartConnectorTransaction(
-        chargingPointId,
-        connectorId,
-        { idTag },
-      ),
-    onSuccess: (result) => {
-      if (result.status === "accepted") {
-        toast.success("充电已启动");
-        return;
-      }
+  const workbench = useChargingPointWorkbench(chargingPointId);
 
-      toast.error(result.reason);
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "启动充电失败");
-    },
-  });
-  const stopTransactionMutation = useMutation({
-    mutationFn: ({
-      connectorId,
-      transactionId,
-    }: {
-      connectorId: string;
-      transactionId: string;
-    }) => stopConnectorTransaction(chargingPointId, connectorId, { transactionId }),
-    onSuccess: (result) => {
-      if (result.status === "accepted") {
-        toast.success("充电已停止");
-        return;
-      }
-
-      toast.error(result.errorMessage);
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "停止充电失败");
-    },
-  });
-
-  if (detailQuery.isLoading) {
+  if (workbench.status === "loading") {
     return <DetailState text="桩实例详情加载中" />;
   }
 
-  if (detailQuery.isError || detailQuery.data === undefined) {
+  if (workbench.status === "error") {
     return <DetailState className="text-destructive" text="桩实例详情加载失败" />;
   }
 
-  const headerModel = buildChargingPointDetailHeaderModel({
-    detail: detailQuery.data,
-    runtimeStatus: runtimeStatusQuery.data,
-    statusQueryState: runtimeStatusQueryState,
-    lastHeartbeatAt: null,
-    runtimeEventState,
-  });
-  const connectorCardModels = buildConnectorCardModels({
-    connectors: detailQuery.data.connectors,
-    runtimeStatus: runtimeStatusQuery.data,
-    runtimeEventState,
-  });
-  const runtimeMutationPending = startMutation.isPending || stopMutation.isPending;
-  const connectorMutationPending =
-    plugMutation.isPending ||
-    unplugMutation.isPending ||
-    startTransactionMutation.isPending ||
-    stopTransactionMutation.isPending;
-  const configurationLocked =
-    runtimeStatusQueryState !== "success" ||
-    runtimeStatusQuery.data?.status !== "stopped";
-  const configurationLockedReason = configurationLocked
-    ? runtimeStatusQueryState === "success"
-      ? "桩实例未停止时仅可修改名称和说明；连接配置需停止后修改。"
-      : "运行状态未确认，仅可修改名称和说明；连接配置需停止后修改。"
-    : undefined;
-  const connectorEditLockedReason = configurationLocked
-    ? runtimeStatusQueryState === "success"
-      ? "请先停止桩实例再编辑枪口配置。"
-      : "运行状态未确认，暂不可编辑枪口配置。"
-    : undefined;
+  const {
+    chargingPointEditor,
+    configuration,
+    connectorEditor,
+    connectorItems,
+    connectors,
+    detail,
+    headerModel,
+    observation,
+    runtime,
+  } = workbench;
 
   return (
     <section className="flex flex-col gap-4">
@@ -269,9 +148,8 @@ export function ChargingPointDetailPage() {
         <CardHeader className="gap-x-3 gap-y-1">
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
-              <CardTitle className="text-lg">{detailQuery.data.name}</CardTitle>
+              <CardTitle className="text-lg">{detail.name}</CardTitle>
               <StatusBadge item={headerModel.mainStatus} />
-              <StatusBadge item={headerModel.chargingPointStatus} />
               <span className="text-xs text-muted-foreground">
                 {headerModel.lastHeartbeatLabel}
               </span>
@@ -281,25 +159,18 @@ export function ChargingPointDetailPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setEditOpen(true)}
+              onClick={chargingPointEditor.openEditor}
             >
               <PencilIcon data-icon="inline-start" />
               编辑
             </Button>
             <Button
-              disabled={headerModel.primaryAction.disabled || runtimeMutationPending}
+              disabled={headerModel.primaryAction.disabled || runtime.pending}
               type="button"
               variant={headerModel.primaryAction.kind === "stop" ? "destructive" : "default"}
-              onClick={() => {
-                if (headerModel.primaryAction.kind === "start") {
-                  startMutation.mutate();
-                  return;
-                }
-
-                stopMutation.mutate();
-              }}
+              onClick={runtime.applyPrimaryAction}
             >
-              {runtimeMutationPending ? "处理中" : headerModel.primaryAction.label}
+              {runtime.pending ? "处理中" : headerModel.primaryAction.label}
             </Button>
           </CardAction>
           {headerModel.finalConnectionUrl && (
@@ -333,89 +204,49 @@ export function ChargingPointDetailPage() {
         </CardContent>
       </Card>
       <section className="grid gap-3">
-        {connectorCardModels.map((model) => (
+        {connectorItems.map(({ model, samples }) => (
           <ConnectorRuntimeCard
             key={model.connectorId}
-            configurationLocked={configurationLocked}
-            configurationLockedReason={connectorEditLockedReason}
-            disabled={connectorMutationPending}
+            configurationLocked={configuration.locked}
+            configurationLockedReason={configuration.connectorEditLockedReason}
+            disabled={connectors.pending}
             model={model}
-            onEdit={() => setConnectorEditTarget(model.connector)}
-            onPlug={() => plugMutation.mutate(model.connectorId)}
+            samples={samples}
+            onEdit={() => connectorEditor.open(model.connector)}
+            onPlug={() => connectors.plug(model.connectorId)}
             onStartCharging={(idTag) =>
-              startTransactionMutation.mutate({
-                connectorId: model.connectorId,
-                idTag,
-              })}
+              connectors.startTransaction(model.connectorId, idTag)}
             onStopCharging={(transactionId) =>
-              stopTransactionMutation.mutate({
-                connectorId: model.connectorId,
-                transactionId,
-              })}
-            onUnplug={() => unplugMutation.mutate(model.connectorId)}
+              connectors.stopTransaction(model.connectorId, transactionId)}
+            onUnplug={() => connectors.unplug(model.connectorId)}
           />
         ))}
       </section>
       <RuntimeObservationTabs
-        events={eventFeedState.events}
-        protocolMessages={eventFeedState.protocolMessages}
+        events={observation.events}
+        protocolMessages={observation.protocolMessages}
       />
       <ChargingPointEditDialog
-        configurationLocked={configurationLocked}
-        configurationLockedReason={configurationLockedReason}
-        item={detailQuery.data}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        onSaved={async (updatedItem) => {
-          queryClient.setQueryData(detailQueryKey, updatedItem);
-          await queryClient.invalidateQueries({ queryKey: detailQueryKey });
-        }}
+        configurationLocked={configuration.locked}
+        configurationLockedReason={configuration.lockedReason}
+        item={detail}
+        open={chargingPointEditor.open}
+        onOpenChange={chargingPointEditor.setOpen}
+        onSaved={chargingPointEditor.save}
       />
-      {connectorEditTarget && (
+      {connectorEditor.target && (
         <ChargingPointConnectorEditDialog
           chargingPointId={chargingPointId}
-          configurationLocked={configurationLocked}
-          configurationLockedReason={connectorEditLockedReason}
-          connector={connectorEditTarget}
-          open={connectorEditTarget !== null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setConnectorEditTarget(null);
-            }
-          }}
-          onSaved={async (savedConnector) => {
-            queryClient.setQueryData<ChargingPointDetailResponse>(
-              detailQueryKey,
-              (current) => {
-                if (current === undefined) {
-                  return current;
-                }
-
-                return {
-                  ...current,
-                  connectors: current.connectors.map((connector) =>
-                    connector.id === savedConnector.id ? savedConnector : connector,
-                  ),
-                };
-              },
-            );
-            await queryClient.invalidateQueries({ queryKey: detailQueryKey });
-          }}
+          configurationLocked={configuration.locked}
+          configurationLockedReason={configuration.connectorEditLockedReason}
+          connector={connectorEditor.target}
+          open={connectorEditor.target !== null}
+          onOpenChange={connectorEditor.setOpen}
+          onSaved={connectorEditor.save}
         />
       )}
     </section>
   );
-}
-
-function toRuntimeStatusQueryState(query: {
-  isError: boolean;
-  isLoading: boolean;
-}): RuntimeStatusQueryState {
-  if (query.isLoading) {
-    return "loading";
-  }
-
-  return query.isError ? "error" : "success";
 }
 
 function DetailMetric({
@@ -454,12 +285,8 @@ function DetailMetric({
 
 function RuntimeSummaryPanel({ items }: { items: HeaderMetricItem[] }) {
   return (
-    <section className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">运行摘要</h3>
-        <span className="text-xs text-muted-foreground">通信状态</span>
-      </div>
-      <div className="grid gap-2 md:grid-cols-3">
+    <section>
+      <div className="grid gap-2 md:grid-cols-4">
         {items.map((item) => (
           <DetailMetric key={item.label} {...item} />
         ))}
@@ -498,6 +325,7 @@ function ConnectorRuntimeCard({
   configurationLockedReason,
   disabled,
   model,
+  samples,
   onEdit,
   onPlug,
   onStartCharging,
@@ -508,6 +336,7 @@ function ConnectorRuntimeCard({
   configurationLockedReason?: string;
   disabled: boolean;
   model: ConnectorCardModel;
+  samples: ChargingSamplePoint[];
   onEdit(): void;
   onPlug(): void;
   onStartCharging(idTag: string): void;
@@ -516,35 +345,42 @@ function ConnectorRuntimeCard({
 }) {
   return (
     <Card className="min-w-0">
-      <CardHeader className="gap-1.5">
-        <div className="flex min-w-0 items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <CardTitle className="truncate text-base">{model.title}</CardTitle>
-              <Badge
-                className={toBadgeToneClassName(model.statusBadge.tone)}
-                variant={toBadgeVariant(model.statusBadge.tone)}
-              >
-                {model.statusBadge.label}
-              </Badge>
-            </div>
-            <CardDescription className="mt-1 truncate">
-              {model.description}
-            </CardDescription>
-          </div>
+      <CardHeader className="gap-x-3 gap-y-1">
+        <div className="min-w-0">
+          <CardTitle className="truncate text-base">{model.title}</CardTitle>
+          <CardDescription className="mt-1 truncate">
+            {model.description}
+          </CardDescription>
+        </div>
+        <CardAction className="flex flex-wrap justify-end gap-2">
           <ConnectorEditButton
             configurationLocked={configurationLocked}
             configurationLockedReason={configurationLockedReason}
             label={`编辑${model.title}`}
             onEdit={onEdit}
           />
-        </div>
+          {model.actions.map((action) => (
+            <ConnectorActionButton
+              key={action.kind}
+              action={action}
+              disabled={disabled}
+              onPlug={onPlug}
+              onStartCharging={onStartCharging}
+              onStopCharging={onStopCharging}
+              onUnplug={onUnplug}
+            />
+          ))}
+        </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {model.fields.map((field) => (
-            <ConnectorField key={field.label} field={field} />
-          ))}
+        <div className="grid gap-3 xl:grid-cols-[13rem_minmax(20rem,1fr)_minmax(20rem,1fr)]">
+          <div className="grid gap-2">
+            {model.fields.map((field) => (
+              <ConnectorField key={field.label} field={field} />
+            ))}
+          </div>
+          <ConnectorElectricalChart samples={samples} />
+          <ConnectorEnergyChart samples={samples} />
         </div>
         {model.issue && (
           <div
@@ -559,19 +395,6 @@ function ConnectorRuntimeCard({
             {model.issue.label}
           </div>
         )}
-        <div className="flex flex-wrap gap-2">
-          {model.actions.map((action) => (
-            <ConnectorActionButton
-              key={action.kind}
-              action={action}
-              disabled={disabled}
-              onPlug={onPlug}
-              onStartCharging={onStartCharging}
-              onStopCharging={onStopCharging}
-              onUnplug={onUnplug}
-            />
-          ))}
-        </div>
       </CardContent>
     </Card>
   );
@@ -583,7 +406,12 @@ function ConnectorField({
   field: ConnectorCardModel["fields"][number];
 }) {
   return (
-    <dl className="min-w-0 rounded-lg bg-muted/40 px-3 py-2">
+    <dl
+      className={cn(
+        "min-w-0 rounded-lg bg-muted/40 px-3 py-2",
+        field.span === "full" && "col-span-full",
+      )}
+    >
       <dt className="text-xs text-muted-foreground">{field.label}</dt>
       <dd
         className={cn(
@@ -598,6 +426,297 @@ function ConnectorField({
       </dd>
     </dl>
   );
+}
+
+const ELECTRICAL_CHART_CONFIG = {
+  powerW: {
+    label: "功率 kW",
+    color: "#0284c7",
+  },
+  currentA: {
+    label: "电流 A",
+    color: "#059669",
+  },
+  voltageV: {
+    label: "电压 V",
+    color: "#d97706",
+  },
+} satisfies ChartConfig;
+
+const ELECTRICAL_CHART_SERIES = [
+  { dataKey: "powerW", label: "功率", unit: "kW" },
+  { dataKey: "currentA", label: "电流", unit: "A" },
+  { dataKey: "voltageV", label: "电压", unit: "V" },
+] as const;
+
+const ENERGY_CHART_CONFIG = {
+  meterKwh: {
+    label: "电量 kWh",
+    color: "#7c3aed",
+  },
+} satisfies ChartConfig;
+
+function ConnectorElectricalChart({ samples }: { samples: ChargingSamplePoint[] }) {
+  return (
+    <ConnectorChartPanel title="功率 / 电流 / 电压曲线" empty={samples.length === 0}>
+      <div className="flex h-40 flex-col gap-2">
+        {ELECTRICAL_CHART_SERIES.map((series) => (
+          <ConnectorElectricalMetricChart
+            key={series.dataKey}
+            dataKey={series.dataKey}
+            label={series.label}
+            samples={samples}
+            unit={series.unit}
+          />
+        ))}
+      </div>
+    </ConnectorChartPanel>
+  );
+}
+
+function ConnectorElectricalMetricChart({
+  dataKey,
+  label,
+  samples,
+  unit,
+}: {
+  dataKey: (typeof ELECTRICAL_CHART_SERIES)[number]["dataKey"];
+  label: string;
+  samples: ChargingSamplePoint[];
+  unit: string;
+}) {
+  const latestValue = samples[samples.length - 1]?.[dataKey];
+
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-2">
+      <div className="min-w-0">
+        <div className="truncate text-xs text-muted-foreground">{label}</div>
+        <div className="truncate text-xs font-medium tabular-nums">
+          {formatElectricalMetricValue(latestValue, dataKey, unit)}
+        </div>
+      </div>
+      <ChartContainer
+        className="aspect-auto h-full min-h-0 w-full"
+        config={ELECTRICAL_CHART_CONFIG}
+      >
+        <LineChart
+          accessibilityLayer
+          data={samples}
+          margin={{ left: 0, right: 6, top: 4, bottom: 4 }}
+        >
+          <CartesianGrid vertical={false} />
+          <XAxis
+            dataKey="sampledAt"
+            hide
+          />
+          <YAxis domain={getElectricalMetricDomain(samples, dataKey)} hide />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                formatter={(value) => (
+                  <>
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-mono font-medium tabular-nums text-foreground">
+                      {formatElectricalMetricValue(value, dataKey, unit)}
+                    </span>
+                  </>
+                )}
+                labelFormatter={(value) => formatChartTime(String(value))}
+              />
+            }
+          />
+          <Line
+            dataKey={dataKey}
+            dot={samples.length <= 8}
+            stroke={`var(--color-${dataKey})`}
+            strokeWidth={2}
+            type="monotone"
+          />
+        </LineChart>
+      </ChartContainer>
+    </div>
+  );
+}
+
+function ConnectorEnergyChart({ samples }: { samples: ChargingSamplePoint[] }) {
+  const energySamples = toEnergyChartSamples(samples);
+
+  return (
+    <ConnectorChartPanel title="电量曲线" empty={samples.length === 0}>
+      <ChartContainer
+        className="aspect-auto h-40 w-full"
+        config={ENERGY_CHART_CONFIG}
+      >
+        <LineChart
+          accessibilityLayer
+          data={energySamples}
+          margin={{ left: 0, right: 10, top: 10, bottom: 0 }}
+        >
+          <CartesianGrid vertical={false} />
+          <XAxis
+            axisLine={false}
+            dataKey="sampledAt"
+            minTickGap={24}
+            tickFormatter={formatChartTime}
+            tickLine={false}
+            tickMargin={8}
+          />
+          <YAxis
+            allowDecimals={false}
+            axisLine={false}
+            domain={getEnergyChartDomain(samples)}
+            tickFormatter={formatEnergyAxisTick}
+            tickLine={false}
+            width={54}
+          />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                formatter={(value) => (
+                  <>
+                    <span className="text-muted-foreground">电量</span>
+                    <span className="font-mono font-medium tabular-nums text-foreground">
+                      {formatEnergyTooltipValue(value)}
+                    </span>
+                  </>
+                )}
+                labelFormatter={(value) => formatChartTime(String(value))}
+              />
+            }
+          />
+          <Line
+            dataKey="meterKwh"
+            dot={samples.length <= 8}
+            stroke="var(--color-meterKwh)"
+            strokeWidth={2}
+            type="monotone"
+          />
+        </LineChart>
+      </ChartContainer>
+    </ConnectorChartPanel>
+  );
+}
+
+function ConnectorChartPanel({
+  children,
+  empty,
+  title,
+}: {
+  children: ReactNode;
+  empty: boolean;
+  title: string;
+}) {
+  return (
+    <section className="min-w-0 rounded-lg border border-border/40 p-3">
+      <h3 className="text-sm font-medium">{title}</h3>
+      {empty ? (
+        <div className="mt-2 flex h-40 items-center justify-center rounded-md border border-dashed border-border/60 text-sm text-muted-foreground">
+          暂无充电采样
+        </div>
+      ) : (
+        <div className="mt-2">{children}</div>
+      )}
+    </section>
+  );
+}
+
+function formatChartTime(value: string) {
+  const time = new Date(value);
+  if (!Number.isFinite(time.getTime())) {
+    return value;
+  }
+
+  return time.toLocaleTimeString("zh-CN", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function formatElectricalMetricValue(
+  value: string | number | undefined,
+  dataKey: (typeof ELECTRICAL_CHART_SERIES)[number]["dataKey"],
+  unit: string,
+) {
+  if (value === undefined) {
+    return "暂无";
+  }
+
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return `${value} ${unit}`;
+  }
+
+  if (dataKey === "powerW") {
+    return `${(numericValue / 1000).toLocaleString("zh-CN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} ${unit}`;
+  }
+
+  return `${numericValue.toLocaleString("zh-CN", {
+    maximumFractionDigits: 3,
+  })} ${unit}`;
+}
+
+function toEnergyChartSamples(samples: ChargingSamplePoint[]) {
+  return samples.map((sample) => ({
+    ...sample,
+    meterKwh: sample.meterWh / 1000,
+  }));
+}
+
+function formatEnergyAxisTick(value: number) {
+  return `${Math.round(value).toLocaleString("zh-CN")} kWh`;
+}
+
+function formatEnergyTooltipValue(value: string | number) {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return `${value} kWh`;
+  }
+
+  return `${numericValue.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} kWh`;
+}
+
+function getElectricalMetricDomain(
+  samples: ChargingSamplePoint[],
+  dataKey: (typeof ELECTRICAL_CHART_SERIES)[number]["dataKey"],
+) {
+  const values = samples
+    .map((sample) => sample[dataKey])
+    .filter((value) => Number.isFinite(value));
+
+  if (values.length === 0) {
+    return [0, 1];
+  }
+
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const range = maxValue - minValue;
+  const padding =
+    range === 0 ? Math.max(Math.abs(maxValue) * 0.05, 1) : range * 0.15;
+
+  return [Math.max(0, minValue - padding), maxValue + padding];
+}
+
+function getEnergyChartDomain(samples: ChargingSamplePoint[]) {
+  const firstSample = samples[0];
+  if (firstSample === undefined) {
+    return [0, 1];
+  }
+
+  const firstMeterKwh = firstSample.meterWh / 1000;
+  const maxMeterKwh = Math.max(...samples.map((sample) => sample.meterWh / 1000));
+  const range = maxMeterKwh - firstMeterKwh;
+  const topPadding =
+    range === 0 ? Math.max(Math.abs(firstMeterKwh) * 0.05, 1) : range * 0.05;
+
+  return [firstMeterKwh, maxMeterKwh + topPadding];
 }
 
 function RuntimeObservationTabs({
@@ -844,12 +963,12 @@ function ConnectorEditButton({
           <Button
             aria-label={label}
             disabled={configurationLocked}
-            size="icon-sm"
             type="button"
-            variant="ghost"
+            variant="outline"
             onClick={onEdit}
           >
-            <PencilIcon />
+            <PencilIcon data-icon="inline-start" />
+            编辑
           </Button>
         </span>
       </TooltipTrigger>
@@ -1189,7 +1308,7 @@ function ConnectorActionButton({
 }) {
   if (action.kind === "plug") {
     return (
-      <Button disabled={disabled} size="sm" type="button" onClick={onPlug}>
+      <Button disabled={disabled} type="button" onClick={onPlug}>
         <PlugZapIcon />
         {action.label}
       </Button>
@@ -1200,7 +1319,6 @@ function ConnectorActionButton({
     return (
       <Button
         disabled={disabled}
-        size="sm"
         type="button"
         variant="outline"
         onClick={onUnplug}
@@ -1257,7 +1375,7 @@ function StartChargingDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button disabled={disabled} size="sm" type="button">
+        <Button disabled={disabled} type="button">
           <PlayIcon />
           {label}
         </Button>
@@ -1305,7 +1423,7 @@ function StopChargingDialog({
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button disabled={disabled || transactionId === undefined} size="sm" type="button">
+        <Button disabled={disabled || transactionId === undefined} type="button">
           <SquareIcon />
           {action.label}
         </Button>
