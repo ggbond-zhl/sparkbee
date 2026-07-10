@@ -1,0 +1,242 @@
+# GitHub 要求 workflow_run 监听器存在于默认分支 main。
+# 本工作流仍只部署通过质量检查的 develop 提交。
+name: 发布测试环境
+
+on:
+  workflow_run:
+    workflows:
+      - 质量检查
+    types:
+      - completed
+
+concurrency:
+  group: test-environment-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 迁移并发布测试环境
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'develop'
+    runs-on: ubuntu-latest
+    environment: test
+    permissions:
+      contents: read
+      deployments: write
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+      RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+      RENDER_API_BASE_URL: ${{ vars.RENDER_API_BASE_URL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+      CLOUDFLARE_PAGES_URL: ${{ vars.CLOUDFLARE_PAGES_URL }}
+
+    steps:
+      - name: 检出已验证提交
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: 配置 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 验证发布配置
+        env:
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          required=(
+            SUPABASE_DATABASE_URL
+            RENDER_API_KEY
+            RENDER_DEPLOY_HOOK_URL
+            RENDER_SERVICE_ID
+            RENDER_API_BASE_URL
+            CLOUDFLARE_API_TOKEN
+            CLOUDFLARE_ACCOUNT_ID
+            CLOUDFLARE_PAGES_PROJECT
+            CLOUDFLARE_PAGES_URL
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then
+              echo "缺少测试环境配置：${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: 记录当前 Render 部署
+        id: previous_render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          response=$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${RENDER_API_KEY}" \
+            "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys?limit=20")
+          deploy_id=$(jq --raw-output \
+            '[.[] | select(.deploy.status == "live")][0].deploy.id // empty' \
+            <<<"${response}")
+          echo "deploy_id=${deploy_id}" >> "${GITHUB_OUTPUT}"
+
+      - name: 迁移 Supabase 数据库
+        id: migrate_database
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+        run: pnpm db:migrate
+
+      - name: 部署 Render 后端
+        id: deploy_render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          separator='?'
+          if [[ "${RENDER_DEPLOY_HOOK_URL}" == *'?'* ]]; then
+            separator='&'
+          fi
+          response=$(curl --fail --silent --show-error --request POST \
+            "${RENDER_DEPLOY_HOOK_URL}${separator}ref=${DEPLOY_SHA}")
+          deploy_id=$(jq --raw-output '.deploy.id // .id // empty' <<<"${response}")
+          if [[ -z "${deploy_id}" ]]; then
+            echo 'Render Deploy Hook 未返回 deployment id。' >&2
+            exit 1
+          fi
+          echo "deploy_id=${deploy_id}" >> "${GITHUB_OUTPUT}"
+
+          for attempt in {1..60}; do
+            deploy=$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${RENDER_API_KEY}" \
+              "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${deploy_id}")
+            status=$(jq --raw-output '.status' <<<"${deploy}")
+            case "${status}" in
+              live)
+                exit 0
+                ;;
+              build_failed|update_failed|canceled|pre_deploy_failed|deactivated)
+                echo "Render 部署失败，状态：${status}" >&2
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+
+          echo '等待 Render 部署完成超时。' >&2
+          exit 1
+
+      - name: 验证后端就绪和业务 API
+        id: smoke_api
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error \
+              "${RENDER_API_BASE_URL}/api/ready" \
+              | jq --exit-status '.status == "ready"' > /dev/null; then
+              break
+            fi
+            if [[ "${attempt}" == '30' ]]; then
+              echo 'Render 后端未在期限内就绪。' >&2
+              exit 1
+            fi
+            sleep 10
+          done
+
+          curl --fail --silent --show-error \
+            "${RENDER_API_BASE_URL}/api/charging-points?page=1&pageSize=1" \
+            | jq --exit-status \
+              '.items | type == "array"' > /dev/null
+
+      - name: 回滚 Render 后端
+        if: >-
+          failure() &&
+          steps.previous_render.outputs.deploy_id != '' &&
+          steps.deploy_render.outcome != 'skipped'
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          PREVIOUS_RENDER_DEPLOY_ID: ${{ steps.previous_render.outputs.deploy_id }}
+        run: |
+          jq --null-input \
+            --arg deployId "${PREVIOUS_RENDER_DEPLOY_ID}" \
+            '{ deployId: $deployId }' \
+            | curl --fail --silent --show-error --request POST \
+              --header "Authorization: Bearer ${RENDER_API_KEY}" \
+              --header 'Content-Type: application/json' \
+              --data-binary @- \
+              "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/rollback"
+
+      - name: 构建 Pages 前端
+        env:
+          VITE_API_BASE_URL: ${{ vars.RENDER_API_BASE_URL }}
+        run: pnpm --filter @spark-bee/web build
+
+      - name: 记录当前 Pages 部署
+        id: previous_pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          response=$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${CLOUDFLARE_PAGES_PROJECT}/deployments?env=production&per_page=1")
+          deploy_id=$(jq --raw-output '.result[0].id // empty' <<<"${response}")
+          echo "deploy_id=${deploy_id}" >> "${GITHUB_OUTPUT}"
+
+      - name: 部署 Cloudflare Pages
+        id: deploy_pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: >-
+            pages deploy dist
+            --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+            --branch=develop
+            --commit-hash=${{ env.DEPLOY_SHA }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 验证 Pages 前端
+        id: smoke_pages
+        run: |
+          html=$(curl --fail --silent --show-error \
+            "${CLOUDFLARE_PAGES_URL}/charging-points")
+          grep --quiet '<div id="root"></div>' <<<"${html}"
+
+      - name: 回滚 Cloudflare Pages
+        if: >-
+          failure() &&
+          steps.previous_pages.outputs.deploy_id != '' &&
+          steps.deploy_pages.outcome == 'success'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PREVIOUS_PAGES_DEPLOY_ID: ${{ steps.previous_pages.outputs.deploy_id }}
+        run: |
+          curl --fail --silent --show-error --request POST \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${CLOUDFLARE_PAGES_PROJECT}/deployments/${PREVIOUS_PAGES_DEPLOY_ID}/rollback"
+
+      - name: 写入发布摘要
+        if: always()
+        run: |
+          {
+            echo '## SparkBee 测试环境发布'
+            echo
+            echo "- Commit: \`${DEPLOY_SHA}\`"
+            echo "- 数据库迁移: ${{ steps.migrate_database.outcome }}"
+            echo "- Render 部署: ${{ steps.deploy_render.outcome }}"
+            echo "- 后端冒烟测试: ${{ steps.smoke_api.outcome }}"
+            echo "- Pages 部署: ${{ steps.deploy_pages.outcome }}"
+            echo "- 前端冒烟测试: ${{ steps.smoke_pages.outcome }}"
+            echo "- 后端地址: ${RENDER_API_BASE_URL}"
+            echo "- 前端地址: ${CLOUDFLARE_PAGES_URL}"
+          } >> "${GITHUB_STEP_SUMMARY}"
