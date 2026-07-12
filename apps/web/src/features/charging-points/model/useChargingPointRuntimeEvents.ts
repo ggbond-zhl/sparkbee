@@ -72,5 +72,16 @@ export function toRuntimeStatusFromStreamMessage(
     return message.data.runtimeStatus;
   }
 
+  if (
+    message.event === "chargingPoint.lifecycle" &&
+    message.data.currentStatus === "running"
+  ) {
+    return {
+      chargingPointId: message.data.chargingPointId,
+      status: "running",
+      bootStatus: "Accepted",
+    };
+  }
+
   return null;
 }

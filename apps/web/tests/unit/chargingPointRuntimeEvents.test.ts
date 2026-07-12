@@ -216,6 +216,26 @@ describe("charging point runtime events", () => {
     });
   });
 
+  test("maps a running lifecycle event to an accepted boot status", () => {
+    const runtimeStatus = toRuntimeStatusFromStreamMessage({
+      event: "chargingPoint.lifecycle",
+      data: {
+        type: "chargingPoint.lifecycle",
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        occurredAt: "2026-07-04T09:00:01.000Z",
+        resource: { scope: "chargingPoint" },
+        previousStatus: "starting",
+        currentStatus: "running",
+      },
+    });
+
+    expect(runtimeStatus).toEqual({
+      chargingPointId: "00000000-0000-4000-8000-000000000001",
+      status: "running",
+      bootStatus: "Accepted",
+    });
+  });
+
   test("updates the runtime projection from incremental connector events", () => {
     const initialState = createChargingPointRuntimeEventState();
     const state = reduceChargingPointRuntimeEventState(initialState, {
