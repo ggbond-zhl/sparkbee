@@ -256,4 +256,26 @@ describe("server architecture", () => {
       ).success,
     ).toBe(true);
   });
+
+  test("waits for slow Render deploys and only rolls back a completed deploy", () => {
+    const workflowSource = readFileSync(
+      join(repositoryRoot, ".github/workflows/deploy-test.yml"),
+      "utf8",
+    );
+    const deployAttempts = Number(
+      workflowSource.match(/for attempt in \{1\.\.(\d+)\}; do/)?.[1],
+    );
+
+    expect(deployAttempts).toBeGreaterThanOrEqual(180);
+    expect(workflowSource).toContain('echo "Render 部署状态：${status}"');
+    expect(workflowSource).toContain(
+      "created|queued|build_in_progress|update_in_progress|pre_deploy_in_progress",
+    );
+    expect(workflowSource).toContain(
+      "steps.deploy_render.outcome == 'success'",
+    );
+    expect(workflowSource).not.toContain(
+      "steps.deploy_render.outcome != 'skipped'",
+    );
+  });
 });

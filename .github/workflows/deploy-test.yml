@@ -114,11 +114,21 @@ jobs:
           fi
           echo "deploy_id=${deploy_id}" >> "${GITHUB_OUTPUT}"
 
-          for attempt in {1..60}; do
+          previous_status=''
+          for attempt in {1..180}; do
             deploy=$(curl --fail --silent --show-error \
               --header "Authorization: Bearer ${RENDER_API_KEY}" \
               "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${deploy_id}")
-            status=$(jq --raw-output '.status' <<<"${deploy}")
+            status=$(jq --raw-output '.status // empty' <<<"${deploy}")
+            if [[ -z "${status}" ]]; then
+              echo 'Render 部署响应缺少 status。' >&2
+              echo "${deploy}" >&2
+              exit 1
+            fi
+            if [[ "${status}" != "${previous_status}" ]]; then
+              echo "Render 部署状态：${status}"
+              previous_status="${status}"
+            fi
             case "${status}" in
               live)
                 exit 0
@@ -127,11 +137,18 @@ jobs:
                 echo "Render 部署失败，状态：${status}" >&2
                 exit 1
                 ;;
+              created|queued|build_in_progress|update_in_progress|pre_deploy_in_progress)
+                ;;
+              *)
+                echo "Render 返回未知部署状态：${status}" >&2
+                echo "${deploy}" >&2
+                exit 1
+                ;;
             esac
             sleep 10
           done
 
-          echo '等待 Render 部署完成超时。' >&2
+          echo "等待 Render 部署完成超时，最后状态：${previous_status}，deployment id：${deploy_id}。" >&2
           exit 1
 
       - name: 验证后端就绪和业务 API
@@ -159,7 +176,7 @@ jobs:
         if: >-
           failure() &&
           steps.previous_render.outputs.deploy_id != '' &&
-          steps.deploy_render.outcome != 'skipped'
+          steps.deploy_render.outcome == 'success'
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           PREVIOUS_RENDER_DEPLOY_ID: ${{ steps.previous_render.outputs.deploy_id }}
