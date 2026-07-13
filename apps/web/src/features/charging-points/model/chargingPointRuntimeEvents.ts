@@ -188,6 +188,8 @@ export function reduceChargingPointRuntimeEventState(
             tone: "destructive",
             occurredAt: message.data.occurredAt,
           });
+    case "chargingPoint.boot":
+      return state;
     case "session.status": {
       const nextState = { ...state, sessionStatus: message.data };
       if (message.data.error !== undefined) {
@@ -527,6 +529,16 @@ function formatRuntimeEventSummary(
   switch (message.event) {
     case "chargingPoint.lifecycle":
       return `运行状态: ${formatActorStatus(message.data.currentStatus)}`;
+    case "chargingPoint.boot":
+      if (message.data.status === "Pending") {
+        return message.data.retryAfterSec === undefined
+          ? "BootNotification 待接受"
+          : `BootNotification 待接受，${message.data.retryAfterSec} 秒后重试`;
+      }
+
+      return message.data.status === "Accepted"
+        ? "BootNotification 已接受"
+        : "BootNotification 已拒绝";
     case "session.status":
       return formatSessionStatus(message.data.currentStatus);
     case "chargingPoint.status":

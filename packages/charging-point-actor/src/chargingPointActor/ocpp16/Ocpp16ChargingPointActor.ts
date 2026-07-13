@@ -97,6 +97,8 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
         configurationCatalog:
           dependencies.configurationCatalog ?? options.configurationCatalog,
         emitRuntimeLog: (runtimeLog) => this.runtimeLogRecords.publish(runtimeLog),
+        onTriggeredBootResult: (result) =>
+          this.startupLifecycle.handleTriggeredBootResult(result),
       });
     this.eventEnvelope = new Ocpp16EventEnvelope({
       chargingPointId: this.id,
@@ -116,6 +118,8 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
       isDisposed: () => this.disposed,
       transitionStatus: (currentStatus, error) =>
         this.transitionChargingPointActorStatus(currentStatus, error),
+      publishBootStatus: (status, retryAfterSec) =>
+        this.eventEnvelope.publishChargingPointBoot(status, retryAfterSec),
     });
     this.session.on("sessionError", this.handleSessionLog);
     this.session.on("online", this.handleSessionOnlineLog);

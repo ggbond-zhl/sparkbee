@@ -39,6 +39,8 @@ describe("web architecture", () => {
     expect(detailPageSource).not.toContain("api/chargingPoints");
     expect(detailPageSource).not.toContain("chargingPointQueries");
     expect(detailPageSource).not.toContain("useChargingPointRuntimeEvents");
+    expect(detailPageSource).not.toContain('value="runtime-logs"');
+    expect(detailPageSource).not.toContain("usePersistedRuntimeLogs");
     expect(workbenchSource).toContain("useQuery");
     expect(workbenchSource).toContain("useMutation");
     expect(workbenchSource).toContain("useChargingPointRuntimeEvents");

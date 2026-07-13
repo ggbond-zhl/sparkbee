@@ -72,5 +72,25 @@ export function toRuntimeStatusFromStreamMessage(
     return message.data.runtimeStatus;
   }
 
+  if (message.event === "chargingPoint.boot") {
+    if (message.data.status === "Rejected") {
+      return {
+        chargingPointId: message.data.chargingPointId,
+        status: "stopped",
+      };
+    }
+
+    return {
+      chargingPointId: message.data.chargingPointId,
+      status: message.data.status === "Accepted"
+        ? "running"
+        : "starting",
+      bootStatus: message.data.status,
+      ...(message.data.retryAfterSec === undefined
+        ? {}
+        : { retryAfterSec: message.data.retryAfterSec }),
+    };
+  }
+
   return null;
 }

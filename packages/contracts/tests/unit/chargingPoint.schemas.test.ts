@@ -45,6 +45,23 @@ describe("chargingPoint contract schemas", () => {
     expect(chargingPointEventStreamMessageSchema.parse(meterValueMessage)).toEqual(
       meterValueMessage,
     );
+    const bootMessage = {
+      event: "chargingPoint.boot",
+      data: {
+        id: "event-2",
+        sequence: 2,
+        type: "chargingPoint.boot",
+        chargingPointId,
+        protocol: "OCPP16J",
+        resource: { scope: "chargingPoint" },
+        occurredAt: "2026-07-10T00:00:01.000Z",
+        status: "Pending",
+        retryAfterSec: 10,
+      },
+    } as const;
+    expect(chargingPointEventStreamMessageSchema.parse(bootMessage)).toEqual(
+      bootMessage,
+    );
     expect(
       chargingPointEventStreamMessageSchema.safeParse({
         ...meterValueMessage,

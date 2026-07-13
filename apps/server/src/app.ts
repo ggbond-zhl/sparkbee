@@ -9,6 +9,7 @@ import { timeout } from "hono/timeout";
 
 import type { ServerDatabase } from "./db";
 import type { ChargingPointActorHost } from "./lib/chargingPointActorHost";
+import type { ChargingPointRuntimeLogSinkFactory } from "./lib/chargingPointRuntimeLogWriter";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import type { ChargingPointActorFactory } from "./modules/runtimeOperation/runtimeOperation.service";
 import { createRoutes } from "./routes";
@@ -19,8 +20,8 @@ export interface AppDependencies {
   corsAllowedOrigin?: string;
   timeoutMs?: number;
   chargingPointActorHost?: ChargingPointActorHost;
-  runtimeLogDirectory?: string;
   createChargingPointActor?: ChargingPointActorFactory;
+  runtimeLogWriter?: ChargingPointRuntimeLogSinkFactory;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {

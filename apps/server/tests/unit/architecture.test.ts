@@ -63,7 +63,7 @@ describe("server architecture", () => {
       "chargingPointActor.ts",
       "chargingPointActorHost.ts",
       "chargingPointEventStreamHub.ts",
-      "chargingPointRuntimeLogFileWriter.ts",
+      "chargingPointRuntimeLogWriter.ts",
       "chargingPointRuntimeProjection.ts",
     ]);
   });

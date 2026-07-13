@@ -86,6 +86,8 @@ function reduceRuntimeProjection(
       return event.currentStatus === "stopped"
         ? createEmptyProjection()
         : withIssueFromEvent(projection, event);
+    case "chargingPoint.boot":
+      return projection;
     case "session.status":
       return reduceSessionStatus(projection, event);
     case "chargingPoint.availability":

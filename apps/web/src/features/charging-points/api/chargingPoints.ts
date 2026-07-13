@@ -31,6 +31,9 @@ import {
   type RuntimeStopTransactionResponse,
   type UpdateChargingPointRequest,
   type UpdateConnectorRequest,
+  listRuntimeLogsResponseSchema,
+  type ListRuntimeLogsQuery,
+  type ListRuntimeLogsResponse,
 } from "@spark-bee/contracts";
 
 import { toApiUrl } from "@/lib/apiUrl";
@@ -139,6 +142,22 @@ export async function getChargingPointRuntimeSnapshot(
   }
 
   return runtimeSnapshotResponseSchema.parse(await response.json());
+}
+
+export async function listRuntimeLogs(
+  chargingPointId: string,
+  input: ListRuntimeLogsQuery = { limit: 200 },
+): Promise<ListRuntimeLogsResponse> {
+  const search = new URLSearchParams({ limit: String(input.limit ?? 200) });
+  for (const key of ["before", "after", "level", "code", "operationId", "from", "to"] as const) {
+    const value = input[key];
+    if (value !== undefined) search.set(key, String(value));
+  }
+  const response = await fetch(toApiUrl(
+    `/api/charging-points/${chargingPointId}/runtime-logs?${search.toString()}`,
+  ));
+  if (!response.ok) throw new Error("运行日志加载失败");
+  return listRuntimeLogsResponseSchema.parse(await response.json());
 }
 
 async function applyChargingPointRuntimeOperation(

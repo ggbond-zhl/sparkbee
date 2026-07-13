@@ -111,6 +111,13 @@ export const chargingPointLifecycleEventSchema = eventBaseSchema.extend({
   error: chargingPointEventErrorSchema.optional(),
 });
 
+export const chargingPointBootEventSchema = eventBaseSchema.extend({
+  type: z.literal("chargingPoint.boot"),
+  resource: chargingPointResourceSchema,
+  status: z.enum(["Accepted", "Pending", "Rejected"]),
+  retryAfterSec: z.number().int().nonnegative().optional(),
+});
+
 export const sessionStatusEventSchema = eventBaseSchema.extend({
   type: z.literal("session.status"),
   resource: sessionResourceSchema,
@@ -200,6 +207,7 @@ export const protocolMessageEventSchema = eventBaseSchema.extend({
 
 export const chargingPointActorEventSchema = z.discriminatedUnion("type", [
   chargingPointLifecycleEventSchema,
+  chargingPointBootEventSchema,
   sessionStatusEventSchema,
   chargingPointStatusEventSchema,
   chargingPointAvailabilityEventSchema,
@@ -215,6 +223,7 @@ export const chargingPointActorEventSchema = z.discriminatedUnion("type", [
 export const chargingPointEventStreamTypes = [
   "snapshot",
   "chargingPoint.lifecycle",
+  "chargingPoint.boot",
   "session.status",
   "chargingPoint.status",
   "chargingPoint.availability",
@@ -233,6 +242,10 @@ export const chargingPointEventStreamMessageSchema = z.discriminatedUnion("event
   z.object({
     event: z.literal("chargingPoint.lifecycle"),
     data: chargingPointLifecycleEventSchema,
+  }),
+  z.object({
+    event: z.literal("chargingPoint.boot"),
+    data: chargingPointBootEventSchema,
   }),
   z.object({ event: z.literal("session.status"), data: sessionStatusEventSchema }),
   z.object({

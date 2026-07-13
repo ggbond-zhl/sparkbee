@@ -57,6 +57,17 @@ export class Ocpp16EventEnvelope {
     });
   }
 
+  publishChargingPointBoot(
+    status: "Accepted" | "Pending" | "Rejected",
+    retryAfterSec?: number,
+  ): void {
+    this.publisher.publish("chargingPoint.boot", {
+      resource: { scope: "chargingPoint" },
+      status,
+      ...(retryAfterSec === undefined ? {} : { retryAfterSec }),
+    });
+  }
+
   dispose(): void {
     this.options.runtime.off("runtimeEvent", this.routeRuntimeEvent);
     this.options.session.off("protocolMessage", this.routeProtocolMessage);
