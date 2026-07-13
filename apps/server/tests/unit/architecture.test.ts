@@ -2,9 +2,11 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { listChargingPointsQuerySchema } from "@spark-bee/contracts";
 import { describe, expect, test } from "vitest";
 
 const serverRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const repositoryRoot = join(serverRoot, "../..");
 const srcRoot = join(serverRoot, "src");
 
 function walk(path: string): string[] {
@@ -236,5 +238,22 @@ describe("server architecture", () => {
 
     expect(existsSync(join(srcRoot, "db/schema.ts"))).toBe(false);
     expect(existsSync(rootMigrationsDir)).toBe(false);
+  });
+
+  test("uses a valid charging point list query in the test deployment smoke check", () => {
+    const workflowSource = readFileSync(
+      join(repositoryRoot, ".github/workflows/deploy-test.yml"),
+      "utf8",
+    );
+    const queryString = workflowSource.match(
+      /\/api\/charging-points\?([^"\s]+)/,
+    )?.[1];
+
+    expect(queryString).toBeDefined();
+    expect(
+      listChargingPointsQuerySchema.safeParse(
+        Object.fromEntries(new URLSearchParams(queryString)),
+      ).success,
+    ).toBe(true);
   });
 });

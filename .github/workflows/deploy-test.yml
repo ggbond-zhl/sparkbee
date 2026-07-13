@@ -151,7 +151,7 @@ jobs:
           done
 
           curl --fail --silent --show-error \
-            "${RENDER_API_BASE_URL}/api/charging-points?page=1&pageSize=1" \
+            "${RENDER_API_BASE_URL}/api/charging-points?page=1&pageSize=10" \
             | jq --exit-status \
               '.items | type == "array"' > /dev/null
 
