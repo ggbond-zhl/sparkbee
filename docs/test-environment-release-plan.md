@@ -7,7 +7,7 @@
 - Cloudflare Pages 部署 Vite 前端。
 - Render 免费 Web Service 部署单实例 Node.js 后端。
 - Supabase 免费项目提供 PostgreSQL。
-- Cloudflare Worker 定期访问后端进程存活接口，尽量降低 Render 休眠概率。
+- UptimeRobot 免费 HTTP Monitor 定期访问后端进程存活接口，尽量降低 Render 休眠概率。
 - Pull Request 通过质量检查后才能合入 `develop`。
 - `develop` 检查通过后，由 GitHub Actions 串行执行数据库迁移、后端部署、前端部署和冒烟测试。
 - 应用发布失败时自动恢复上一版应用，数据库迁移不自动逆转。
@@ -173,7 +173,7 @@ Variables：
 
 ### 8. 首次发布与演练
 
-1. 手工创建 Supabase、Render 和 Pages 免费资源，并填写 Secrets/Variables。
+1. 手工创建 Supabase、Render 和 Pages 免费资源，配置 UptimeRobot HTTP Monitor，并填写 Secrets/Variables。
 2. 校验 Render 与 Supabase 均选择新加坡区域。
 3. 将本 feature 分支通过 PR 合入 `develop`。
 4. 观察首次迁移、Render 部署、Pages 部署和冒烟测试。
@@ -184,13 +184,7 @@ Variables：
 
 ## 测试环境保活探测
 
-`apps/keepalive-worker` 是独立的 Cloudflare Worker，只实现 Cron `scheduled` 处理器，不提供公共 HTTP 接口。它使用 `*/14 * * * *` 调度访问 `HEALTH_URL=https://sparkbee-test-api.onrender.com/api/health`，请求超时为 90 秒，仅把 `2xx` 视为成功，并为成功或失败输出结构化日志。单次失败不立即重试，等待下一次 Cron。
-
-该 Worker 不纳入测试环境 GitHub Actions，只在首次建立资源时从仓库手动部署一次：
-
-```bash
-pnpm --filter @spark-bee/keepalive-worker run deploy
-```
+在 UptimeRobot 控制台手工创建免费 HTTP Monitor，每 5 分钟访问 `https://sparkbee-test-api.onrender.com/api/health`。该监控不纳入测试环境 GitHub Actions，也不访问会查询 Supabase 的 `/api/ready`。
 
 保活探测会让单个 Render 免费实例在完整月份内消耗约 720 至 744 个实例小时，接近每个工作区每月 750 个免费实例小时。该机制只降低冷启动概率，不承诺 Render 永不休眠。
 
@@ -205,7 +199,7 @@ pnpm --filter @spark-bee/keepalive-worker run deploy
 - 应用冒烟失败能够恢复上一版；数据库迁移不会被自动逆转。
 - 日常发布保留 Supabase 数据。
 - GitHub Actions Summary 能独立说明发布结果，不依赖外部通知渠道。
-- Cloudflare Worker 已按 14 分钟最大间隔执行测试环境保活探测，且不访问数据库就绪接口。
+- UptimeRobot 已按 5 分钟间隔执行测试环境保活探测，且不访问数据库就绪接口。
 - 已知免费套餐限制、公开访问、日志丢失和桩实例断开均与 ADR 一致。
 
 ## 官方参考
@@ -213,7 +207,7 @@ pnpm --filter @spark-bee/keepalive-worker run deploy
 - [Cloudflare Pages Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)
 - [Cloudflare Pages 与 GitHub Actions](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)
 - [Cloudflare Pages Rollback API](https://developers.cloudflare.com/api/resources/pages/subresources/projects/subresources/deployments/methods/rollback/)
-- [Cloudflare Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/)
+- [UptimeRobot 价格与免费套餐](https://uptimerobot.com/pricing/)
 - [Render 免费服务限制](https://render.com/docs/free)
 - [Render Deploy Hooks](https://render.com/docs/deploy-hooks)
 - [Render Rollbacks](https://render.com/docs/rollbacks)
