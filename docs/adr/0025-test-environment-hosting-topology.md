@@ -6,7 +6,7 @@ status: accepted
 
 SparkBee 使用一套长期存在、团队共享的测试环境，发布来源固定为 `develop`。Vite 前端部署到 Cloudflare Pages，并通过显式 API 基础地址直接访问 Render；Node.js 后端部署为单个 Render 免费实例，以符合桩实例 Actor、OCPP WebSocket 和 SSE 均属于当前进程的架构；PostgreSQL 使用 Supabase 免费套餐，日常发布保留已有测试数据。
 
-测试环境以免费套餐为硬约束，不承诺后端 24 小时在线。独立的 Cloudflare Worker 每 14 分钟访问 Render 的 `/api/health`，以 best effort（尽力而为）的测试环境保活探测降低空闲休眠概率；Cron 调度、公网请求或 Render 平台仍可能失败或延迟，因此这不是可用性保证。保活探测不访问会查询 Supabase 的 `/api/ready`。
+测试环境以免费套餐为硬约束，不承诺后端 24 小时在线。UptimeRobot 免费 HTTP Monitor 每 5 分钟访问 Render 的 `/api/health`，以 best effort（尽力而为）的测试环境保活探测降低空闲休眠概率；外部监控、公网请求或 Render 平台仍可能失败或延迟，因此这不是可用性保证。保活探测不访问会查询 Supabase 的 `/api/ready`。
 
 前端第一版不识别或包装 Render 冷启动，不增加“服务正在唤醒”状态、就绪轮询或自动重试。首次访问在后端唤醒期间可能显示普通网络错误，测试人员通过稍后刷新页面重试。
 
@@ -16,7 +16,7 @@ Render 后端与 Supabase 数据库统一选择新加坡区域，以减少服务
 
 第一版使用 Cloudflare Pages 的 `pages.dev` 地址和 Render 的 `onrender.com` 地址，不绑定自定义域名。前端构建时使用稳定的 Render 地址作为 API 基础地址，后端 CORS 精确允许 Pages 的正式测试环境地址。
 
-`develop` 更新通过类型检查、测试和构建后自动发布。功能与发布配置在 `feature/*` 分支开发，合入 `develop` 后才进入测试环境；`release/*` 不作为日常测试环境的部署来源。GitHub Actions 是应用发布的唯一编排器，Cloudflare Pages 与 Render 不再各自独立监听 Git 自动发布。测试环境保活 Worker 作为独立资源手动部署一次，不纳入日常测试环境发布工作流。
+`develop` 更新通过类型检查、测试和构建后自动发布。功能与发布配置在 `feature/*` 分支开发，合入 `develop` 后才进入测试环境；`release/*` 不作为日常测试环境的部署来源。GitHub Actions 是应用发布的唯一编排器，Cloudflare Pages 与 Render 不再各自独立监听 Git 自动发布。测试环境保活探测在 UptimeRobot 控制台手工配置，不纳入日常测试环境发布工作流。
 
 `develop` 禁止直接推送，所有改动必须通过 Pull Request 合入，并将类型检查、测试和构建配置为必需检查。合并成功后产生的 `develop` push 才能进入测试环境发布工作流。
 
