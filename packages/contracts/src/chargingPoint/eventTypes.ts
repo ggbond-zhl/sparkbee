@@ -10,6 +10,7 @@ import type {
   chargingPointEventErrorSchema,
   chargingPointEventStreamMessageSchema,
   chargingPointLifecycleEventSchema,
+  chargingPointBootEventSchema,
   chargingPointSessionStatusSchema,
   chargingPointStatusEventSchema,
   connectorAvailabilityEventSchema,
@@ -56,6 +57,7 @@ export type ChargingPointActorEventError = z.infer<
 export type ChargingPointLifecycleEvent = z.infer<
   typeof chargingPointLifecycleEventSchema
 >;
+export type ChargingPointBootEvent = z.infer<typeof chargingPointBootEventSchema>;
 export type SessionStatusEvent = z.infer<typeof sessionStatusEventSchema>;
 export type ChargingPointStatusEvent = z.infer<typeof chargingPointStatusEventSchema>;
 export type ChargingPointAvailabilityEvent = z.infer<

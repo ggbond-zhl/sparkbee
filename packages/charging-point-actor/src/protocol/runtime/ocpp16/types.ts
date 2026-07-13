@@ -69,6 +69,9 @@ export type Ocpp16RuntimeLogEmitter = (
 export interface Ocpp16RuntimeOptions {
   session: ISession;
   chargingPoint: ChargingPoint | ChargingPointOptions;
+  onTriggeredBootResult?(
+    result: Ocpp16BootResult,
+  ): void | Promise<void>;
   configurationCatalog?: Ocpp16ConfigurationCatalogInput;
   clock?: () => Date;
   protocolClock?: {

@@ -6,7 +6,7 @@ import type {
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 
 import type { ServerDatabase } from "../../db";
-import { chargingPoints, connectors } from "../../db/schema";
+import { chargingPoints, connectors, runtimeLogs } from "../../db/schema";
 import { AppError } from "../../utils/errors";
 import { toConnectorType } from "../connector/connectorType";
 import { normalizeCentralSystemUrl } from "./centralSystemUrl";
@@ -135,6 +135,7 @@ export class ChargingPointRepository {
     await this.requireActiveChargingPoint(id);
 
     await this.db.transaction(async (transaction) => {
+      await transaction.delete(runtimeLogs).where(eq(runtimeLogs.chargingPointId, id));
       await transaction
         .update(chargingPoints)
         .set({

@@ -36,6 +36,7 @@ import {
 
 const ALL_CHARGING_POINT_ACTOR_EVENT_TYPES = [
   "chargingPoint.lifecycle",
+  "chargingPoint.boot",
   "session.status",
   "chargingPoint.availability",
   "chargingPoint.status",
@@ -1370,6 +1371,7 @@ describe("Ocpp16ChargingPointActor", () => {
     const { actor, protocolRuntime } = createHarness();
     const events = collectChargingPointActorEvents(actor, [
       "chargingPoint.lifecycle",
+      "chargingPoint.boot",
       "chargingPoint.status",
       "connector.status",
     ]);
@@ -1401,6 +1403,19 @@ describe("Ocpp16ChargingPointActor", () => {
           currentStatus: "running",
         }),
       ]);
+    expect(events.filter((event) => event.type === "chargingPoint.boot"))
+      .toEqual([
+        expect.objectContaining({
+          status: "Pending",
+          retryAfterSec: 2,
+        }),
+        expect.objectContaining({
+          status: "Accepted",
+        }),
+      ]);
+    expect(events.find((event) =>
+      event.type === "chargingPoint.boot" && event.status === "Accepted"
+    )).not.toHaveProperty("retryAfterSec");
     expect(events).toContainEqual(expect.objectContaining({
       type: "chargingPoint.status",
       currentStatus: "available",
@@ -1409,6 +1424,63 @@ describe("Ocpp16ChargingPointActor", () => {
       type: "connector.status",
       currentStatus: "available",
     }));
+  });
+
+  test("triggered accepted boot completes startup and cancels the pending retry", async () => {
+    vi.useFakeTimers();
+    const { actor, session } = createRuntimeHarness([
+      runtimeResponse("BootNotification", {
+        status: "Pending",
+        currentTime: "2026-01-01T00:00:00.000Z",
+        interval: 10,
+      }),
+      runtimeResponse("BootNotification", {
+        status: "Accepted",
+        currentTime: "2026-01-01T00:00:01.000Z",
+        interval: 10,
+      }),
+      runtimeResponse("StatusNotification", {}),
+      runtimeResponse("StatusNotification", {}),
+    ]);
+    const events = collectChargingPointActorEvents(actor, [
+      "chargingPoint.lifecycle",
+      "chargingPoint.boot",
+    ]);
+    const running = new Promise<void>((resolve) => {
+      actor.events.subscribe((event) => {
+        if (
+          event.type === "chargingPoint.lifecycle" &&
+          event.currentStatus === "running"
+        ) {
+          resolve();
+        }
+      });
+    });
+
+    await expect(actor.start()).resolves.toMatchObject({
+      chargingPointActorStatus: "starting",
+      bootStatus: "Pending",
+      retryAfterSec: 10,
+    });
+    const request = new RuntimeFakeInboundRequest("TriggerMessage", {
+      requestedMessage: "BootNotification",
+    });
+    session.emitInboundRequest(request);
+    await running;
+
+    expect(request.responses).toEqual([{ status: "Accepted" }]);
+    expect(actor.status).toBe("running");
+    expect(events.filter((event) => event.type === "chargingPoint.boot"))
+      .toEqual([
+        expect.objectContaining({ status: "Pending", retryAfterSec: 10 }),
+        expect.objectContaining({ status: "Accepted" }),
+      ]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flushRemoteCommand();
+
+    expect(session.requests.filter((item) => item.action === "BootNotification"))
+      .toHaveLength(2);
   });
 
   test("background boot retry stops and disconnects after rejected boot", async () => {

@@ -77,6 +77,15 @@ export interface ChargingPointLifecycleEvent
   error?: ChargingPointActorEventError;
 }
 
+export interface ChargingPointBootEvent
+  extends ChargingPointActorEventBase<
+    "chargingPoint.boot",
+    Extract<ChargingPointActorResourceRef, { scope: "chargingPoint" }>
+  > {
+  status: "Accepted" | "Pending" | "Rejected";
+  retryAfterSec?: number;
+}
+
 export interface ChargingPointStatusEvent
   extends ChargingPointActorEventBase<
     "chargingPoint.status",
@@ -186,6 +195,7 @@ export interface SessionStatusEvent
 
 export type ChargingPointActorEventMap = {
   "chargingPoint.lifecycle": ChargingPointLifecycleEvent;
+  "chargingPoint.boot": ChargingPointBootEvent;
   "session.status": SessionStatusEvent;
   "chargingPoint.availability": ChargingPointAvailabilityEvent;
   "chargingPoint.status": ChargingPointStatusEvent;

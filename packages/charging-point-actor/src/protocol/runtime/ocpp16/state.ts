@@ -36,6 +36,9 @@ export interface Ocpp16RuntimeThresholds {
 
 export interface Ocpp16RuntimeContext {
   session: Ocpp16RuntimeOptions["session"];
+  onTriggeredBootResult: NonNullable<
+    Ocpp16RuntimeOptions["onTriggeredBootResult"]
+  >;
   clock: () => Date;
   isProtocolClockSynced: () => boolean;
   syncProtocolClock: (currentTime: Date) => void;
@@ -106,6 +109,7 @@ export function createOcpp16RuntimeContext(
 
   return {
     session: options.session,
+    onTriggeredBootResult: options.onTriggeredBootResult ?? (() => undefined),
     clock,
     isProtocolClockSynced: () => protocolClock.isSynced(),
     syncProtocolClock: (currentTime) => protocolClock.sync(currentTime),

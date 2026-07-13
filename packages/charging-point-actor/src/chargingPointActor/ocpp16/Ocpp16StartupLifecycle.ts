@@ -1,4 +1,4 @@
-import type { Ocpp16Runtime } from "../../protocol/runtime";
+import type { Ocpp16BootResult, Ocpp16Runtime } from "../../protocol/runtime";
 import type { ISession } from "../../protocol/session/types";
 import { ChargingPointActorError } from "../errors";
 import type {
@@ -16,6 +16,10 @@ export interface Ocpp16StartupLifecycleOptions {
   transitionStatus(
     currentStatus: ChargingPointActorStatus,
     error?: { code: string; message: string },
+  ): void;
+  publishBootStatus(
+    status: "Accepted" | "Pending" | "Rejected",
+    retryAfterSec?: number,
   ): void;
 }
 
@@ -35,6 +39,10 @@ export class Ocpp16StartupLifecycle {
       }
 
       const bootResult = await this.options.runtime.boot();
+      this.options.publishBootStatus(
+        bootResult.status,
+        bootResult.status === "Pending" ? bootResult.interval : undefined,
+      );
 
       if (bootResult.status === "Accepted") {
         await this.completeAcceptedBoot();
@@ -107,6 +115,18 @@ export class Ocpp16StartupLifecycle {
     void this.retryBoot().catch(() => undefined);
   }
 
+  async handleTriggeredBootResult(bootResult: Ocpp16BootResult): Promise<void> {
+    if (this.options.getStatus() !== "starting" || this.options.isDisposed()) {
+      return;
+    }
+
+    try {
+      await this.handleBackgroundBootResult(bootResult);
+    } catch (cause) {
+      await this.stopAfterFailure(cause);
+    }
+  }
+
   clearBootRetryTimer(): void {
     if (this.bootRetryTimerId === null) {
       return;
@@ -163,31 +183,39 @@ export class Ocpp16StartupLifecycle {
 
     try {
       const bootResult = await this.options.runtime.boot();
-      if (
-        this.options.getStatus() !== "starting" ||
-        this.options.isDisposed()
-      ) {
-        return;
-      }
-
-      if (bootResult.status === "Pending") {
-        this.scheduleBootRetry(bootResult.interval);
-        return;
-      }
-
-      if (bootResult.status === "Accepted") {
-        await this.completeAcceptedBoot();
-        return;
-      }
-
-      await this.stopAfterFailure(new ChargingPointActorError(
-        "CHARGING_POINT_ACTOR_START_FAILED",
-        `BootNotification ${bootResult.status}`,
-        toChargingPointActorBootResult(bootResult),
-      ));
+      await this.handleBackgroundBootResult(bootResult);
     } catch (cause) {
       await this.stopAfterFailure(cause);
     }
+  }
+
+  private async handleBackgroundBootResult(
+    bootResult: Ocpp16BootResult,
+  ): Promise<void> {
+    this.options.publishBootStatus(
+      bootResult.status,
+      bootResult.status === "Pending" ? bootResult.interval : undefined,
+    );
+    if (this.options.getStatus() !== "starting" || this.options.isDisposed()) {
+      return;
+    }
+
+    if (bootResult.status === "Pending") {
+      this.scheduleBootRetry(bootResult.interval);
+      return;
+    }
+
+    this.clearBootRetryTimer();
+    if (bootResult.status === "Accepted") {
+      await this.completeAcceptedBoot();
+      return;
+    }
+
+    await this.stopAfterFailure(new ChargingPointActorError(
+      "CHARGING_POINT_ACTOR_START_FAILED",
+      `BootNotification ${bootResult.status}`,
+      toChargingPointActorBootResult(bootResult),
+    ));
   }
 
   private async stopAfterFailure(cause: unknown): Promise<void> {

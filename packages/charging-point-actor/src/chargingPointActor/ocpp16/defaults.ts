@@ -31,6 +31,7 @@ export function createDefaultOcpp16Runtime(
     idGenerator: () => string;
     configurationCatalog?: Ocpp16RuntimeOptions["configurationCatalog"];
     emitRuntimeLog?: Ocpp16RuntimeOptions["emitRuntimeLog"];
+    onTriggeredBootResult?: Ocpp16RuntimeOptions["onTriggeredBootResult"];
   },
 ): Ocpp16Runtime {
   return new Ocpp16Runtime({
@@ -40,6 +41,7 @@ export function createDefaultOcpp16Runtime(
     protocolClock: runtimeOptions.protocolClock,
     idGenerator: runtimeOptions.idGenerator,
     emitRuntimeLog: runtimeOptions.emitRuntimeLog,
+    onTriggeredBootResult: runtimeOptions.onTriggeredBootResult,
   });
 }
 

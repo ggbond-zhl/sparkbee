@@ -19,16 +19,6 @@ describe("server config", () => {
     expect(logSpy).not.toHaveBeenCalled();
   });
 
-  test("loads the charging point runtime log directory with a development default", async () => {
-    vi.resetModules();
-    const { loadServerConfig } = await import("../../src/config/env");
-
-    expect(loadServerConfig({}).runtimeLogDirectory).toBe("logs/runtime");
-    expect(loadServerConfig({
-      CHARGING_POINT_RUNTIME_LOG_DIRECTORY: "tmp/runtime-logs",
-    }).runtimeLogDirectory).toBe("tmp/runtime-logs");
-  });
-
   test("loads the allowed web origin with a local development default", async () => {
     vi.resetModules();
     const { loadServerConfig } = await import("../../src/config/env");

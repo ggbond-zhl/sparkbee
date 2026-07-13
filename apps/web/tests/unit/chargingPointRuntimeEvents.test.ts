@@ -216,6 +216,48 @@ describe("charging point runtime events", () => {
     });
   });
 
+  test("replaces pending boot status when a background retry is accepted", () => {
+    const pending = toRuntimeStatusFromStreamMessage({
+      event: "chargingPoint.boot",
+      data: {
+        id: "event-1",
+        sequence: 1,
+        type: "chargingPoint.boot",
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        protocol: "OCPP16J",
+        resource: { scope: "chargingPoint" },
+        occurredAt: "2026-07-04T09:00:01.000Z",
+        status: "Pending",
+        retryAfterSec: 10,
+      },
+    });
+    const accepted = toRuntimeStatusFromStreamMessage({
+      event: "chargingPoint.boot",
+      data: {
+        id: "event-2",
+        sequence: 2,
+        type: "chargingPoint.boot",
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        protocol: "OCPP16J",
+        resource: { scope: "chargingPoint" },
+        occurredAt: "2026-07-04T09:00:11.000Z",
+        status: "Accepted",
+      },
+    });
+
+    expect(pending).toEqual({
+      chargingPointId: "00000000-0000-4000-8000-000000000001",
+      status: "starting",
+      bootStatus: "Pending",
+      retryAfterSec: 10,
+    });
+    expect(accepted).toEqual({
+      chargingPointId: "00000000-0000-4000-8000-000000000001",
+      status: "running",
+      bootStatus: "Accepted",
+    });
+  });
+
   test("updates the runtime projection from incremental connector events", () => {
     const initialState = createChargingPointRuntimeEventState();
     const state = reduceChargingPointRuntimeEventState(initialState, {

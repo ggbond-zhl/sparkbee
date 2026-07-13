@@ -20,8 +20,13 @@ export async function handleTriggerMessage(
   const payload = request.payload as Ocpp16RequestOf<"TriggerMessage">;
 
   if (payload.requestedMessage === "BootNotification") {
-    await respondThenRunAcceptedCommand(request, responsePayload("Accepted"), () =>
-      boot(context)
+    await respondThenRunAcceptedCommand(
+      request,
+      responsePayload("Accepted"),
+      async () => {
+        const result = await boot(context);
+        await context.onTriggeredBootResult(result);
+      },
     );
     return;
   }

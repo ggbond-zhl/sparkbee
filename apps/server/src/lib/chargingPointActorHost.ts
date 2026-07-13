@@ -10,7 +10,7 @@ import type {
 } from "./chargingPointActor";
 import { ChargingPointEventStreamHub } from "./chargingPointEventStreamHub";
 import type { ChargingPointStreamEvent } from "./chargingPointEventStreamHub";
-import { ChargingPointRuntimeLogFileWriter } from "./chargingPointRuntimeLogFileWriter";
+import type { ChargingPointRuntimeLogSinkFactory } from "./chargingPointRuntimeLogWriter";
 import { ChargingPointRuntimeProjection } from "./chargingPointRuntimeProjection";
 
 export type ChargingPointActorHostFactory = (
@@ -27,7 +27,7 @@ export type ChargingPointActorHostStartResult =
 
 export interface ChargingPointActorHostDependencies {
   eventStreamHub?: ChargingPointEventStreamHub;
-  runtimeLogFileWriter?: ChargingPointRuntimeLogFileWriter;
+  runtimeLogWriter?: ChargingPointRuntimeLogSinkFactory;
   runtimeProjection?: ChargingPointRuntimeProjection;
 }
 
@@ -35,13 +35,13 @@ export class ChargingPointActorHost {
   private readonly actors = new Map<string, ChargingPointActor>();
   private readonly actorUnsubscribers = new Map<string, () => void>();
   private readonly eventStreamHub: ChargingPointEventStreamHub;
-  private readonly runtimeLogFileWriter?: ChargingPointRuntimeLogFileWriter;
+  private readonly runtimeLogWriter?: ChargingPointRuntimeLogSinkFactory;
   private readonly runtimeProjection: ChargingPointRuntimeProjection;
 
   constructor(dependencies: ChargingPointActorHostDependencies = {}) {
     this.eventStreamHub =
       dependencies.eventStreamHub ?? new ChargingPointEventStreamHub();
-    this.runtimeLogFileWriter = dependencies.runtimeLogFileWriter;
+    this.runtimeLogWriter = dependencies.runtimeLogWriter;
     this.runtimeProjection =
       dependencies.runtimeProjection ?? new ChargingPointRuntimeProjection();
   }
@@ -63,7 +63,7 @@ export class ChargingPointActorHost {
       return { actor: existing, created: false };
     }
 
-    const actor = factory(this.runtimeLogFileWriter?.createSink(chargingPointId));
+    const actor = factory(this.runtimeLogWriter?.createSink(chargingPointId));
     this.actors.set(chargingPointId, actor);
     this.actorUnsubscribers.set(
       chargingPointId,

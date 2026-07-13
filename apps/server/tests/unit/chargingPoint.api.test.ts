@@ -77,6 +77,9 @@ describe("chargingPoint management API", () => {
     expect(document.paths["/api/charging-points/{id}/events"].get.summary).toBe(
       "订阅桩事件流",
     );
+    expect(document.paths["/api/charging-points/{id}/runtime-logs"].get.summary).toBe(
+      "查询桩实例运行日志",
+    );
     expect(document.paths["/api/charging-points/{id}/events"].get.tags).toEqual([
       "ChargingPointEvent",
     ]);
@@ -905,6 +908,22 @@ describe("chargingPoint management API", () => {
     await expect(readSseEvent(reader)).resolves.toEqual({
       event: "protocol.message",
       data: actorEvent,
+    });
+    const bootEvent = {
+      id: "event-2",
+      sequence: 2,
+      type: "chargingPoint.boot",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: { scope: "chargingPoint" },
+      occurredAt: "2026-06-28T00:00:01.000Z",
+      status: "Accepted",
+    } satisfies ChargingPointActorEvent;
+    actor.publish(bootEvent);
+
+    await expect(readSseEvent(reader)).resolves.toEqual({
+      event: "chargingPoint.boot",
+      data: bootEvent,
     });
     await reader.cancel();
   });
@@ -1794,7 +1813,6 @@ describe("chargingPoint management API", () => {
     let actorOptions: ChargingPointActorOptions | undefined;
     const app = createApp({
       database,
-      runtimeLogDirectory: "logs/runtime",
       createChargingPointActor: (options) => {
         actorOptions = options;
         return createActorDouble({
