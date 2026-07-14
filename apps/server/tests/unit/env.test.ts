@@ -28,4 +28,28 @@ describe("server config", () => {
       CORS_ALLOWED_ORIGIN: "https://sparkbee-test-web.pages.dev",
     }).corsAllowedOrigin).toBe("https://sparkbee-test-web.pages.dev");
   });
+
+  test("uses environment-specific default log levels", async () => {
+    vi.resetModules();
+    const { loadServerConfig } = await import("../../src/config/env");
+
+    expect(loadServerConfig({})).toMatchObject({
+      environment: "development",
+      logLevel: "debug",
+      sentryDsn: undefined,
+    });
+    expect(loadServerConfig({ NODE_ENV: "production" })).toMatchObject({
+      environment: "production",
+      logLevel: "info",
+    });
+  });
+
+  test("rejects invalid log levels", async () => {
+    vi.resetModules();
+    const { loadServerConfig } = await import("../../src/config/env");
+
+    expect(() => loadServerConfig({ LOG_LEVEL: "verbose" })).toThrow(
+      /Invalid server config: LOG_LEVEL/,
+    );
+  });
 });

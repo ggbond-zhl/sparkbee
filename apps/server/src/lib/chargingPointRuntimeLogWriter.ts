@@ -3,7 +3,11 @@ import type {
   ChargingPointActorRuntimeLogSink,
 } from "./chargingPointActor";
 import type { RuntimeLog } from "@spark-bee/contracts";
+import pino from "pino";
+import type { Logger } from "pino";
 
+import { noopErrorReporter } from "../config/errorReporter";
+import type { ErrorReporter } from "../config/errorReporter";
 import type { ServerDatabase } from "../db";
 import { RuntimeLogRepository } from "../modules/runtimeLog/runtimeLog.repo";
 
@@ -16,12 +20,21 @@ export class ChargingPointRuntimeLogWriter implements ChargingPointRuntimeLogSin
   private readonly pending: RuntimeLog[] = [];
   private timer?: NodeJS.Timeout;
   private flushing?: Promise<void>;
+  private readonly logger: Logger;
+  private readonly errorReporter: ErrorReporter;
 
   constructor(
     database: ServerDatabase,
-    private readonly options: { batchSize?: number; flushIntervalMs?: number } = {},
+    private readonly options: {
+      batchSize?: number;
+      flushIntervalMs?: number;
+      logger?: Logger;
+      errorReporter?: ErrorReporter;
+    } = {},
   ) {
     this.repository = new RuntimeLogRepository(database);
+    this.logger = options.logger ?? pino({ level: "silent" });
+    this.errorReporter = options.errorReporter ?? noopErrorReporter;
   }
 
   createSink(chargingPointId: string): ChargingPointActorRuntimeLogSink {
@@ -58,11 +71,17 @@ export class ChargingPointRuntimeLogWriter implements ChargingPointRuntimeLogSin
   private async persist(batch: RuntimeLog[]): Promise<void> {
     try {
       await this.repository.insertMany(batch);
-    } catch (firstError) {
+    } catch {
       try {
         await this.repository.insertMany(batch);
       } catch (error) {
-        console.error("写入运行日志失败", error, { firstError });
+        const context = { module: "runtimeLogWriter", batchSize: batch.length };
+        this.logger.error({
+          event: "runtime-log.persist.failed",
+          batchSize: batch.length,
+          error,
+        }, "写入运行日志失败");
+        this.errorReporter.captureException(error, context);
       }
     }
   }

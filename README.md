@@ -67,7 +67,13 @@ pnpm dev
 PORT=3000
 DATABASE_URL=postgres://sparkbee:sparkbee@localhost:5432/sparkbee
 CORS_ALLOWED_ORIGIN=http://localhost:3001
+LOG_LEVEL=debug
+# SENTRY_DSN=https://public@example.ingest.sentry.io/project-id
 ```
+
+服务端开发环境默认输出易读日志，生产环境输出单行 JSON 到标准输出。`LOG_LEVEL`
+可选值为 `trace`、`debug`、`info`、`warn`、`error`、`fatal`；仅配置
+`SENTRY_DSN` 时启用 Sentry 错误追踪。
 
 Cloudflare Pages 构建前端时通过 `VITE_API_BASE_URL` 指向 Render 后端；本地未配置时继续使用 Vite 的 `/api` proxy。
 
