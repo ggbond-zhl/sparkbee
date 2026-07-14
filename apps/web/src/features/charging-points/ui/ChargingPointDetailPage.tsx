@@ -189,11 +189,6 @@ export function ChargingPointDetailPage() {
           )}
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-2 md:grid-cols-2">
-            <StatusMetric label="枪口" value={headerModel.connectorSummary} />
-            <StatusMetric label="交易" value={headerModel.transactionSummary} />
-          </div>
-
           <RuntimeSummaryPanel items={headerModel.runtimeSummaryItems} />
 
           {headerModel.primaryAction.disabledReason && (
@@ -292,31 +287,6 @@ function RuntimeSummaryPanel({ items }: { items: HeaderMetricItem[] }) {
         ))}
       </div>
     </section>
-  );
-}
-
-function StatusMetric({
-  label,
-  tone,
-  value,
-}: {
-  label: string;
-  tone?: "neutral" | "success" | "waiting" | "warning" | "destructive";
-  value: string;
-}) {
-  return (
-    <dl
-      className={cn(
-        "min-w-0 rounded-lg border border-transparent bg-muted/40 px-3 py-2",
-        tone === "success" && "border-emerald-500/20 bg-emerald-500/10",
-        tone === "waiting" && "border-sky-500/20 bg-sky-500/10",
-        tone === "warning" && "border-amber-500/25 bg-amber-500/10",
-        tone === "destructive" && "border-destructive/25 bg-destructive/10",
-      )}
-    >
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 truncate text-sm font-medium">{value}</dd>
-    </dl>
   );
 }
 

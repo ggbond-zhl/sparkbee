@@ -94,10 +94,20 @@ describe("charging point detail header model", () => {
       label: "启动",
       disabled: false,
     });
-    expect(model.connectorSummary).toBe("共 1 枪");
     expect(model.sessionStatus.label).toBe("会话未建立");
     expect(model.chargingPointStatus.label).toBe("桩状态未同步");
-    expect(model.transactionSummary).toBe("无运行交易");
+  });
+
+  test("omits connector and transaction summaries from the detail header", () => {
+    const model = buildChargingPointDetailHeaderModel({
+      detail: baseDetail,
+      runtimeStatus: buildRuntimeStatus({ status: "running", bootStatus: "Accepted" }),
+      statusQueryState: "success",
+      lastHeartbeatAt: null,
+    });
+
+    expect(model).not.toHaveProperty("connectorSummary");
+    expect(model).not.toHaveProperty("transactionSummary");
   });
 
   test("exposes runtime communication summary", () => {
@@ -255,7 +265,6 @@ describe("charging point detail header model", () => {
     expect(model.mainStatus.label).toBe("启动中");
     expect(model.lastHeartbeatLabel).toBe("最后心跳 08:00:00");
     expect(model.bootSummary).toBe("Boot 待接受 · 12 秒后再次上报");
-    expect(model.connectorSummary).toBe("1 枪 · 等待运行状态");
     expect(model.primaryAction).toMatchObject({
       kind: "stop",
       label: "停止",
@@ -340,8 +349,6 @@ describe("charging point detail header model", () => {
       value: "可用",
       tone: "success",
     });
-    expect(model.connectorSummary).toBe("1 枪 · 占用 1");
-    expect(model.transactionSummary).toBe("进行中 1");
     expect(model.lastHeartbeatLabel).toBe("最后心跳 17:00:04");
   });
 
@@ -410,7 +417,6 @@ describe("charging point detail header model", () => {
       runtimeEventState,
     });
 
-    expect(model.connectorSummary).toBe("1 枪 · 故障 1");
     expect(model.recentIssue?.label).toBe("枪口 1/1 故障");
   });
 
