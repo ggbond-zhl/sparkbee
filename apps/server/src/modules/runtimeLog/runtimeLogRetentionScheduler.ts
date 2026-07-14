@@ -1,3 +1,8 @@
+import pino from "pino";
+import type { Logger } from "pino";
+
+import { noopErrorReporter } from "../../config/errorReporter";
+import type { ErrorReporter } from "../../config/errorReporter";
 import type { ServerDatabase } from "../../db";
 import { RuntimeLogRepository } from "./runtimeLog.repo";
 
@@ -8,12 +13,22 @@ export class RuntimeLogRetentionScheduler {
   private readonly repository: RuntimeLogRepository;
   private timer?: NodeJS.Timeout;
   private stopped = false;
+  private readonly logger: Logger;
+  private readonly errorReporter: ErrorReporter;
 
   constructor(
     database: ServerDatabase,
-    private readonly options: { intervalMs?: number; batchSize?: number; now?: () => Date } = {},
+    private readonly options: {
+      intervalMs?: number;
+      batchSize?: number;
+      now?: () => Date;
+      logger?: Logger;
+      errorReporter?: ErrorReporter;
+    } = {},
   ) {
     this.repository = new RuntimeLogRepository(database);
+    this.logger = options.logger ?? pino({ level: "silent" });
+    this.errorReporter = options.errorReporter ?? noopErrorReporter;
   }
 
   start(): void {
@@ -42,7 +57,12 @@ export class RuntimeLogRetentionScheduler {
     try {
       await this.cleanup();
     } catch (error) {
-      console.error("清理过期运行日志失败", error);
+      const context = { module: "runtimeLogRetention" };
+      this.logger.error({
+        event: "runtime-log.retention.failed",
+        error,
+      }, "清理过期运行日志失败");
+      this.errorReporter.captureException(error, context);
     }
     if (this.stopped) return;
     this.timer = setTimeout(() => void this.run(), this.options.intervalMs ?? DAY_MS);

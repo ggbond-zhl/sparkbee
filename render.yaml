@@ -18,5 +18,5 @@ services:
         sync: false
       - key: CORS_ALLOWED_ORIGIN
         sync: false
-      - key: CHARGING_POINT_RUNTIME_LOG_DIRECTORY
-        value: /tmp/sparkbee/runtime
+      - key: SENTRY_DSN
+        sync: false

@@ -1,6 +1,10 @@
+import { Writable } from "node:stream";
+
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { createApp } from "../../src/app";
+import { createServerLogger } from "../../src/config/logger";
+import { AppError } from "../../src/utils/errors";
 import { createTestDatabase } from "../support/testDatabase";
 
 describe("createApp", () => {
@@ -52,27 +56,145 @@ describe("createApp", () => {
     expect(response.headers.get("X-Request-Id")).toMatch(/^[\w=-]+$/);
   });
 
-  test("logs requests in development", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const app = createApp({ environment: "development" });
+  test("logs client errors at warn level", async () => {
+    const lines: string[] = [];
+    const logger = createServerLogger({
+      environment: "production",
+      level: "debug",
+      destination: new Writable({
+        write(chunk, _encoding, callback) {
+          lines.push(chunk.toString());
+          callback();
+        },
+      }),
+    });
+    const app = createApp({ environment: "production", logger });
 
-    await app.request("/api/health");
+    const response = await app.request("/missing");
 
-    expect(logSpy.mock.calls.some(([message]) => String(message).includes("<-- GET /api/health"))).toBe(
-      true,
-    );
-    expect(logSpy.mock.calls.some(([message]) => String(message).includes("--> GET /api/health"))).toBe(
-      true,
-    );
+    expect(response.status).toBe(404);
+    expect(JSON.parse(lines.join(""))).toMatchObject({
+      level: 40,
+      event: "http.request.completed",
+      path: "/missing",
+      status: 404,
+    });
   });
 
-  test("does not log requests outside development", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const app = createApp({ environment: "test" });
+  test("logs request metadata without sensitive request data", async () => {
+    const lines: string[] = [];
+    const logger = createServerLogger({
+      environment: "production",
+      level: "debug",
+      destination: new Writable({
+        write(chunk, _encoding, callback) {
+          lines.push(chunk.toString());
+          callback();
+        },
+      }),
+    });
+    const app = createApp({ environment: "production", logger });
 
-    await app.request("/api/health");
+    const response = await app.request("/api/health?token=secret-query", {
+      headers: {
+        Authorization: "Bearer secret-token",
+        Cookie: "session=secret-cookie",
+        "X-Request-Id": "request-123",
+      },
+    });
 
-    expect(logSpy).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    const record = JSON.parse(lines.join(""));
+    expect(record).toMatchObject({
+      level: 20,
+      event: "http.request.completed",
+      requestId: "request-123",
+      method: "GET",
+      path: "/api/health",
+      status: 200,
+    });
+    expect(record.durationMs).toBeGreaterThanOrEqual(0);
+    expect(lines.join("")).not.toContain("secret-query");
+    expect(lines.join("")).not.toContain("secret-token");
+    expect(lines.join("")).not.toContain("secret-cookie");
+  });
+
+  test("reports unexpected server errors with request context", async () => {
+    const lines: string[] = [];
+    const captured: Array<{ error: unknown; context: Record<string, unknown> }> = [];
+    const logger = createServerLogger({
+      environment: "production",
+      level: "debug",
+      destination: new Writable({
+        write(chunk, _encoding, callback) {
+          lines.push(chunk.toString());
+          callback();
+        },
+      }),
+    });
+    const app = createApp({
+      environment: "production",
+      logger,
+      errorReporter: {
+        captureException(error, context) {
+          captured.push({ error, context });
+        },
+      },
+    });
+    const failure = new Error("controlled failure");
+    app.get("/failure", () => {
+      throw failure;
+    });
+
+    const response = await app.request("/failure", {
+      headers: { "X-Request-Id": "request-500" },
+    });
+
+    expect(response.status).toBe(500);
+    expect(captured).toEqual([{
+      error: failure,
+      context: {
+        requestId: "request-500",
+        method: "GET",
+        path: "/failure",
+        module: "http",
+      },
+    }]);
+    const records = lines.join("").trim().split("\n").map((line) => JSON.parse(line));
+    expect(records).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        event: "http.request.failed",
+        requestId: "request-500",
+        method: "GET",
+        path: "/failure",
+        error: expect.objectContaining({ message: "controlled failure" }),
+      }),
+      expect.objectContaining({
+        event: "http.request.completed",
+        requestId: "request-500",
+        status: 500,
+      }),
+    ]));
+  });
+
+  test("does not report expected application errors", async () => {
+    const captured: unknown[] = [];
+    const app = createApp({
+      environment: "production",
+      errorReporter: {
+        captureException(error) {
+          captured.push(error);
+        },
+      },
+    });
+    app.get("/expected-failure", () => {
+      throw new AppError(409, "EXPECTED_CONFLICT", "Expected conflict");
+    });
+
+    const response = await app.request("/expected-failure");
+
+    expect(response.status).toBe(409);
+    expect(captured).toEqual([]);
   });
 
   test("adds secure response headers", async () => {

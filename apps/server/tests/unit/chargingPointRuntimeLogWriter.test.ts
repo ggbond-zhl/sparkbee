@@ -1,7 +1,10 @@
-import { describe, expect, test } from "vitest";
+import { Writable } from "node:stream";
+
+import { describe, expect, test, vi } from "vitest";
 import { listRuntimeLogsResponseSchema } from "@spark-bee/contracts";
 
 import { createApp } from "../../src/app";
+import { createServerLogger } from "../../src/config/logger";
 import { ChargingPointRuntimeLogWriter } from "../../src/lib/chargingPointRuntimeLogWriter";
 import { RuntimeLogRetentionScheduler } from "../../src/modules/runtimeLog/runtimeLogRetentionScheduler";
 import { createTestDatabase } from "../support/testDatabase";
@@ -77,6 +80,96 @@ describe("运行日志持久化", () => {
       await app.request(`/api/charging-points/${chargingPoint.id}/runtime-logs`)
     ).json());
     expect(result.items).toEqual([]);
+  });
+
+  test("数据库持续失败时记录并上报运行日志写入故障", async () => {
+    const failure = new Error("database unavailable");
+    const insert = vi.fn(() => ({
+      values: () => ({
+        onConflictDoNothing: () => Promise.reject(failure),
+      }),
+    }));
+    const lines: string[] = [];
+    const captured: Array<{ error: unknown; context: Record<string, unknown> }> = [];
+    const writer = new ChargingPointRuntimeLogWriter(
+      { insert } as never,
+      {
+        batchSize: 1,
+        logger: createServerLogger({
+          environment: "production",
+          level: "debug",
+          destination: new Writable({
+            write(chunk, _encoding, callback) {
+              lines.push(chunk.toString());
+              callback();
+            },
+          }),
+        }),
+        errorReporter: {
+          captureException(error, context) {
+            captured.push({ error, context });
+          },
+        },
+      },
+    );
+
+    writer.createSink("00000000-0000-0000-0000-000000000001").write(createLog(
+      "00000000-0000-0000-0000-000000000001",
+      "failed-log",
+      "2026-07-12T00:00:00.000Z",
+    ));
+    await writer.flush();
+
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(captured).toEqual([{
+      error: failure,
+      context: { module: "runtimeLogWriter", batchSize: 1 },
+    }]);
+    expect(JSON.parse(lines.join(""))).toMatchObject({
+      event: "runtime-log.persist.failed",
+      batchSize: 1,
+      error: { message: "database unavailable" },
+    });
+  });
+
+  test("保留任务失败时记录并上报后台故障", async () => {
+    const failure = new Error("cleanup unavailable");
+    const lines: string[] = [];
+    const captured: Array<{ error: unknown; context: Record<string, unknown> }> = [];
+    const scheduler = new RuntimeLogRetentionScheduler(
+      { execute: () => Promise.reject(failure) } as never,
+      {
+        intervalMs: 60_000,
+        logger: createServerLogger({
+          environment: "production",
+          level: "debug",
+          destination: new Writable({
+            write(chunk, _encoding, callback) {
+              lines.push(chunk.toString());
+              callback();
+            },
+          }),
+        }),
+        errorReporter: {
+          captureException(error, context) {
+            captured.push({ error, context });
+          },
+        },
+      },
+    );
+
+    scheduler.start();
+    await new Promise((resolve) => setImmediate(resolve));
+    scheduler.stop();
+
+    expect(captured).toEqual([{
+      error: failure,
+      context: { module: "runtimeLogRetention" },
+    }]);
+    expect(JSON.parse(lines.join(""))).toMatchObject({
+      event: "runtime-log.retention.failed",
+      error: { message: "cleanup unavailable" },
+    });
   });
 });
 

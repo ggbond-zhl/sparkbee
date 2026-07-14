@@ -98,7 +98,17 @@ Render 环境变量：
 
 - `DATABASE_URL`：Supabase Session pooler 连接串。
 - `CORS_ALLOWED_ORIGIN`：Pages 正式测试环境地址。
-- `CHARGING_POINT_RUNTIME_LOG_DIRECTORY`：Render 临时目录。
+- `SENTRY_DSN`：Sentry Node.js 项目的 DSN，作为 Render Secret 保存。
+- `LOG_LEVEL`：可选，生产环境默认 `info`；排查时可临时调整为 `debug`。
+
+服务端自身日志以单行 JSON 输出到 `stdout/stderr`，由 Render Logs 保存和检索；
+桩实例运行日志继续写入 PostgreSQL，两者不混用。成功的 `/api/health` 和
+`/api/ready` 请求使用 `debug` 级别，避免默认 `info` 日志被保活探测淹没。
+
+在 Sentry 创建 Node.js 项目后，将 DSN 配置到 Render，并创建邮件告警规则：
+仅在新问题首次出现或已解决问题回归时通知，不对每个重复事件逐条通知。
+首版不启用性能追踪，也不发送请求体、查询参数值、Authorization、Cookie
+或完整请求头。
 
 验证：
 
