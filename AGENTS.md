@@ -7,18 +7,21 @@
 
 ## Git 分支管理
 
-- main：生产稳定分支，只能合并已发布或可发布代码，禁止直接提交。
-- develop：日常集成分支，功能开发完成后合入这里，作为测试环境来源。
-- feature/*：功能分支，从 develop 拉出，开发完成后合回 develop。
-- release/*：发布分支，从 develop 拉出，只允许修 bug、改配置、补文档
-- hotfix/*：生产紧急修复，从 main 拉出，修复后同时合入 main 和 develop
+- `main`：生产稳定分支，只能合入已发布或可发布代码，禁止直接提交。
+- `develop`：日常集成分支，作为测试环境来源，禁止直接提交。
+- `feature/*`：功能分支，从 `develop` 拉出，开发完成后通过 Squash merge 合入 `develop`，合入后删除分支。
+- `release/*`：发布分支，从 `develop` 拉出，只允许修复 bug、修改配置和补充文档；使用 Merge commit 合入 `main`，必要时同步合入 `develop`。
+- `hotfix/*`：生产紧急修复分支，从 `main` 拉出；使用 Merge commit 分别合入 `main` 和 `develop`，合入后删除分支。
 
-命名规范：
+禁止使用 Rebase merge 合入分支。
+
+### 分支命名规范
+
 feature/功能名
 release/版本号
 hotfix/紧急问题名
 
-## Git Commit 规范
+### Git Commit 规范
 
 type: subject
 

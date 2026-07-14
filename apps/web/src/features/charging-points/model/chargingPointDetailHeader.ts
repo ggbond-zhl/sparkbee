@@ -30,7 +30,6 @@ export interface HeaderMetricItem {
 }
 
 export interface ChargingPointDetailHeaderModel {
-  connectorCountLabel: string;
   finalConnectionUrl: string | null;
   runtimeSummaryItems: HeaderMetricItem[];
   mainStatus: HeaderStatusItem;
@@ -38,8 +37,6 @@ export interface ChargingPointDetailHeaderModel {
   chargingPointStatus: HeaderStatusItem;
   operability: HeaderStatusItem;
   bootSummary: string;
-  connectorSummary: string;
-  transactionSummary: string;
   recentIssue: HeaderStatusItem | null;
   lastHeartbeatLabel: string;
   primaryAction: HeaderPrimaryAction;
@@ -61,11 +58,9 @@ export function buildChargingPointDetailHeaderModel({
   runtimeEventState?: ChargingPointRuntimeEventState;
 }): ChargingPointDetailHeaderModel {
   const connectorCount = detail.connectors.length;
-  const connectorCountLabel = `${connectorCount} 枪`;
   const effectiveLastHeartbeatAt =
     runtimeEventState?.lastHeartbeatAt ?? lastHeartbeatAt;
   const base = {
-    connectorCountLabel,
     finalConnectionUrl: toFinalConnectionUrl(runtimeEventState),
     runtimeSummaryItems: toRuntimeSummaryItems(
       runtimeStatus,
@@ -95,8 +90,6 @@ export function buildChargingPointDetailHeaderModel({
         tone: "waiting",
       },
       bootSummary: "等待运行状态",
-      connectorSummary: `${connectorCountLabel} · 等待运行状态`,
-      transactionSummary: "交易数据获取中",
       recentIssue: null,
       primaryAction: {
         kind: "start",
@@ -127,8 +120,6 @@ export function buildChargingPointDetailHeaderModel({
         tone: "warning",
       },
       bootSummary: "状态未知",
-      connectorSummary: `${connectorCountLabel} · 状态未知`,
-      transactionSummary: "交易状态未知",
       recentIssue: {
         label: "运行状态获取失败",
         tone: "warning",
@@ -172,8 +163,6 @@ export function buildChargingPointDetailHeaderModel({
             description: "缺少枪口，先添加至少 1 个枪口",
           },
       bootSummary: "未启动",
-      connectorSummary: `共 ${connectorCountLabel}`,
-      transactionSummary: "无运行交易",
       recentIssue,
       primaryAction: {
         kind: "start",
@@ -200,13 +189,6 @@ export function buildChargingPointDetailHeaderModel({
         tone: "waiting",
       },
       bootSummary: toBootSummary(runtimeStatus, "等待 BootNotification"),
-      connectorSummary: toConnectorSummary(
-        connectorCount,
-        connectorCountLabel,
-        runtimeStatus,
-        runtimeEventState,
-      ),
-      transactionSummary: toTransactionSummary(runtimeStatus, runtimeEventState),
       recentIssue,
       primaryAction: {
         kind: "stop",
@@ -230,13 +212,6 @@ export function buildChargingPointDetailHeaderModel({
       tone: "success",
     },
     bootSummary: toBootSummary(runtimeStatus, "Boot 状态待同步"),
-    connectorSummary: toConnectorSummary(
-      connectorCount,
-      connectorCountLabel,
-      runtimeStatus,
-      runtimeEventState,
-    ),
-    transactionSummary: toTransactionSummary(runtimeStatus, runtimeEventState),
     recentIssue,
     primaryAction: {
       kind: "stop",
@@ -603,73 +578,6 @@ function toChargingPointStatusItem(
   };
 }
 
-function toConnectorSummary(
-  connectorCount: number,
-  connectorCountLabel: string,
-  runtimeStatus: RuntimeOperationResponse,
-  runtimeEventState: ChargingPointRuntimeEventState | undefined,
-) {
-  if (runtimeStatus.status === "stopped") {
-    return `共 ${connectorCountLabel}`;
-  }
-
-  const connectorStatuses = Object.values(
-    runtimeEventState?.connectorStatuses ?? {},
-  );
-  if (connectorStatuses.length === 0) {
-    return `${connectorCountLabel} · 等待运行状态`;
-  }
-
-  const counts = countByStatus(
-    connectorStatuses.map((connector) => connector.currentStatus),
-  );
-  const parts = [
-    formatCount("可用", counts.available),
-    formatCount("占用", counts.occupied),
-    formatCount("不可用", counts.unavailable),
-    formatCount("故障", counts.faulted),
-  ].filter((part): part is string => part !== null);
-  const syncLabel = connectorStatuses.length < connectorCount
-    ? `已同步 ${connectorStatuses.length}/${connectorCount}`
-    : connectorCountLabel;
-
-  return `${syncLabel} · ${parts.join(" / ")}`;
-}
-
-function toTransactionSummary(
-  runtimeStatus: RuntimeOperationResponse,
-  runtimeEventState: ChargingPointRuntimeEventState | undefined,
-) {
-  if (runtimeStatus.status === "stopped") {
-    return "无运行交易";
-  }
-
-  const transactions = Object.values(runtimeEventState?.transactionStatuses ?? {});
-  if (transactions.length === 0) {
-    return runtimeStatus.status === "starting" ? "尚无交易数据" : "暂无交易数据";
-  }
-
-  const counts = countByStatus(
-    transactions.map((transaction) => transaction.currentStatus),
-  );
-  const activeCount =
-    (counts.starting ?? 0) +
-    (counts.active ?? 0) +
-    (counts.suspended ?? 0) +
-    (counts.ending ?? 0);
-  const parts = [
-    activeCount > 0 ? `进行中 ${activeCount}` : null,
-    formatCount("挂起", counts.suspended),
-    formatCount("失败", counts.failed),
-    formatCount("拒绝", counts.rejected),
-    activeCount === 0 ? formatCount("已结束", counts.ended) : null,
-  ].filter((part): part is string => part !== null);
-
-  return activeCount === 0
-    ? `无进行中 · ${parts.join(" / ")}`
-    : parts.join(" / ");
-}
-
 function toRecentIssue(
   runtimeEventState: ChargingPointRuntimeEventState | undefined,
 ): HeaderStatusItem | null {
@@ -681,17 +589,6 @@ function toRecentIssue(
     label: runtimeEventState.recentIssue.label,
     tone: runtimeEventState.recentIssue.tone,
   };
-}
-
-function countByStatus<TStatus extends string>(statuses: TStatus[]) {
-  return statuses.reduce<Partial<Record<TStatus, number>>>((counts, status) => ({
-    ...counts,
-    [status]: (counts[status] ?? 0) + 1,
-  }), {});
-}
-
-function formatCount(label: string, count: number | undefined) {
-  return count === undefined || count === 0 ? null : `${label} ${count}`;
 }
 
 function formatOfflineReason(reason: string | undefined) {
