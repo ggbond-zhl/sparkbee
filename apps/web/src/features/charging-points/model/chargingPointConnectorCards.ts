@@ -9,7 +9,6 @@ import type {
   ConnectorRuntimeStatus,
   HeaderTone,
   TransactionRuntimeSnapshot,
-  TransactionRuntimeStatus,
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
 import {
   formatConnectorFormat,
@@ -98,7 +97,7 @@ function buildConnectorCardModel({
   const connectorStatusField = toConnectorStatusField(runtimeStatus, connectorStatus);
   const transactionStatus = toTransactionStatus(transaction);
   const availability = toConnectorAvailability(runtimeStatus, connectorAvailability);
-  const issue = toConnectorIssue(connector, connectorStatus, transaction);
+  const issue = toConnectorIssue(connector, connectorStatus);
 
   return {
     connector,
@@ -212,8 +211,8 @@ function toTransactionStatus(
 
   return {
     label: "交易状态",
-    value: formatTransactionStatus(transaction.currentStatus),
-    tone: toTransactionTone(transaction.currentStatus),
+    value: "进行中",
+    tone: "waiting",
   };
 }
 
@@ -282,20 +281,11 @@ function selectConnectorTransaction(
   evseId: number,
   connectorId: number,
 ): TransactionRuntimeSnapshot | null {
-  const transactions = Object.values(runtimeEventState.transactionStatuses)
-    .filter((transaction) =>
-      transaction.evseId === evseId &&
-      transaction.connectorId === connectorId &&
-      transaction.currentStatus !== "rejected"
-    );
-  const activeTransaction = transactions.find(isActiveTransaction);
-  if (activeTransaction !== undefined) {
-    return activeTransaction;
-  }
-
-  return transactions.sort((left, right) =>
-    Date.parse(right.occurredAt) - Date.parse(left.occurredAt)
-  )[0] ?? null;
+  return Object.values(runtimeEventState.transactionStatuses).find((transaction) =>
+    transaction.evseId === evseId &&
+    transaction.connectorId === connectorId &&
+    isActiveTransaction(transaction)
+  ) ?? null;
 }
 
 function isActiveTransaction(transaction: TransactionRuntimeSnapshot) {
@@ -310,7 +300,6 @@ function isActiveTransaction(transaction: TransactionRuntimeSnapshot) {
 function toConnectorIssue(
   connector: ConnectorResponse,
   connectorStatus: ConnectorRuntimeStatus | undefined,
-  transaction: TransactionRuntimeSnapshot | null,
 ) {
   if (connectorStatus === "faulted") {
     return {
@@ -319,74 +308,7 @@ function toConnectorIssue(
     };
   }
 
-  if (transaction?.currentStatus === "failed") {
-    return {
-      label: transaction.reason === undefined
-        ? "交易失败"
-        : `交易失败: ${transaction.reason}`,
-      tone: "destructive" as const,
-    };
-  }
-
-  if (transaction?.currentStatus === "rejected") {
-    return {
-      label: transaction.reason === undefined
-        ? "交易被拒绝"
-        : `交易被拒绝: ${transaction.reason}`,
-      tone: "warning" as const,
-    };
-  }
-
   return null;
-}
-
-function toTransactionTone(status: TransactionRuntimeStatus): HeaderTone {
-  if (
-    status === "starting" ||
-    status === "active" ||
-    status === "suspended" ||
-    status === "ending"
-  ) {
-    return "waiting";
-  }
-
-  if (status === "failed") {
-    return "destructive";
-  }
-
-  if (status === "rejected") {
-    return "warning";
-  }
-
-  return "neutral";
-}
-
-function formatTransactionStatus(status: TransactionRuntimeStatus) {
-  if (status === "starting") {
-    return "启动中";
-  }
-
-  if (status === "active") {
-    return "进行中";
-  }
-
-  if (status === "suspended") {
-    return "已挂起";
-  }
-
-  if (status === "ending") {
-    return "停止中";
-  }
-
-  if (status === "ended") {
-    return "已结束";
-  }
-
-  if (status === "rejected") {
-    return "已拒绝";
-  }
-
-  return "失败";
 }
 
 function connectorKey(evseId: number, connectorId: number) {

@@ -44,7 +44,7 @@ function createRuntimeState(input: {
     requestedAvailability?: "operative" | "inoperative";
   } | null;
   transaction?: {
-    status: "active" | "rejected";
+    status: "active" | "ended" | "rejected";
     meterWh?: number;
   };
 }) {
@@ -89,7 +89,7 @@ function createRuntimeState(input: {
         ? []
         : [
         {
-          transactionId: input.transaction.status === "active" ? "tx-1" : "1/1",
+          transactionId: input.transaction.status === "rejected" ? "1/1" : "tx-1",
           evseId: 1,
           connectorId: 1,
           currentStatus: input.transaction.status,
@@ -229,6 +229,27 @@ describe("charging point connector cards", () => {
         transactionId: "tx-1",
       },
     ]);
+  });
+
+  test("shows no transaction after the transaction has ended", () => {
+    const state = createRuntimeState({
+      connectorStatus: "occupied",
+      transaction: {
+        status: "ended",
+      },
+    });
+
+    const [model] = buildConnectorCardModels({
+      connectors: [connector],
+      runtimeStatus: runtimeStatus("running"),
+      runtimeEventState: state,
+    });
+
+    expect(model?.fields[1]).toEqual({
+      label: "交易状态",
+      value: "无交易",
+      tone: "neutral",
+    });
   });
 
   test("hides actions when the charging point is not running", () => {
