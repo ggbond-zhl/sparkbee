@@ -117,8 +117,8 @@ pnpm --filter @spark-bee/charging-point-actor test:unit
 ## Git 工作流
 
 - `main`：生产稳定分支，只合入已发布或可发布代码。
-- `develop`：日常集成分支，功能完成后合入这里。
-- `feature/*`：功能分支，从 `develop` 拉出，完成后合回 `develop`。
+- `develop`：日常集成分支和测试环境来源，允许完成验证后直接推送。
+- `feature/*`：可选功能分支，较大或需要独立审查的改动从 `develop` 拉出，完成后合回 `develop`。
 - `release/*`：发布分支，从 `develop` 拉出，只修 bug、改配置和补文档。
 - `hotfix/*`：生产紧急修复，从 `main` 拉出，修复后同时合入 `main` 和 `develop`。
 

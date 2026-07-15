@@ -8,7 +8,7 @@
 - Render 免费 Web Service 部署单实例 Node.js 后端。
 - Supabase 免费项目提供 PostgreSQL。
 - UptimeRobot 免费 HTTP Monitor 定期访问后端进程存活接口，尽量降低 Render 休眠概率。
-- Pull Request 通过质量检查后才能合入 `develop`。
+- 直接推送或通过 Pull Request 合入 `develop` 的提交都必须通过质量检查。
 - `develop` 检查通过后，由 GitHub Actions 串行执行数据库迁移、后端部署、前端部署和冒烟测试。
 - 应用发布失败时自动恢复上一版应用，数据库迁移不自动逆转。
 
@@ -25,8 +25,8 @@
 
 ```mermaid
 flowchart LR
-    A["feature/* Pull Request"] --> B["类型检查、测试、构建"]
-    B --> C["合入 develop"]
+    A["直接推送 develop 或 feature/* Pull Request"] --> B["类型检查、测试、构建"]
+    B --> C["通过检查的 develop 提交"]
     C --> D["Supabase 数据库迁移"]
     D --> E["Render 部署指定提交"]
     E --> F["就绪检查和 API 冒烟测试"]
@@ -102,8 +102,9 @@ Render 环境变量：
 - `LOG_LEVEL`：可选，生产环境默认 `info`；排查时可临时调整为 `debug`。
 
 服务端自身日志以单行 JSON 输出到 `stdout/stderr`，由 Render Logs 保存和检索；
-桩实例运行日志继续写入 PostgreSQL，两者不混用。成功的 `/api/health` 和
-`/api/ready` 请求使用 `debug` 级别，避免默认 `info` 日志被保活探测淹没。
+桩实例运行日志继续写入 PostgreSQL，两者不混用。测试环境中的 `/api/health` 和
+`/api/ready` 成功请求使用 `info` 级别，确保保活探测和 API 访问记录可在 Render Logs
+中检索。
 
 在 Sentry 创建 Node.js 项目后，将 DSN 配置到 Render，并创建邮件告警规则：
 仅在新问题首次出现或已解决问题回归时通知，不对每个重复事件逐条通知。
@@ -117,9 +118,9 @@ Render 环境变量：
 - `/api/ready` 能连接 Supabase。
 - 跨来源普通请求和 SSE 均可工作。
 
-### 5. 建立 Pull Request 质量门禁
+### 5. 建立 develop 质量检查
 
-新增 PR 工作流，触发范围为目标分支 `develop`：
+新增质量检查工作流，同时覆盖 `develop` push 和目标分支为 `develop` 的 Pull Request：
 
 1. 使用 Node.js 24 和 pnpm 10.23.0。
 2. `pnpm install --frozen-lockfile`。
@@ -127,11 +128,7 @@ Render 环境变量：
 4. `pnpm test`。
 5. `pnpm build`。
 
-在 GitHub branch protection 中：
-
-- 禁止直接推送 `develop`。
-- 要求通过 Pull Request 合并。
-- 将类型检查、测试和构建设为 required checks。
+`develop` 允许直接推送。直接推送前应在本地运行相关检查；远程质量检查失败时不进入测试环境发布工作流。Pull Request 仍可用于较大或需要独立审查的改动。
 
 feature 分支只执行质量检查，不部署任何环境。
 
@@ -185,7 +182,7 @@ Variables：
 
 1. 手工创建 Supabase、Render 和 Pages 免费资源，配置 UptimeRobot HTTP Monitor，并填写 Secrets/Variables。
 2. 校验 Render 与 Supabase 均选择新加坡区域。
-3. 将本 feature 分支通过 PR 合入 `develop`。
+3. 将已验证改动直接推送到 `develop`，或通过 Pull Request 合入。
 4. 观察首次迁移、Render 部署、Pages 部署和冒烟测试。
 5. 创建一个桩实例并验证页面刷新后数据仍存在。
 6. 验证普通 API、SSE 和连接测试 CSMS 的 OCPP WebSocket。

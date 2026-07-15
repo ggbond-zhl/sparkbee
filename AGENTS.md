@@ -8,8 +8,8 @@
 ## Git 分支管理
 
 - `main`：生产稳定分支，只能合入已发布或可发布代码，禁止直接提交。
-- `develop`：日常集成分支，作为测试环境来源，禁止直接提交。
-- `feature/*`：功能分支，从 `develop` 拉出，开发完成后通过 Squash merge 合入 `develop`，合入后删除分支。
+- `develop`：日常集成分支，作为测试环境来源，允许直接提交和推送；推送前必须完成相关测试、类型检查和构建验证。
+- `feature/*`：可选功能分支，从 `develop` 拉出；较大或需要独立审查的改动通过 Squash merge 合入 `develop`，合入后删除分支。
 - `release/*`：发布分支，从 `develop` 拉出，只允许修复 bug、修改配置和补充文档；使用 Merge commit 合入 `main`，必要时同步合入 `develop`。
 - `hotfix/*`：生产紧急修复分支，从 `main` 拉出；使用 Merge commit 分别合入 `main` 和 `develop`，合入后删除分支。
 

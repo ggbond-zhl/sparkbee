@@ -18,7 +18,7 @@ Render 后端与 Supabase 数据库统一选择新加坡区域，以减少服务
 
 `develop` 更新通过类型检查、测试和构建后自动发布。功能与发布配置在 `feature/*` 分支开发，合入 `develop` 后才进入测试环境；`release/*` 不作为日常测试环境的部署来源。GitHub Actions 是应用发布的唯一编排器，Cloudflare Pages 与 Render 不再各自独立监听 Git 自动发布。测试环境保活探测在 UptimeRobot 控制台手工配置，不纳入日常测试环境发布工作流。
 
-`develop` 禁止直接推送，所有改动必须通过 Pull Request 合入，并将类型检查、测试和构建配置为必需检查。合并成功后产生的 `develop` push 才能进入测试环境发布工作流。
+`develop` 允许直接推送，也可以通过 Pull Request 合入。质量检查同时覆盖 `develop` push 和目标为 `develop` 的 Pull Request；只有检查成功的 `develop` 提交才能进入测试环境发布工作流。
 
 `feature/*` 和 Pull Request 只运行质量检查，不创建可访问的预览环境。第一版只维护 `develop` 对应的一套共享测试环境，避免预览前端共享测试数据库或为每个分支复制 Render 与 Supabase 资源。
 
