@@ -1,4 +1,4 @@
-Status: needs-info
+Status: ready-for-agent
 
 # 将 Actor 日志物理表重命名为 actor_logs
 
@@ -21,3 +21,4 @@ Status: needs-info
 
 ## Comments
 
+- 2026-07-15：发布 A 已部署到测试环境。真实桩启动产生 4 条 Actor 日志，`/actor-logs` 返回 200，旧 `/runtime-logs` 返回 404；数据库未执行新 migration，因此成功写入证明兼容层已选择 `runtime_logs`。

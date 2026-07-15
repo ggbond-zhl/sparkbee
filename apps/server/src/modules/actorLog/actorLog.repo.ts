@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gt, lt, lte, gte, or, sql } from "drizzle-orm";
 import type { ActorLog, ListActorLogsQuery } from "@spark-bee/contracts";
 
 import type { ServerDatabase } from "../../db";
-import { actorLogs, legacyActorLogs } from "../../db/schema";
+import { actorLogs, legacyActorLogs } from "../../db/schema/actorLog.schema";
 
 type Cursor = { occurredAt: string; id: string };
 type ActorLogTable = typeof actorLogs | typeof legacyActorLogs;

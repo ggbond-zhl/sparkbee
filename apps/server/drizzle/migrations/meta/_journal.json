@@ -22,6 +22,13 @@
       "when": 1783862777876,
       "tag": "0002_fast_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784120481128,
+      "tag": "0003_rename_actor_logs",
+      "breakpoints": true
     }
   ]
 }
