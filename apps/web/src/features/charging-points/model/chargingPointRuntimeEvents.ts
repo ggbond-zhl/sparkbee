@@ -24,6 +24,7 @@ import type {
   TransactionRuntimeStatus,
   TransactionStatusEvent,
 } from "@spark-bee/contracts";
+import { formatRuntimeAvailabilityDetail } from "@/features/charging-points/model/runtimeAvailabilityPresentation";
 
 export type {
   AuthorizationRuntimeSource,
@@ -635,22 +636,6 @@ function withIssue(
   recentIssue: ChargingPointRuntimeIssue,
 ): ChargingPointRuntimeEventState {
   return { ...state, recentIssue };
-}
-
-function formatRuntimeAvailabilityDetail(availability: {
-  currentAvailability: RuntimeAvailability;
-  requestedAvailability?: RuntimeAvailability;
-}) {
-  const currentLabel = formatRuntimeAvailability(availability.currentAvailability);
-  return availability.requestedAvailability === undefined
-    ? currentLabel
-    : `${currentLabel} · 待切换为${formatRuntimeAvailability(
-        availability.requestedAvailability,
-      )}`;
-}
-
-function formatRuntimeAvailability(availability: RuntimeAvailability) {
-  return availability === "operative" ? "可用" : "不可用";
 }
 
 function formatEVSEStatus(status: EVSERuntimeStatus) {

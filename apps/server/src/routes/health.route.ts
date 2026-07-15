@@ -1,7 +1,7 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { sql } from "drizzle-orm";
 
 import type { ServerDatabase } from "../db";
+import { verifyDatabaseConnection } from "../db/connection";
 
 const healthRoute = createRoute({
   method: "get",
@@ -62,7 +62,7 @@ export function createHealthRoute(database?: ServerDatabase) {
     }
 
     try {
-      await database.execute(sql`select 1`);
+      await verifyDatabaseConnection(database);
       return context.json({ status: "ready" }, 200);
     } catch {
       return context.json({ status: "unavailable" }, 503);

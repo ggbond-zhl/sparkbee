@@ -40,104 +40,116 @@ export async function replayOfflineTransactions(
   context.offlineTransactionReplayInProgress = true;
   try {
     for (const record of listPendingOfflineTransactions(context)) {
-      const replayStartResult = await replayOfflineStartTransaction(
-        context,
-        record,
-      );
-      if (replayStartResult === null) {
+      if (!await replayOfflineTransaction(context, record)) {
         return;
       }
-
-      const { ocppTransactionId, startTransactionResult } = replayStartResult;
-      if (startTransactionResult !== null) {
-        getOcpp16AuthorizationPolicy(context).absorbStartTransactionResult({
-          evseId: record.evseId,
-          result: startTransactionResult,
-        });
-        emitAuthorizationStatus(context, {
-          evseId: record.evseId,
-          connectorId: record.connectorId,
-          idTag: record.idTag,
-          authorizationStatus: startTransactionResult.authorizationStatus,
-          occurredAt: startTransactionResult.receivedAt,
-        });
-      }
-
-
-      if (
-        startTransactionResult !== null &&
-        startTransactionResult.outcome !== "Accepted"
-      ) {
-        if (context.configurationFacts.shouldStopTransactionOnInvalidId()) {
-          recordDeauthorizedStop(context, record);
-          const latestRecord =
-            getOfflineTransactionRecord(context, record.localTransactionId) ??
-            record;
-          const replayed = await replayOfflineStopTransaction(
-            context,
-            latestRecord,
-            ocppTransactionId,
-          );
-          if (!replayed) {
-            return;
-          }
-          continue;
-        }
-
-        await sendStatusNotification(context, {
-          connectorId: record.ocppConnectorId,
-          status: mapConnectorFlowStatus("charging"),
-          at: startTransactionResult.receivedAt,
-        });
-        startMeterValueLoop(context, record.localTransactionId);
-        continue;
-      }
-
-      for (const [index, meterValue] of record.meterValues.entries()) {
-        if (meterValue.replayed) {
-          continue;
-        }
-
-        const result = await context.session.request("MeterValues", {
-          connectorId: record.ocppConnectorId,
-          transactionId: ocppTransactionId,
-          meterValue: [
-            createMeterValue(
-              meterValue.meterWh,
-              meterValue.sampledAt,
-              "Sample.Periodic",
-              meterValue.measurements,
-            ),
-          ],
-        });
-        if (result.kind === "error") {
-          return;
-        }
-
-        markOfflineMeterValueReplayed(context, record.localTransactionId, index);
-      }
-      if (record.stop !== null && !record.stop.replayed) {
-        const replayed = await replayOfflineStopTransaction(
-          context,
-          record,
-          ocppTransactionId,
-        );
-        if (!replayed) {
-          return;
-        }
-        continue;
-      }
-
-      await sendStatusNotification(context, {
-        connectorId: record.ocppConnectorId,
-        status: mapConnectorFlowStatus("charging"),
-        at: record.startedAt,
-      });
-      startMeterValueLoop(context, record.localTransactionId);
     }
   } finally {
     context.offlineTransactionReplayInProgress = false;
   }
+}
+
+async function replayOfflineTransaction(
+  context: Ocpp16RuntimeContext,
+  record: OfflineTransactionRecord,
+): Promise<boolean> {
+  const replayStartResult = await replayOfflineStartTransaction(
+    context,
+    record,
+  );
+  if (replayStartResult === null) {
+    return false;
+  }
+
+  const { ocppTransactionId, startTransactionResult } = replayStartResult;
+  if (startTransactionResult !== null) {
+    getOcpp16AuthorizationPolicy(context).absorbStartTransactionResult({
+      evseId: record.evseId,
+      result: startTransactionResult,
+    });
+    emitAuthorizationStatus(context, {
+      evseId: record.evseId,
+      connectorId: record.connectorId,
+      idTag: record.idTag,
+      authorizationStatus: startTransactionResult.authorizationStatus,
+      occurredAt: startTransactionResult.receivedAt,
+    });
+  }
+
+  if (
+    startTransactionResult !== null &&
+    startTransactionResult.outcome !== "Accepted"
+  ) {
+    if (context.configurationFacts.shouldStopTransactionOnInvalidId()) {
+      recordDeauthorizedStop(context, record);
+      const latestRecord = getOfflineTransactionRecord(
+        context,
+        record.localTransactionId,
+      ) ?? record;
+      return replayOfflineStopTransaction(
+        context,
+        latestRecord,
+        ocppTransactionId,
+      );
+    }
+
+    await resumeCharging(context, record, startTransactionResult.receivedAt);
+    return true;
+  }
+
+  if (!await replayOfflineMeterValues(context, record, ocppTransactionId)) {
+    return false;
+  }
+  if (record.stop !== null && !record.stop.replayed) {
+    return replayOfflineStopTransaction(context, record, ocppTransactionId);
+  }
+
+  await resumeCharging(context, record, record.startedAt);
+  return true;
+}
+
+async function replayOfflineMeterValues(
+  context: Ocpp16RuntimeContext,
+  record: OfflineTransactionRecord,
+  ocppTransactionId: number,
+): Promise<boolean> {
+  for (const [index, meterValue] of record.meterValues.entries()) {
+    if (meterValue.replayed) {
+      continue;
+    }
+
+    const result = await context.session.request("MeterValues", {
+      connectorId: record.ocppConnectorId,
+      transactionId: ocppTransactionId,
+      meterValue: [
+        createMeterValue(
+          meterValue.meterWh,
+          meterValue.sampledAt,
+          "Sample.Periodic",
+          meterValue.measurements,
+        ),
+      ],
+    });
+    if (result.kind === "error") {
+      return false;
+    }
+
+    markOfflineMeterValueReplayed(context, record.localTransactionId, index);
+  }
+  return true;
+}
+
+async function resumeCharging(
+  context: Ocpp16RuntimeContext,
+  record: OfflineTransactionRecord,
+  at: Date,
+): Promise<void> {
+  await sendStatusNotification(context, {
+    connectorId: record.ocppConnectorId,
+    status: mapConnectorFlowStatus("charging"),
+    at,
+  });
+  startMeterValueLoop(context, record.localTransactionId);
 }
 
 async function replayOfflineStartTransaction(

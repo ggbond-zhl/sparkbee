@@ -15,6 +15,10 @@ import {
   formatConnectorPowerType,
   formatConnectorType,
 } from "@/features/charging-points/model/connectorDisplay";
+import {
+  formatRuntimeAvailabilityDetail,
+  toRuntimeAvailabilityTone,
+} from "@/features/charging-points/model/runtimeAvailabilityPresentation";
 
 export type ConnectorCardActionKind =
   | "plug"
@@ -251,29 +255,6 @@ function toConnectorAvailability(
       ? toRuntimeAvailabilityTone(connectorAvailability.currentAvailability)
       : "warning",
   };
-}
-
-function formatRuntimeAvailabilityDetail(
-  availability: ConnectorRuntimeAvailabilitySnapshot,
-) {
-  const currentLabel = formatRuntimeAvailability(availability.currentAvailability);
-  return availability.requestedAvailability === undefined
-    ? currentLabel
-    : `${currentLabel} · 待切换为${formatRuntimeAvailability(
-        availability.requestedAvailability,
-      )}`;
-}
-
-function formatRuntimeAvailability(
-  availability: ConnectorRuntimeAvailabilitySnapshot["currentAvailability"],
-) {
-  return availability === "operative" ? "可用" : "不可用";
-}
-
-function toRuntimeAvailabilityTone(
-  availability: ConnectorRuntimeAvailabilitySnapshot["currentAvailability"],
-): HeaderTone {
-  return availability === "operative" ? "success" : "warning";
 }
 
 function selectConnectorTransaction(

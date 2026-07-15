@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { createApp } from "../../src/app";
 import { createServerLogger } from "../../src/config/logger";
+import type { ServerDatabase } from "../../src/db";
 import { AppError } from "../../src/utils/errors";
 import { createTestDatabase } from "../support/testDatabase";
 
@@ -46,6 +47,34 @@ describe("createApp", () => {
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({ status: "unavailable" });
+  });
+
+  test("reports unavailable when the database probe fails", async () => {
+    const database = {
+      execute: vi.fn().mockRejectedValue(new Error("connection refused")),
+    } as unknown as ServerDatabase;
+    const app = createApp({ database });
+
+    const response = await app.request("/api/ready");
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ status: "unavailable" });
+  });
+
+  test("reports unavailable when the database probe times out", async () => {
+    vi.useFakeTimers();
+    const database = {
+      execute: vi.fn().mockReturnValue(new Promise(() => {})),
+    } as unknown as ServerDatabase;
+    const app = createApp({ database });
+
+    const responsePromise = app.request("/api/ready");
+    await vi.advanceTimersByTimeAsync(5_000);
+    const response = await responsePromise;
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ status: "unavailable" });
+    vi.useRealTimers();
   });
 
   test("adds a request id response header", async () => {

@@ -11,6 +11,7 @@ import type { Logger } from "pino";
 import { noopErrorReporter } from "./config/errorReporter";
 import type { ErrorReporter } from "./config/errorReporter";
 import type { ServerDatabase } from "./db";
+import { verifyDatabaseConnection } from "./db/connection";
 import type { ChargingPointActorHost } from "./lib/chargingPointActorHost";
 import type { ChargingPointRuntimeLogSinkFactory } from "./lib/chargingPointRuntimeLogWriter";
 import { createErrorMiddleware } from "./middlewares/error.middleware";
@@ -72,4 +73,34 @@ export function createApp(dependencies: AppDependencies = {}) {
   );
 
   return app;
+}
+
+export interface StartServerOptions {
+  database: ServerDatabase;
+  errorReporter: ErrorReporter;
+  listen(): void;
+  logger: Logger;
+  onStarted(): void;
+}
+
+export async function startServer({
+  database,
+  errorReporter,
+  listen,
+  logger,
+  onStarted,
+}: StartServerOptions): Promise<void> {
+  try {
+    await verifyDatabaseConnection(database);
+  } catch (error) {
+    logger.error({
+      event: "database.connection.failed",
+      error,
+    }, "数据库连接校验失败，服务启动已终止");
+    errorReporter.captureException(error, { module: "database.startup" });
+    throw error;
+  }
+
+  listen();
+  onStarted();
 }

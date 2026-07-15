@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 
-import { createApp } from "./app";
+import { createApp, startServer } from "./app";
 import { loadServerConfig } from "./config/env";
 import { createSentryErrorReporter } from "./config/errorReporter";
 import { createServerLogger } from "./config/logger";
@@ -36,17 +36,25 @@ const app = createApp({
   errorReporter,
 });
 
-serve({
-  fetch: app.fetch,
-  port: config.port
-});
-
-logger.info({
-  event: "server.started",
-  port: config.port,
-  environment: config.environment,
-}, "SparkBee 服务已启动");
-retentionScheduler.start();
+await startServer({
+  database,
+  errorReporter,
+  listen() {
+    serve({
+      fetch: app.fetch,
+      port: config.port,
+    });
+  },
+  logger,
+  onStarted() {
+    logger.info({
+      event: "server.started",
+      port: config.port,
+      environment: config.environment,
+    }, "SparkBee 服务已启动");
+    retentionScheduler.start();
+  },
+}).catch(() => process.exit(1));
 
 let shuttingDown = false;
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

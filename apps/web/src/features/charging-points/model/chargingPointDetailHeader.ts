@@ -8,6 +8,10 @@ import type {
   ChargingPointRuntimeEventState,
   HeaderTone,
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
+import {
+  formatRuntimeAvailabilityDetail,
+  toRuntimeAvailabilityTone,
+} from "@/features/charging-points/model/runtimeAvailabilityPresentation";
 
 interface HeaderStatusItem {
   label: string;
@@ -448,27 +452,6 @@ function toChargingPointStatusSummaryItem(
     value: "故障",
     tone: "destructive",
   };
-}
-
-function formatRuntimeAvailabilityDetail(availability: ChargingPointAvailabilitySnapshot) {
-  const currentLabel = formatRuntimeAvailability(availability.currentAvailability);
-  return availability.requestedAvailability === undefined
-    ? currentLabel
-    : `${currentLabel} · 待切换为${formatRuntimeAvailability(
-        availability.requestedAvailability,
-      )}`;
-}
-
-function formatRuntimeAvailability(
-  availability: ChargingPointAvailabilitySnapshot["currentAvailability"],
-) {
-  return availability === "operative" ? "可用" : "不可用";
-}
-
-function toRuntimeAvailabilityTone(
-  availability: ChargingPointAvailabilitySnapshot["currentAvailability"],
-): HeaderTone {
-  return availability === "operative" ? "success" : "warning";
 }
 
 function formatSessionLogEntryValue(
