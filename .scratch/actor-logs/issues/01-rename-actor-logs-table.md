@@ -22,3 +22,4 @@ Status: ready-for-agent
 ## Comments
 
 - 2026-07-15：发布 A 已部署到测试环境。真实桩启动产生 4 条 Actor 日志，`/actor-logs` 返回 200，旧 `/runtime-logs` 返回 404；数据库未执行新 migration，因此成功写入证明兼容层已选择 `runtime_logs`。
+- 2026-07-15：发布 B 的 `0003_rename_actor_logs` migration、Render 部署和业务冒烟均成功。数据库 rename 后、Render 新版本切换前，仍在线兼容版本成功写入并查询 3 条 Actor 日志。

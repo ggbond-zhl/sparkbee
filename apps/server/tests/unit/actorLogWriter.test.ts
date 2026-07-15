@@ -93,9 +93,6 @@ describe("Actor 日志持久化", () => {
     const captured: Array<{ error: unknown; context: Record<string, unknown> }> = [];
     const writer = new ActorLogWriter(
       {
-        execute: () => ({
-          rows: [{ actor_logs: "actor_logs", runtime_logs: null }],
-        }),
         insert,
       } as never,
       {

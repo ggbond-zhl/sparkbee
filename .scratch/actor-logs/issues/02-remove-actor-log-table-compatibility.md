@@ -1,4 +1,4 @@
-Status: needs-info
+Status: ready-for-agent
 
 # 删除 Actor 日志旧表名兼容
 
@@ -21,3 +21,4 @@ Status: needs-info
 
 ## Comments
 
+- 2026-07-15：发布 B 已完成。migration 成功后数据库使用 `actor_logs`，Actor 日志真实写入/查询成功，完整测试环境部署与冒烟测试通过。

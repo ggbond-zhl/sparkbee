@@ -3,15 +3,8 @@ import { sql } from "drizzle-orm";
 
 import { chargingPoints } from "./chargingPoint.schema";
 
-export const actorLogs = createActorLogsTable("actor_logs", "actor_logs");
-export const legacyActorLogs = createActorLogsTable("runtime_logs", "runtime_logs");
-
-function createActorLogsTable(
-  tableName: "actor_logs" | "runtime_logs",
-  indexPrefix: "actor_logs" | "runtime_logs",
-) {
-  return pgTable(
-  tableName,
+export const actorLogs = pgTable(
+  "actor_logs",
   {
     id: text("id").primaryKey(),
     sequence: integer("sequence").notNull(),
@@ -26,12 +19,11 @@ function createActorLogsTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index(`${indexPrefix}_charging_point_occurred_at_idx`)
+    index("actor_logs_charging_point_occurred_at_idx")
       .on(table.chargingPointId, table.occurredAt, table.id),
-    index(`${indexPrefix}_occurred_at_idx`).on(table.occurredAt),
-    index(`${indexPrefix}_code_idx`).on(table.chargingPointId, table.code),
-    index(`${indexPrefix}_operation_id_idx`)
+    index("actor_logs_occurred_at_idx").on(table.occurredAt),
+    index("actor_logs_code_idx").on(table.chargingPointId, table.code),
+    index("actor_logs_operation_id_idx")
       .on(table.chargingPointId, sql`(${table.context} ->> 'operationId')`),
   ],
-  );
-}
+);

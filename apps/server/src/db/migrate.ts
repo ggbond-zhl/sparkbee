@@ -57,7 +57,7 @@ export async function migrateDatabase(client: Pick<PGlite, "exec">): Promise<voi
       on connectors (charging_point_id, connector_id)
       where deleted_at is null;
 
-    create table runtime_logs (
+    create table actor_logs (
       id text primary key,
       sequence integer not null,
       charging_point_id uuid not null references charging_points(id) on delete cascade,
@@ -69,11 +69,12 @@ export async function migrateDatabase(client: Pick<PGlite, "exec">): Promise<voi
       created_at timestamptz not null default now()
     );
 
-    create index runtime_logs_charging_point_occurred_at_idx
-      on runtime_logs (charging_point_id, occurred_at, id);
-    create index runtime_logs_occurred_at_idx on runtime_logs (occurred_at);
-    create index runtime_logs_operation_id_idx
-      on runtime_logs (charging_point_id, ((context ->> 'operationId')));
-    alter table runtime_logs enable row level security;
+    create index actor_logs_charging_point_occurred_at_idx
+      on actor_logs (charging_point_id, occurred_at, id);
+    create index actor_logs_occurred_at_idx on actor_logs (occurred_at);
+    create index actor_logs_code_idx on actor_logs (charging_point_id, code);
+    create index actor_logs_operation_id_idx
+      on actor_logs (charging_point_id, ((context ->> 'operationId')));
+    alter table actor_logs enable row level security;
   `);
 }

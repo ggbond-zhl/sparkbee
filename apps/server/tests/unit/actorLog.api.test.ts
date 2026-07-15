@@ -1,13 +1,12 @@
 import { describe, expect, test } from "vitest";
 import { listActorLogsResponseSchema } from "@spark-bee/contracts";
-import { sql } from "drizzle-orm";
 
 import { createApp } from "../../src/app";
 import { ActorLogWriter } from "../../src/lib/actorLogWriter";
 import { createTestDatabase } from "../support/testDatabase";
 
 describe("Actor 日志 API", () => {
-  test("通过新接口读写旧物理表且不保留旧接口", async () => {
+  test("通过新接口读写 Actor 日志且不保留旧接口", async () => {
     const database = await createTestDatabase();
     const app = createApp({ database });
     const chargingPoint = await createChargingPoint(app);
@@ -37,45 +36,7 @@ describe("Actor 日志 API", () => {
     )).status).toBe(404);
   });
 
-  test("物理表在线重命名后自动切换并重试", async () => {
-    const database = await createTestDatabase();
-    const app = createApp({ database });
-    const chargingPoint = await createChargingPoint(app);
-    const writer = new ActorLogWriter(database, { batchSize: 1 });
-
-    writer.createSink(chargingPoint.id).write(createActorLog(chargingPoint.id, "before"));
-    await writer.flush();
-    expect((await app.request(
-      `/api/charging-points/${chargingPoint.id}/actor-logs`,
-    )).status).toBe(200);
-
-    await database.execute(sql`alter table runtime_logs rename to actor_logs`);
-
-    writer.createSink(chargingPoint.id).write(createActorLog(chargingPoint.id, "after"));
-    await writer.flush();
-
-    const response = await app.request(
-      `/api/charging-points/${chargingPoint.id}/actor-logs`,
-    );
-    expect(response.status).toBe(200);
-    expect(listActorLogsResponseSchema.parse(await response.json()).items.map(
-      (item) => item.id,
-    )).toEqual(["after", "before"]);
-  });
 });
-
-function createActorLog(chargingPointId: string, id: string) {
-  return {
-    id,
-    sequence: 1,
-    chargingPointId,
-    occurredAt: id === "before"
-      ? "2026-07-15T00:00:00.000Z"
-      : "2026-07-15T00:00:01.000Z",
-    level: "info" as const,
-    message: id,
-  };
-}
 
 async function createChargingPoint(app: ReturnType<typeof createApp>) {
   const response = await app.request("/api/charging-points", {

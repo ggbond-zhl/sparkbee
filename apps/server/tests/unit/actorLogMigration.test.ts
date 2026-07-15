@@ -4,19 +4,21 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, test } from "vitest";
 
-import { migrateDatabase } from "../../src/db/migrate";
-
 describe("Actor 日志表迁移", () => {
   test("重命名物理表并保留数据、约束和索引", async () => {
     const client = new PGlite();
-    await migrateDatabase(client);
+    for (const migrationName of [
+      "0000_fixed_silk_fever.sql",
+      "0001_flaky_johnny_blaze.sql",
+      "0002_fast_luke_cage.sql",
+    ]) {
+      await client.exec(readFileSync(join(
+        import.meta.dirname,
+        "../../drizzle/migrations",
+        migrationName,
+      ), "utf8"));
+    }
     await client.exec(`
-      alter table runtime_logs
-        rename constraint runtime_logs_charging_point_id_fkey
-        to runtime_logs_charging_point_id_charging_points_id_fk;
-      create index runtime_logs_code_idx
-        on runtime_logs (charging_point_id, code);
-
       insert into charging_points (
         id, name, identity, protocol, central_system_url, vendor, model
       ) values (
