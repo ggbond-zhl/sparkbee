@@ -60,7 +60,7 @@ describe("createApp", () => {
     const lines: string[] = [];
     const logger = createServerLogger({
       environment: "production",
-      level: "debug",
+      level: "info",
       destination: new Writable({
         write(chunk, _encoding, callback) {
           lines.push(chunk.toString());
@@ -106,7 +106,7 @@ describe("createApp", () => {
     expect(response.status).toBe(200);
     const record = JSON.parse(lines.join(""));
     expect(record).toMatchObject({
-      level: 20,
+      level: 30,
       event: "http.request.completed",
       requestId: "request-123",
       method: "GET",

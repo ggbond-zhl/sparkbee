@@ -24,7 +24,7 @@ export function requestLogMiddleware(logger: Logger): MiddlewareHandler {
     } else if (status >= 400) {
       logger.warn(fields, "HTTP 请求未成功");
     } else if (HEALTH_PATHS.has(path)) {
-      logger.debug(fields, "健康检查完成");
+      logger.info(fields, "健康检查完成");
     } else {
       logger.info(fields, "HTTP 请求完成");
     }
