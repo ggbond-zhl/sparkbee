@@ -112,7 +112,7 @@ describe("OutboundRequestCoordinator", () => {
   });
 
   test("returns a FormationViolation result when the inbound response payload is invalid", async () => {
-    const validator = createValidator((action, payload, direction) => {
+    const validator = createValidator((action, _payload, direction) => {
       if (action === "Heartbeat" && direction === "response") {
         return {
           success: false,

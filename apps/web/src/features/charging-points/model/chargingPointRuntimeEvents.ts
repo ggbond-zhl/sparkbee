@@ -1,28 +1,18 @@
 import type {
-  AuthorizationRuntimeSource,
   AuthorizationRuntimeStatus,
   ChargingPointActorEvent,
-  ChargingPointActorEventError,
   ChargingPointActorStatus,
-  ChargingPointAvailabilityEvent,
   ChargingPointAvailabilityStatus,
   ChargingPointEventStreamMessage,
-  ChargingPointLifecycleEvent,
   ChargingPointSessionStatus,
   ChargingPointStatusEvent,
-  ConnectorAvailabilityEvent,
   ConnectorRuntimeStatus,
-  ConnectorStatusEvent,
   EVSERuntimeStatus,
-  EVSEStatusEvent,
   ProtocolMessageEvent,
   RuntimeAvailability,
   RuntimeSnapshotResponse,
-  SessionOfflineReason,
   SessionStatusEvent,
-  TransactionMeterValueEvent,
   TransactionRuntimeStatus,
-  TransactionStatusEvent,
 } from "@spark-bee/contracts";
 import { formatRuntimeAvailabilityDetail } from "@/features/charging-points/model/runtimeAvailabilityPresentation";
 

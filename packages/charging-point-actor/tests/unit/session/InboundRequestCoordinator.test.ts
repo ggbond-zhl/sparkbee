@@ -70,7 +70,7 @@ describe("InboundRequestCoordinator", () => {
     const transport = new MemoryTransport();
     const emittedRequests: InboundRequest[] = [];
     const coordinator = new InboundRequestCoordinator({
-      validator: createValidator((action, payload, direction) => {
+      validator: createValidator((action, _payload, direction) => {
         if (action === "Heartbeat" && direction === "response") {
           return {
             success: false,

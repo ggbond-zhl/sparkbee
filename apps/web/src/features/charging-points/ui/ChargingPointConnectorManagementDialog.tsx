@@ -89,7 +89,6 @@ export function ChargingPointConnectorManagementDialog({
   const [activeTab, setActiveTab] = useState("");
   const [draftTabs, setDraftTabs] = useState<DraftConnectorTab[]>([]);
   const [draftSequence, setDraftSequence] = useState(1);
-  const queryClient = useQueryClient();
   const connectorsQuery = useQuery({
     queryKey: ["charging-point-connectors", item.id],
     queryFn: () => listConnectors(item.id),
@@ -206,7 +205,6 @@ export function ChargingPointConnectorManagementDialog({
                   idPrefix={`connector-${tab.key}`}
                   initialValues={tab.values}
                   isLastSavedConnector={connectors.length === 1}
-                  tabKey={tab.key}
                   onCreated={(connector) => {
                     setDraftTabs((current) =>
                       current.filter((draft) => draft.key !== tab.key),
@@ -248,7 +246,6 @@ interface ConnectorTabFormProps {
   idPrefix: string;
   initialValues: ConnectorManagementFormInput;
   isLastSavedConnector: boolean;
-  tabKey: string;
   onCreated(connector: ConnectorResponse): void;
   onDeleted(): void;
 }
@@ -261,7 +258,6 @@ function ConnectorTabForm({
   isLastSavedConnector,
   onCreated,
   onDeleted,
-  tabKey,
 }: ConnectorTabFormProps) {
   const queryClient = useQueryClient();
   const form = useForm<

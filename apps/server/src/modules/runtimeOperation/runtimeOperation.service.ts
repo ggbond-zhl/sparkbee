@@ -97,7 +97,7 @@ export class RuntimeOperationService {
       await this.actorHost.stop(id);
       return this.toStoppedResponse(id);
     } catch (error) {
-      throw this.mapStopError(error);
+      throw this.mapStopError();
     }
   }
 
@@ -539,7 +539,7 @@ export class RuntimeOperationService {
     );
   }
 
-  private mapStopError(error: unknown): AppError {
+  private mapStopError(): AppError {
     return new AppError(502, "CHARGING_POINT_STOP_FAILED", "Charging point stop failed");
   }
 

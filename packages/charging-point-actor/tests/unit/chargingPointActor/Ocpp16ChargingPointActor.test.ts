@@ -598,12 +598,12 @@ class FakeProtocolRuntime {
     return this.transactionResources.get(transactionId);
   }
 
-  on(event: "runtimeEvent", listener: Ocpp16RuntimeEventListener): this {
+  on(_event: "runtimeEvent", listener: Ocpp16RuntimeEventListener): this {
     this.runtimeEventListeners.add(listener);
     return this;
   }
 
-  off(event: "runtimeEvent", listener: Ocpp16RuntimeEventListener): this {
+  off(_event: "runtimeEvent", listener: Ocpp16RuntimeEventListener): this {
     this.runtimeEventListeners.delete(listener);
     return this;
   }
