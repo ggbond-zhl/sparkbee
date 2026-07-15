@@ -37,7 +37,7 @@ export interface ProtocolMessageEvent {
   errorDetails?: unknown;
 }
 
-export type SessionLogSource =
+export type SessionActorLogSource =
   | "transport"
   | "decode"
   | "inbound_request";
@@ -52,9 +52,9 @@ export type InboundRequest = {
   reject(errorCode: string, message: string, details?: unknown): Promise<void>;
 };
 
-/** 协议会话对外暴露的异步运行日志载荷。 */
-export interface SessionLogEntry {
-  source: SessionLogSource;
+/** 协议会话对外暴露的异步Actor 日志载荷。 */
+export interface SessionActorLogEntry {
+  source: SessionActorLogSource;
   error: SessionError;
   messageId?: string;
   action?: string;
@@ -67,7 +67,7 @@ export interface SessionEvents {
   reconnecting: (attempt: number, error?: SessionError) => void;
   inboundRequest: (request: InboundRequest) => void;
   protocolMessage: (event: ProtocolMessageEvent) => void;
-  sessionError: (runtimeLog: SessionLogEntry) => void;
+  sessionError: (actorLog: SessionActorLogEntry) => void;
 }
 
 /** 控制 transport 意外断开后的自动重连行为。 */

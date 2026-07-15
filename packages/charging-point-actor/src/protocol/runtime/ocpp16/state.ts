@@ -19,7 +19,7 @@ import type {
   Ocpp16RuntimeEvent,
   Ocpp16RuntimeOptions,
   Ocpp16RegistrationStatus,
-  Ocpp16RuntimeLog,
+  Ocpp16ActorLog,
 } from "./types";
 import { ConfigurationStore } from "./ConfigurationStore/index";
 import { Ocpp16ConfigurationFacts } from "./Ocpp16ConfigurationFacts";
@@ -44,8 +44,8 @@ export interface Ocpp16RuntimeContext {
   syncProtocolClock: (currentTime: Date) => void;
   idGenerator: () => string;
   emitRuntimeEvent: (event: Ocpp16RuntimeEvent) => void;
-  emitRuntimeLog: (runtimeLog: Ocpp16RuntimeLog) => void;
-  nextRuntimeLogOperationId: () => string;
+  emitActorLog: (actorLog: Ocpp16ActorLog) => void;
+  nextActorLogOperationId: () => string;
   thresholds: Ocpp16RuntimeThresholds;
   registrationStatus: Ocpp16RegistrationStatus | "Unregistered";
   chargingPoint: ChargingPoint;
@@ -105,7 +105,7 @@ export function createOcpp16RuntimeContext(
     isReporting: boolean;
     intervalSec: number;
   }>();
-  let runtimeLogOperationSequence = 0;
+  let actorLogOperationSequence = 0;
 
   return {
     session: options.session,
@@ -115,10 +115,10 @@ export function createOcpp16RuntimeContext(
     syncProtocolClock: (currentTime) => protocolClock.sync(currentTime),
     idGenerator: options.idGenerator ?? randomUUID,
     emitRuntimeEvent,
-    emitRuntimeLog: options.emitRuntimeLog ?? (() => undefined),
-    nextRuntimeLogOperationId: () => {
-      runtimeLogOperationSequence += 1;
-      return `ocpp16-operation-${runtimeLogOperationSequence}`;
+    emitActorLog: options.emitActorLog ?? (() => undefined),
+    nextActorLogOperationId: () => {
+      actorLogOperationSequence += 1;
+      return `ocpp16-operation-${actorLogOperationSequence}`;
     },
     thresholds: createThresholds(options),
     registrationStatus: "Unregistered",

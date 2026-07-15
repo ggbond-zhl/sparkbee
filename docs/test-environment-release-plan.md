@@ -16,7 +16,7 @@
 
 - 用户登录和 API 鉴权。
 - feature/PR 预览环境。
-- 运行日志持久化。
+- Actor 日志持久化。
 - 后端 24 小时在线保证或冷启动交互优化。
 - 桩实例运行意图持久化和发布后自动恢复。
 - 固定出口 IP、生产级数据库备份和外部消息通知。
@@ -92,7 +92,7 @@ flowchart LR
 - 构建时安装锁定依赖；启动命令使用现有 `pnpm --filter @spark-bee/server start`。
 - 平台健康路径为 `/api/health`。
 - `NODE_ENV=production`。
-- 运行日志目录放在临时目录；重新部署、重启或休眠后允许丢失。
+- Actor 日志目录放在临时目录；重新部署、重启或休眠后允许丢失。
 
 Render 环境变量：
 
@@ -102,7 +102,7 @@ Render 环境变量：
 - `LOG_LEVEL`：可选，生产环境默认 `info`；排查时可临时调整为 `debug`。
 
 服务端自身日志以单行 JSON 输出到 `stdout/stderr`，由 Render Logs 保存和检索；
-桩实例运行日志继续写入 PostgreSQL，两者不混用。测试环境中的 `/api/health` 和
+桩实例 Actor 日志继续写入 PostgreSQL，两者不混用。测试环境中的 `/api/health` 和
 `/api/ready` 成功请求使用 `info` 级别，确保保活探测和 API 访问记录可在 Render Logs
 中检索。
 

@@ -5,7 +5,7 @@ import { createMeterValue } from "../payloadBuilders";
 import { emitTransactionMeterValue } from "../events";
 import { requireOcppConnectorId } from "../resourceAccess";
 import { requireConnectorSelection } from "../connectorSelection";
-import { traceOcpp16RuntimeOperation } from "../runtimeLogs";
+import { traceOcpp16RuntimeOperation } from "../actorLogs";
 import { getUnexpectedResponseFields, toRequestErrorInfo } from "../requestErrors";
 import type { Ocpp16RuntimeContext } from "../state";
 import type {

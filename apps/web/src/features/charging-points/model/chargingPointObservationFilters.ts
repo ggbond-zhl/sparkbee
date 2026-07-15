@@ -1,18 +1,18 @@
 export const ALL_RUNTIME_LOG_TYPE_FILTER = "__all__";
 
-export type RuntimeLogTimeFilter = "all" | "1m" | "5m" | "15m" | "1h";
+export type ObservationTimeFilter = "all" | "1m" | "5m" | "15m" | "1h";
 
-export interface RuntimeLogTimeFilterOption {
-  value: RuntimeLogTimeFilter;
+export interface ObservationTimeFilterOption {
+  value: ObservationTimeFilter;
   label: string;
 }
 
-export interface RuntimeLogTypeFilterOption {
+export interface ObservationTypeFilterOption {
   value: string;
   label: string;
 }
 
-export const RUNTIME_LOG_TIME_FILTER_OPTIONS: RuntimeLogTimeFilterOption[] = [
+export const OBSERVATION_TIME_FILTER_OPTIONS: ObservationTimeFilterOption[] = [
   { value: "all", label: "全部" },
   { value: "1m", label: "最近 1 分钟" },
   { value: "5m", label: "最近 5 分钟" },
@@ -20,10 +20,10 @@ export const RUNTIME_LOG_TIME_FILTER_OPTIONS: RuntimeLogTimeFilterOption[] = [
   { value: "1h", label: "最近 1 小时" },
 ];
 
-export function buildRuntimeLogTypeFilterOptions<TEntry>(
+export function buildObservationTypeFilterOptions<TEntry>(
   entries: TEntry[],
   getType: (entry: TEntry) => string,
-): RuntimeLogTypeFilterOption[] {
+): ObservationTypeFilterOption[] {
   const types = [...new Set(entries.map(getType))].sort((left, right) =>
     left.localeCompare(right),
   );
@@ -34,7 +34,7 @@ export function buildRuntimeLogTypeFilterOptions<TEntry>(
   ];
 }
 
-export function filterRuntimeLogEntries<TEntry extends { occurredAt: string }>(
+export function filterObservationEntries<TEntry extends { occurredAt: string }>(
   entries: TEntry[],
   {
     getType,
@@ -44,11 +44,11 @@ export function filterRuntimeLogEntries<TEntry extends { occurredAt: string }>(
   }: {
     getType: (entry: TEntry) => string;
     nowMs: number;
-    timeFilter: RuntimeLogTimeFilter;
+    timeFilter: ObservationTimeFilter;
     typeFilter: string;
   },
 ): TEntry[] {
-  const cutoffMs = getRuntimeLogTimeFilterCutoffMs(timeFilter, nowMs);
+  const cutoffMs = getObservationTimeFilterCutoffMs(timeFilter, nowMs);
 
   return entries.filter((entry) => {
     if (
@@ -67,7 +67,7 @@ export function filterRuntimeLogEntries<TEntry extends { occurredAt: string }>(
   });
 }
 
-export function getRuntimeLogEmptyText({
+export function getObservationEmptyText({
   emptyText,
   entriesCount,
   filteredEmptyText,
@@ -79,8 +79,8 @@ export function getRuntimeLogEmptyText({
   return entriesCount === 0 ? emptyText : filteredEmptyText;
 }
 
-function getRuntimeLogTimeFilterCutoffMs(
-  timeFilter: RuntimeLogTimeFilter,
+function getObservationTimeFilterCutoffMs(
+  timeFilter: ObservationTimeFilter,
   nowMs: number,
 ) {
   if (timeFilter === "all") {

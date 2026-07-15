@@ -5,7 +5,7 @@ import { Ocpp16Codec } from "../../../src/protocol/codec/index.ts";
 import { ChargingPointSession } from "../../../src/protocol/session/index.ts";
 import type {
   ProtocolMessageEvent,
-  SessionLogEntry,
+  SessionActorLogEntry,
 } from "../../../src/protocol/session/types.ts";
 import {
   createValidator,
@@ -24,10 +24,10 @@ describe("ChargingPointSession", () => {
       codec,
       validator: createValidator(),
     });
-    const runtimeLogs: SessionLogEntry[] = [];
+    const actorLogs: SessionActorLogEntry[] = [];
 
-    session.on("sessionError", (runtimeLog) => {
-      runtimeLogs.push(runtimeLog);
+    session.on("sessionError", (actorLog) => {
+      actorLogs.push(actorLog);
     });
 
     expect(() => {
@@ -37,8 +37,8 @@ describe("ChargingPointSession", () => {
     }).not.toThrow();
 
     expect(session.state).toBe("offline");
-    expect(runtimeLogs).toHaveLength(1);
-    expect(runtimeLogs[0]).toMatchObject({
+    expect(actorLogs).toHaveLength(1);
+    expect(actorLogs[0]).toMatchObject({
       source: "transport",
       error: {
         code: "TRANSPORT_RUNTIME_ERROR",
@@ -59,18 +59,18 @@ describe("ChargingPointSession", () => {
       codec,
       validator: createValidator(),
     });
-    const runtimeLogs: SessionLogEntry[] = [];
+    const actorLogs: SessionActorLogEntry[] = [];
 
-    session.on("sessionError", (runtimeLog) => {
-      runtimeLogs.push(runtimeLog);
+    session.on("sessionError", (actorLog) => {
+      actorLogs.push(actorLog);
     });
 
     await session.connect();
     transport.emitMessage('[2,"msg-1","Heartbeat",{}]');
 
     expect(session.state).toBe("online");
-    expect(runtimeLogs).toHaveLength(1);
-    expect(runtimeLogs[0]).toMatchObject({
+    expect(actorLogs).toHaveLength(1);
+    expect(actorLogs[0]).toMatchObject({
       source: "decode",
       raw: '[2,"msg-1","Heartbeat",{}]',
       error: {
@@ -91,17 +91,17 @@ describe("ChargingPointSession", () => {
       codec,
       validator: createValidator(),
     });
-    const runtimeLogs: SessionLogEntry[] = [];
+    const actorLogs: SessionActorLogEntry[] = [];
 
-    session.on("sessionError", (runtimeLog) => {
-      runtimeLogs.push(runtimeLog);
+    session.on("sessionError", (actorLog) => {
+      actorLogs.push(actorLog);
     });
 
     await session.connect();
     transport.emitMessage('[2,"msg-1","Heartbeat",{}]');
 
-    expect(runtimeLogs).toHaveLength(1);
-    expect(runtimeLogs[0]).toMatchObject({
+    expect(actorLogs).toHaveLength(1);
+    expect(actorLogs[0]).toMatchObject({
       source: "decode",
       raw: '[2,"msg-1","Heartbeat",{}]',
       error: {

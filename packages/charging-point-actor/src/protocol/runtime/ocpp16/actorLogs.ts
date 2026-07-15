@@ -1,14 +1,14 @@
 import type { Ocpp16RuntimeContext } from "./state";
 
-type Ocpp16RuntimeLogCategory = "action" | "command";
-type Ocpp16RuntimeLogPhase =
+type Ocpp16ActorLogCategory = "action" | "command";
+type Ocpp16ActorLogPhase =
   | "started"
   | "completed"
   | "rejected"
   | "failed";
 
 type TraceOptions = {
-  category: Ocpp16RuntimeLogCategory;
+  category: Ocpp16ActorLogCategory;
   name: string;
   input?: unknown;
   messageId?: string;
@@ -19,16 +19,16 @@ export function traceOcpp16RuntimeOperation<TResult>(
   options: TraceOptions,
   run: () => Promise<TResult>,
 ): Promise<TResult> {
-  const operationId = context.nextRuntimeLogOperationId();
+  const operationId = context.nextActorLogOperationId();
   const startedAt = context.clock();
-  emitRuntimeLog(context, options, {
+  emitActorLog(context, options, {
     phase: "started",
     operationId,
     input: options.input,
   });
 
   return run().then((result) => {
-    emitRuntimeLog(context, options, {
+    emitActorLog(context, options, {
       phase: classifyResult(result),
       operationId,
       input: options.input,
@@ -37,7 +37,7 @@ export function traceOcpp16RuntimeOperation<TResult>(
     });
     return result;
   }, (cause) => {
-    emitRuntimeLog(context, options, {
+    emitActorLog(context, options, {
       phase: "failed",
       operationId,
       input: options.input,
@@ -59,9 +59,9 @@ export function traceOcpp16RuntimeCommandStarted(
   operationId: string;
   startedAt: Date;
 } {
-  const operationId = context.nextRuntimeLogOperationId();
+  const operationId = context.nextActorLogOperationId();
   const startedAt = context.clock();
-  emitRuntimeLog(context, {
+  emitActorLog(context, {
     category: "command",
     name: input.name,
     messageId: input.messageId,
@@ -83,12 +83,12 @@ export function emitOcpp16RuntimeCommandResult(
     operationId: string;
     startedAt: Date;
     requestPayload: unknown;
-    phase: Exclude<Ocpp16RuntimeLogPhase, "started">;
+    phase: Exclude<Ocpp16ActorLogPhase, "started">;
     responsePayload?: unknown;
     error?: unknown;
   },
 ): void {
-  emitRuntimeLog(context, {
+  emitActorLog(context, {
     category: "command",
     name: input.name,
     messageId: input.messageId,
@@ -102,11 +102,11 @@ export function emitOcpp16RuntimeCommandResult(
   });
 }
 
-function emitRuntimeLog(
+function emitActorLog(
   context: Ocpp16RuntimeContext,
   options: TraceOptions,
   input: {
-    phase: Ocpp16RuntimeLogPhase;
+    phase: Ocpp16ActorLogPhase;
     operationId: string;
     input?: unknown;
     result?: unknown;
@@ -116,7 +116,7 @@ function emitRuntimeLog(
   },
 ): void {
   const code = toCode(options.category, input.phase);
-  context.emitRuntimeLog({
+  context.emitActorLog({
     level: toLevel(input.phase),
     code,
     message: toMessage(options.category, input.phase),
@@ -137,7 +137,7 @@ function emitRuntimeLog(
   });
 }
 
-function classifyResult(result: unknown): Exclude<Ocpp16RuntimeLogPhase, "started"> {
+function classifyResult(result: unknown): Exclude<Ocpp16ActorLogPhase, "started"> {
   const outcome = getResultStatus(result);
   if (outcome === "Rejected" || outcome === "rejected") {
     return "rejected";
@@ -169,20 +169,20 @@ function elapsedMs(startedAt: Date, completedAt: Date): number {
 }
 
 function toCode(
-  category: Ocpp16RuntimeLogCategory,
-  phase: Ocpp16RuntimeLogPhase,
+  category: Ocpp16ActorLogCategory,
+  phase: Ocpp16ActorLogPhase,
 ): string {
   return `OCPP16_${category.toUpperCase()}_${phase.toUpperCase()}`;
 }
 
 function toMessage(
-  category: Ocpp16RuntimeLogCategory,
-  phase: Ocpp16RuntimeLogPhase,
+  category: Ocpp16ActorLogCategory,
+  phase: Ocpp16ActorLogPhase,
 ): string {
   return `OCPP 1.6 ${category} ${phase}`;
 }
 
-function toLevel(phase: Ocpp16RuntimeLogPhase): "info" | "warn" | "error" {
+function toLevel(phase: Ocpp16ActorLogPhase): "info" | "warn" | "error" {
   if (phase === "failed") {
     return "error";
   }

@@ -5,16 +5,16 @@ import type {
 
 import type {
   ChargingPointActor,
-  ChargingPointActorRuntimeLogSink,
+  ChargingPointActorLogSink,
   ChargingPointActorStartResult,
 } from "./chargingPointActor";
 import { ChargingPointEventStreamHub } from "./chargingPointEventStreamHub";
 import type { ChargingPointStreamEvent } from "./chargingPointEventStreamHub";
-import type { ChargingPointRuntimeLogSinkFactory } from "./chargingPointRuntimeLogWriter";
+import type { ActorLogSinkFactory } from "./actorLogWriter";
 import { ChargingPointRuntimeProjection } from "./chargingPointRuntimeProjection";
 
 export type ChargingPointActorHostFactory = (
-  runtimeLogSink?: ChargingPointActorRuntimeLogSink,
+  actorLogSink?: ChargingPointActorLogSink,
 ) => ChargingPointActor;
 
 export type ChargingPointActorHostStartResult =
@@ -27,7 +27,7 @@ export type ChargingPointActorHostStartResult =
 
 export interface ChargingPointActorHostDependencies {
   eventStreamHub?: ChargingPointEventStreamHub;
-  runtimeLogWriter?: ChargingPointRuntimeLogSinkFactory;
+  actorLogWriter?: ActorLogSinkFactory;
   runtimeProjection?: ChargingPointRuntimeProjection;
 }
 
@@ -35,13 +35,13 @@ export class ChargingPointActorHost {
   private readonly actors = new Map<string, ChargingPointActor>();
   private readonly actorUnsubscribers = new Map<string, () => void>();
   private readonly eventStreamHub: ChargingPointEventStreamHub;
-  private readonly runtimeLogWriter?: ChargingPointRuntimeLogSinkFactory;
+  private readonly actorLogWriter?: ActorLogSinkFactory;
   private readonly runtimeProjection: ChargingPointRuntimeProjection;
 
   constructor(dependencies: ChargingPointActorHostDependencies = {}) {
     this.eventStreamHub =
       dependencies.eventStreamHub ?? new ChargingPointEventStreamHub();
-    this.runtimeLogWriter = dependencies.runtimeLogWriter;
+    this.actorLogWriter = dependencies.actorLogWriter;
     this.runtimeProjection =
       dependencies.runtimeProjection ?? new ChargingPointRuntimeProjection();
   }
@@ -63,7 +63,7 @@ export class ChargingPointActorHost {
       return { actor: existing, created: false };
     }
 
-    const actor = factory(this.runtimeLogWriter?.createSink(chargingPointId));
+    const actor = factory(this.actorLogWriter?.createSink(chargingPointId));
     this.actors.set(chargingPointId, actor);
     this.actorUnsubscribers.set(
       chargingPointId,
@@ -157,7 +157,7 @@ export class ChargingPointActorHost {
     try {
       await actor.dispose();
     } catch {
-      // 启停错误优先返回；释放失败由运行日志处理。
+      // 启停错误优先返回；释放失败由 Actor 日志处理。
     }
   }
 }

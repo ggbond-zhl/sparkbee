@@ -3,7 +3,7 @@ import type { Ocpp16RuntimeContext } from "../state";
 import {
   emitOcpp16RuntimeCommandResult,
   traceOcpp16RuntimeCommandStarted,
-} from "../runtimeLogs";
+} from "../actorLogs";
 import { handleChangeAvailability } from "./changeAvailability";
 import { handleChangeConfiguration } from "./changeConfiguration";
 import { handleClearCache } from "./clearCache";

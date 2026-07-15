@@ -2,9 +2,9 @@ export { createChargingPointActor } from "./createChargingPointActor";
 export { ChargingPointActorError, type ChargingPointActorErrorCode } from "./errors";
 export type {
   AuthorizationStatusEvent,
-  ChargingPointActorRuntimeLogLevel,
-  ChargingPointActorRuntimeLogRecord,
-  ChargingPointActorRuntimeLogSink,
+  ChargingPointActorLogLevel,
+  ChargingPointActorLogRecord,
+  ChargingPointActorLogSink,
   ChargingPointStatusEvent,
   ConnectorStatusEvent,
   EVSEStatusEvent,

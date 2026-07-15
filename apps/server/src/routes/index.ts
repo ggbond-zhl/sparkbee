@@ -3,21 +3,21 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import type { ServerDatabase } from "../db";
 import { ChargingPointActorHost } from "../lib/chargingPointActorHost";
 import {
-  ChargingPointRuntimeLogWriter,
-  type ChargingPointRuntimeLogSinkFactory,
-} from "../lib/chargingPointRuntimeLogWriter";
+  ActorLogWriter,
+  type ActorLogSinkFactory,
+} from "../lib/actorLogWriter";
 import type { ChargingPointActorFactory } from "../modules/runtimeOperation/runtimeOperation.service";
 import { createChargingPointRoute } from "../modules/chargingPoint/chargingPoint.route";
 import { createConnectorRoute } from "../modules/connector/connector.route";
 import { createRuntimeOperationRoute } from "../modules/runtimeOperation/runtimeOperation.route";
-import { createRuntimeLogRoute } from "../modules/runtimeLog/runtimeLog.route";
+import { createActorLogRoute } from "../modules/actorLog/actorLog.route";
 import { createHealthRoute } from "./health.route";
 
 export interface RouteDependencies {
   database?: ServerDatabase;
   chargingPointActorHost?: ChargingPointActorHost;
   createChargingPointActor?: ChargingPointActorFactory;
-  runtimeLogWriter?: ChargingPointRuntimeLogSinkFactory;
+  actorLogWriter?: ActorLogSinkFactory;
 }
 
 export function createRoutes(dependencies: RouteDependencies = {}) {
@@ -27,8 +27,8 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
     (dependencies.database === undefined
       ? new ChargingPointActorHost()
       : new ChargingPointActorHost({
-          runtimeLogWriter:
-            dependencies.runtimeLogWriter ?? new ChargingPointRuntimeLogWriter(dependencies.database),
+          actorLogWriter:
+            dependencies.actorLogWriter ?? new ActorLogWriter(dependencies.database),
         }));
 
   routes.route("/", createHealthRoute(dependencies.database));
@@ -47,7 +47,7 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
         createChargingPointActor: dependencies.createChargingPointActor,
       }),
     );
-    routes.route("/charging-points", createRuntimeLogRoute(dependencies.database));
+    routes.route("/charging-points", createActorLogRoute(dependencies.database));
   }
 
   return routes;

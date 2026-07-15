@@ -13,7 +13,7 @@ import type { ErrorReporter } from "./config/errorReporter";
 import type { ServerDatabase } from "./db";
 import { verifyDatabaseConnection } from "./db/connection";
 import type { ChargingPointActorHost } from "./lib/chargingPointActorHost";
-import type { ChargingPointRuntimeLogSinkFactory } from "./lib/chargingPointRuntimeLogWriter";
+import type { ActorLogSinkFactory } from "./lib/actorLogWriter";
 import { createErrorMiddleware } from "./middlewares/error.middleware";
 import { requestLogMiddleware } from "./middlewares/requestLog.middleware";
 import type { ChargingPointActorFactory } from "./modules/runtimeOperation/runtimeOperation.service";
@@ -26,7 +26,7 @@ export interface AppDependencies {
   timeoutMs?: number;
   chargingPointActorHost?: ChargingPointActorHost;
   createChargingPointActor?: ChargingPointActorFactory;
-  runtimeLogWriter?: ChargingPointRuntimeLogSinkFactory;
+  actorLogWriter?: ActorLogSinkFactory;
   logger?: Logger;
   errorReporter?: ErrorReporter;
 }

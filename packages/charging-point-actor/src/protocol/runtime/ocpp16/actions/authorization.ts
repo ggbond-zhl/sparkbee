@@ -6,7 +6,7 @@ import {
   requireAuthorizableConnector,
   requireLocallyAuthorizableConnector,
 } from "../connectorSelection";
-import { traceOcpp16RuntimeOperation } from "../runtimeLogs";
+import { traceOcpp16RuntimeOperation } from "../actorLogs";
 import { emitAuthorizationStatus } from "../events";
 import type { Ocpp16RuntimeContext } from "../state";
 import { getOcpp16TransactionDelivery } from "../Ocpp16TransactionDelivery";

@@ -1,11 +1,11 @@
 import type { ProtocolClock } from "../../protocol/runtime/ocpp16/protocolClock";
 import type {
-  ChargingPointActorRuntimeLogLevel,
-  ChargingPointActorRuntimeLogRecord,
-  ChargingPointActorRuntimeLogSink,
+  ChargingPointActorLogLevel,
+  ChargingPointActorLogRecord,
+  ChargingPointActorLogSink,
 } from "../types";
 
-export class RuntimeLogRecordPublisher {
+export class ActorLogRecordPublisher {
   private sequence = 0;
 
   constructor(
@@ -13,12 +13,12 @@ export class RuntimeLogRecordPublisher {
       chargingPointId: string;
       clock: ProtocolClock;
       idGenerator: () => string;
-      sink?: ChargingPointActorRuntimeLogSink;
+      sink?: ChargingPointActorLogSink;
     },
   ) {}
 
   publish(input: {
-    level: ChargingPointActorRuntimeLogLevel;
+    level: ChargingPointActorLogLevel;
     message: string;
     code?: string;
     context?: Record<string, unknown>;
@@ -28,7 +28,7 @@ export class RuntimeLogRecordPublisher {
     }
 
     this.sequence += 1;
-    const record: ChargingPointActorRuntimeLogRecord = {
+    const record: ChargingPointActorLogRecord = {
       id: this.options.idGenerator(),
       sequence: this.sequence,
       chargingPointId: this.options.chargingPointId,
@@ -45,7 +45,7 @@ export class RuntimeLogRecordPublisher {
         void Promise.resolve(result).catch(() => undefined);
       }
     } catch {
-      // Runtime logs are observers and must not affect charging point execution.
+      // Actor logs are observers and must not affect charging point execution.
     }
   }
 }

@@ -31,9 +31,9 @@ import {
   type RuntimeStopTransactionResponse,
   type UpdateChargingPointRequest,
   type UpdateConnectorRequest,
-  listRuntimeLogsResponseSchema,
-  type ListRuntimeLogsQuery,
-  type ListRuntimeLogsResponse,
+  listActorLogsResponseSchema,
+  type ListActorLogsQuery,
+  type ListActorLogsResponse,
 } from "@spark-bee/contracts";
 
 import { toApiUrl } from "@/lib/apiUrl";
@@ -144,20 +144,20 @@ export async function getChargingPointRuntimeSnapshot(
   return runtimeSnapshotResponseSchema.parse(await response.json());
 }
 
-export async function listRuntimeLogs(
+export async function listActorLogs(
   chargingPointId: string,
-  input: ListRuntimeLogsQuery = { limit: 200 },
-): Promise<ListRuntimeLogsResponse> {
+  input: ListActorLogsQuery = { limit: 200 },
+): Promise<ListActorLogsResponse> {
   const search = new URLSearchParams({ limit: String(input.limit ?? 200) });
   for (const key of ["before", "after", "level", "code", "operationId", "from", "to"] as const) {
     const value = input[key];
     if (value !== undefined) search.set(key, String(value));
   }
   const response = await fetch(toApiUrl(
-    `/api/charging-points/${chargingPointId}/runtime-logs?${search.toString()}`,
+    `/api/charging-points/${chargingPointId}/actor-logs?${search.toString()}`,
   ));
-  if (!response.ok) throw new Error("运行日志加载失败");
-  return listRuntimeLogsResponseSchema.parse(await response.json());
+  if (!response.ok) throw new Error("Actor 日志加载失败");
+  return listActorLogsResponseSchema.parse(await response.json());
 }
 
 async function applyChargingPointRuntimeOperation(

@@ -77,8 +77,8 @@ describe("chargingPoint management API", () => {
     expect(document.paths["/api/charging-points/{id}/events"].get.summary).toBe(
       "订阅桩事件流",
     );
-    expect(document.paths["/api/charging-points/{id}/runtime-logs"].get.summary).toBe(
-      "查询桩实例运行日志",
+    expect(document.paths["/api/charging-points/{id}/actor-logs"].get.summary).toBe(
+      "查询桩实例 Actor 日志",
     );
     expect(document.paths["/api/charging-points/{id}/events"].get.tags).toEqual([
       "ChargingPointEvent",
@@ -1808,7 +1808,7 @@ describe("chargingPoint management API", () => {
     expect(actorCentralSystemUrl).toBe("ws://localhost:9000/ocpp/CP001");
   });
 
-  test("injects a runtime log sink when starting a chargingPoint", async () => {
+  test("injects an actor log sink when starting a chargingPoint", async () => {
     const database = await createTestDatabase();
     let actorOptions: ChargingPointActorOptions | undefined;
     const app = createApp({
@@ -1845,8 +1845,8 @@ describe("chargingPoint management API", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(actorOptions?.runtimeLogSink).toBeDefined();
-    expect(typeof actorOptions?.runtimeLogSink?.write).toBe("function");
+    expect(actorOptions?.actorLogSink).toBeDefined();
+    expect(typeof actorOptions?.actorLogSink?.write).toBe("function");
   });
 
   test("maps Boot Pending to starting status", async () => {

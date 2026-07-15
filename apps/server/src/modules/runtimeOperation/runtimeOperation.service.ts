@@ -20,7 +20,7 @@ import {
   type ChargingPointActorAuthorizeResult,
   type ChargingPointActorConnectorActionResult,
   type ChargingPointActorOptions,
-  type ChargingPointActorRuntimeLogSink,
+  type ChargingPointActorLogSink,
   type ChargingPointActorStartResult,
   type ChargingPointActorStopTransactionResult,
   type ChargingPointActorTransactionStartResult,
@@ -77,8 +77,8 @@ export class RuntimeOperationService {
 
     let entry: ChargingPointActorHostStartResult;
     try {
-      entry = await this.actorHost.start(id, (runtimeLogSink) =>
-        this.actorFactory(this.toActorOptions(chargingPoint, runtimeLogSink)),
+      entry = await this.actorHost.start(id, (actorLogSink) =>
+        this.actorFactory(this.toActorOptions(chargingPoint, actorLogSink)),
       );
     } catch (error) {
       throw this.mapStartError(error);
@@ -508,15 +508,15 @@ export class RuntimeOperationService {
 
   private toActorOptions(
     chargingPoint: ChargingPointDetailResponse,
-    runtimeLogSink?: ChargingPointActorRuntimeLogSink,
+    actorLogSink?: ChargingPointActorLogSink,
   ): ChargingPointActorOptions {
     const options = toChargingPointActorOptions(chargingPoint);
 
-    return runtimeLogSink === undefined
+    return actorLogSink === undefined
       ? options
       : {
           ...options,
-          runtimeLogSink,
+          actorLogSink,
         };
   }
 

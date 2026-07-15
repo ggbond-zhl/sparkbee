@@ -2,17 +2,17 @@ import { describe, expect, test } from "vitest";
 
 import {
   ALL_RUNTIME_LOG_TYPE_FILTER,
-  buildRuntimeLogTypeFilterOptions,
-  filterRuntimeLogEntries,
-  getRuntimeLogEmptyText,
-} from "../../src/features/charging-points/model/chargingPointRuntimeLogFilters";
+  buildObservationTypeFilterOptions,
+  filterObservationEntries,
+  getObservationEmptyText,
+} from "../../src/features/charging-points/model/chargingPointObservationFilters";
 
 interface TestLogEntry {
   occurredAt: string;
   type: string;
 }
 
-describe("charging point runtime log filters", () => {
+describe("charging point observation filters", () => {
   test("builds sorted type options with all types first", () => {
     const entries: TestLogEntry[] = [
       { occurredAt: "2026-07-09T10:00:00.000Z", type: "StatusNotification" },
@@ -21,7 +21,7 @@ describe("charging point runtime log filters", () => {
       { occurredAt: "2026-07-09T10:00:03.000Z", type: "Authorize" },
     ];
 
-    expect(buildRuntimeLogTypeFilterOptions(entries, (entry) => entry.type)).toEqual([
+    expect(buildObservationTypeFilterOptions(entries, (entry) => entry.type)).toEqual([
       { value: ALL_RUNTIME_LOG_TYPE_FILTER, label: "全部类型" },
       { value: "Authorize", label: "Authorize" },
       { value: "Heartbeat", label: "Heartbeat" },
@@ -39,7 +39,7 @@ describe("charging point runtime log filters", () => {
     ];
 
     expect(
-      filterRuntimeLogEntries(entries, {
+      filterObservationEntries(entries, {
         getType: (entry) => entry.type,
         nowMs,
         timeFilter: "5m",
@@ -53,14 +53,14 @@ describe("charging point runtime log filters", () => {
 
   test("uses distinct empty text for empty feeds and empty filter results", () => {
     expect(
-      getRuntimeLogEmptyText({
+      getObservationEmptyText({
         emptyText: "暂无报文",
         entriesCount: 0,
         filteredEmptyText: "没有匹配筛选条件的报文",
       }),
     ).toBe("暂无报文");
     expect(
-      getRuntimeLogEmptyText({
+      getObservationEmptyText({
         emptyText: "暂无报文",
         entriesCount: 3,
         filteredEmptyText: "没有匹配筛选条件的报文",

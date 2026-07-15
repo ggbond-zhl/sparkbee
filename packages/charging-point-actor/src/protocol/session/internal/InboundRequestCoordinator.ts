@@ -1,5 +1,5 @@
 import type { IValidator, RequestMessage } from "../../types";
-import type { InboundRequest, SessionLogEntry } from "../types";
+import type { InboundRequest, SessionActorLogEntry } from "../types";
 import { SessionError } from "../types";
 import {
   InboundRequestRegistry,
@@ -13,7 +13,7 @@ type InboundRequestCoordinatorOptions = {
   inboundResponseTimeoutMs: number;
   messageSender: ProtocolMessageSender;
   emitInboundRequest(request: InboundRequest): void;
-  emitSessionLog(runtimeLog: SessionLogEntry): void;
+  emitSessionActorLog(actorLog: SessionActorLogEntry): void;
 };
 
 type InboundReplyContext = {
@@ -122,7 +122,7 @@ export class InboundRequestCoordinator {
         errorDetails,
       );
     } catch (cause) {
-      this.options.emitSessionLog(
+      this.options.emitSessionActorLog(
         this.createReplyFailureLog(replyContext, cause),
       );
     }
@@ -209,7 +209,7 @@ export class InboundRequestCoordinator {
   private createReplyFailureLog(
     replyContext: InboundReplyContext,
     cause: unknown,
-  ): SessionLogEntry {
+  ): SessionActorLogEntry {
     return {
       source: "inbound_request",
       action: replyContext.action,

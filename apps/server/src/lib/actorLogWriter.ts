@@ -1,23 +1,23 @@
 import type {
-  ChargingPointActorRuntimeLogRecord,
-  ChargingPointActorRuntimeLogSink,
+  ChargingPointActorLogRecord,
+  ChargingPointActorLogSink,
 } from "./chargingPointActor";
-import type { RuntimeLog } from "@spark-bee/contracts";
+import type { ActorLog } from "@spark-bee/contracts";
 import pino from "pino";
 import type { Logger } from "pino";
 
 import { noopErrorReporter } from "../config/errorReporter";
 import type { ErrorReporter } from "../config/errorReporter";
 import type { ServerDatabase } from "../db";
-import { RuntimeLogRepository } from "../modules/runtimeLog/runtimeLog.repo";
+import { ActorLogRepository } from "../modules/actorLog/actorLog.repo";
 
-export interface ChargingPointRuntimeLogSinkFactory {
-  createSink(chargingPointId: string): ChargingPointActorRuntimeLogSink;
+export interface ActorLogSinkFactory {
+  createSink(chargingPointId: string): ChargingPointActorLogSink;
 }
 
-export class ChargingPointRuntimeLogWriter implements ChargingPointRuntimeLogSinkFactory {
-  private readonly repository: RuntimeLogRepository;
-  private readonly pending: RuntimeLog[] = [];
+export class ActorLogWriter implements ActorLogSinkFactory {
+  private readonly repository: ActorLogRepository;
+  private readonly pending: ActorLog[] = [];
   private timer?: NodeJS.Timeout;
   private flushing?: Promise<void>;
   private readonly logger: Logger;
@@ -32,12 +32,12 @@ export class ChargingPointRuntimeLogWriter implements ChargingPointRuntimeLogSin
       errorReporter?: ErrorReporter;
     } = {},
   ) {
-    this.repository = new RuntimeLogRepository(database);
+    this.repository = new ActorLogRepository(database);
     this.logger = options.logger ?? pino({ level: "silent" });
     this.errorReporter = options.errorReporter ?? noopErrorReporter;
   }
 
-  createSink(chargingPointId: string): ChargingPointActorRuntimeLogSink {
+  createSink(chargingPointId: string): ChargingPointActorLogSink {
     return {
       write: (record) => {
         if (record.chargingPointId !== chargingPointId) return;
@@ -56,8 +56,8 @@ export class ChargingPointRuntimeLogWriter implements ChargingPointRuntimeLogSin
     await this.flushing;
   }
 
-  private enqueue(record: ChargingPointActorRuntimeLogRecord): void {
-    this.pending.push(toRuntimeLog(record));
+  private enqueue(record: ChargingPointActorLogRecord): void {
+    this.pending.push(toActorLog(record));
     if (this.pending.length >= (this.options.batchSize ?? 100)) {
       void this.flush();
       return;
@@ -68,26 +68,26 @@ export class ChargingPointRuntimeLogWriter implements ChargingPointRuntimeLogSin
     }
   }
 
-  private async persist(batch: RuntimeLog[]): Promise<void> {
+  private async persist(batch: ActorLog[]): Promise<void> {
     try {
       await this.repository.insertMany(batch);
     } catch {
       try {
         await this.repository.insertMany(batch);
       } catch (error) {
-        const context = { module: "runtimeLogWriter", batchSize: batch.length };
+        const context = { module: "actorLogWriter", batchSize: batch.length };
         this.logger.error({
-          event: "runtime-log.persist.failed",
+          event: "actor-log.persist.failed",
           batchSize: batch.length,
           error,
-        }, "写入运行日志失败");
+        }, "写入 Actor 日志失败");
         this.errorReporter.captureException(error, context);
       }
     }
   }
 }
 
-function toRuntimeLog(record: ChargingPointActorRuntimeLogRecord): RuntimeLog {
+function toActorLog(record: ChargingPointActorLogRecord): ActorLog {
   return {
     id: record.id,
     sequence: record.sequence,

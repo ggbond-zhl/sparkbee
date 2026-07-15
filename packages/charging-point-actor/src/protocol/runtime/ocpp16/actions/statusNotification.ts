@@ -12,7 +12,7 @@ import {
 } from "../events";
 import { getUnexpectedResponseFields, toRequestErrorInfo } from "../requestErrors";
 import type { Ocpp16RuntimeContext } from "../state";
-import { traceOcpp16RuntimeOperation } from "../runtimeLogs";
+import { traceOcpp16RuntimeOperation } from "../actorLogs";
 import type {
   Ocpp16ConnectorStatus,
   Ocpp16ReportConnectorStatusInput,

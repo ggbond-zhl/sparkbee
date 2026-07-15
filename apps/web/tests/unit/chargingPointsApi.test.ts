@@ -8,7 +8,7 @@ import {
   getChargingPointRuntimeStatus,
   listConnectors,
   listChargingPoints,
-  listRuntimeLogs,
+  listActorLogs,
   plugConnector,
   authorizeAndStartConnectorTransaction,
   startConnectorTransaction,
@@ -236,7 +236,7 @@ describe("chargingPoints API client", () => {
     );
   });
 
-  test("queries persisted runtime logs with diagnostic filters", async () => {
+  test("queries persisted actor logs with diagnostic filters", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       items: [],
       previousCursor: null,
@@ -244,7 +244,7 @@ describe("chargingPoints API client", () => {
     }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await listRuntimeLogs("00000000-0000-4000-8000-000000000001", {
+    await listActorLogs("00000000-0000-4000-8000-000000000001", {
       limit: 50,
       before: "cursor-1",
       level: "error",
@@ -253,7 +253,7 @@ describe("chargingPoints API client", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/charging-points/00000000-0000-4000-8000-000000000001/runtime-logs?limit=50&before=cursor-1&level=error&code=OCPP_ACTION_FAILED&operationId=operation-1",
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/actor-logs?limit=50&before=cursor-1&level=error&code=OCPP_ACTION_FAILED&operationId=operation-1",
     );
   });
 

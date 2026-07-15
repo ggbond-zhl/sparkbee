@@ -104,13 +104,13 @@ import type {
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
 import {
   ALL_RUNTIME_LOG_TYPE_FILTER,
-  RUNTIME_LOG_TIME_FILTER_OPTIONS,
-  buildRuntimeLogTypeFilterOptions,
-  filterRuntimeLogEntries,
-  getRuntimeLogEmptyText,
-  type RuntimeLogTimeFilter,
-  type RuntimeLogTypeFilterOption,
-} from "@/features/charging-points/model/chargingPointRuntimeLogFilters";
+  OBSERVATION_TIME_FILTER_OPTIONS,
+  buildObservationTypeFilterOptions,
+  filterObservationEntries,
+  getObservationEmptyText,
+  type ObservationTimeFilter,
+  type ObservationTypeFilterOption,
+} from "@/features/charging-points/model/chargingPointObservationFilters";
 import { useChargingPointWorkbench } from "@/features/charging-points/model/useChargingPointWorkbench";
 import { ChargingPointConnectorEditDialog } from "@/features/charging-points/ui/ChargingPointConnectorEditDialog";
 import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingPointEditDialog";
@@ -699,9 +699,9 @@ function RuntimeObservationTabs({
   const [activeObservationTab, setActiveObservationTab] =
     useState<RuntimeObservationTab>("messages");
   const [messageTimeFilter, setMessageTimeFilter] =
-    useState<RuntimeLogTimeFilter>("all");
+    useState<ObservationTimeFilter>("all");
   const [eventTimeFilter, setEventTimeFilter] =
-    useState<RuntimeLogTimeFilter>("all");
+    useState<ObservationTimeFilter>("all");
   const [messageTypeFilter, setMessageTypeFilter] = useState(
     ALL_RUNTIME_LOG_TYPE_FILTER,
   );
@@ -710,12 +710,12 @@ function RuntimeObservationTabs({
   );
   const [messagesPinned, setMessagesPinned] = useState(false);
   const [eventsPinned, setEventsPinned] = useState(false);
-  const messagesListHandleRef = useRef<RuntimeLogListHandle | null>(null);
-  const eventsListHandleRef = useRef<RuntimeLogListHandle | null>(null);
+  const messagesListHandleRef = useRef<ObservationListHandle | null>(null);
+  const eventsListHandleRef = useRef<ObservationListHandle | null>(null);
   const filterNowMs = Date.now();
   const messageTypeOptions = useMemo(
     () =>
-      buildRuntimeLogTypeFilterOptions(
+      buildObservationTypeFilterOptions(
         protocolMessages,
         (message) => message.action,
       ),
@@ -723,7 +723,7 @@ function RuntimeObservationTabs({
   );
   const eventTypeOptions = useMemo(
     () =>
-      buildRuntimeLogTypeFilterOptions(
+      buildObservationTypeFilterOptions(
         events,
         (event) => event.eventType,
       ),
@@ -731,7 +731,7 @@ function RuntimeObservationTabs({
   );
   const filteredProtocolMessages = useMemo(
     () =>
-      filterRuntimeLogEntries(protocolMessages, {
+      filterObservationEntries(protocolMessages, {
         getType: (message) => message.action,
         nowMs: filterNowMs,
         timeFilter: messageTimeFilter,
@@ -741,7 +741,7 @@ function RuntimeObservationTabs({
   );
   const filteredEvents = useMemo(
     () =>
-      filterRuntimeLogEntries(events, {
+      filterObservationEntries(events, {
         getType: (event) => event.eventType,
         nowMs: filterNowMs,
         timeFilter: eventTimeFilter,
@@ -762,7 +762,7 @@ function RuntimeObservationTabs({
   const activeTypeOptions =
     activeObservationTab === "messages" ? messageTypeOptions : eventTypeOptions;
 
-  function handleActiveTimeFilterChange(timeFilter: RuntimeLogTimeFilter) {
+  function handleActiveTimeFilterChange(timeFilter: ObservationTimeFilter) {
     activeListHandleRef.current?.resetToTop();
     if (activeObservationTab === "messages") {
       setMessagesPinned(false);
@@ -812,7 +812,7 @@ function RuntimeObservationTabs({
           />
         </div>
         <TabsContent className="mt-3" value="messages">
-          <ProtocolMessageLogList
+          <ProtocolMessageList
             entries={filteredProtocolMessages}
             entriesCount={protocolMessages.length}
             listHandleRef={messagesListHandleRef}
@@ -821,7 +821,7 @@ function RuntimeObservationTabs({
           />
         </TabsContent>
         <TabsContent className="mt-3" value="events">
-          <RuntimeEventLogList
+          <ProtocolEventList
             entries={filteredEvents}
             entriesCount={events.length}
             listHandleRef={eventsListHandleRef}
@@ -848,11 +848,11 @@ function RuntimeObservationToolbar({
 }: {
   disabled: boolean;
   pinned: boolean;
-  timeFilter: RuntimeLogTimeFilter;
+  timeFilter: ObservationTimeFilter;
   typeFilter: string;
-  typeOptions: RuntimeLogTypeFilterOption[];
+  typeOptions: ObservationTypeFilterOption[];
   onPinnedToggle(): void;
-  onTimeFilterChange(timeFilter: RuntimeLogTimeFilter): void;
+  onTimeFilterChange(timeFilter: ObservationTimeFilter): void;
   onTypeFilterChange(typeFilter: string): void;
 }) {
   return (
@@ -861,14 +861,14 @@ function RuntimeObservationToolbar({
         disabled={disabled}
         value={timeFilter}
         onValueChange={(value) =>
-          onTimeFilterChange(value as RuntimeLogTimeFilter)}
+          onTimeFilterChange(value as ObservationTimeFilter)}
       >
         <SelectTrigger aria-label="时间筛选" size="sm">
           <SelectValue placeholder="时间筛选" />
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            {RUNTIME_LOG_TIME_FILTER_OPTIONS.map((option) => (
+            {OBSERVATION_TIME_FILTER_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>
@@ -949,7 +949,7 @@ function ConnectorEditButton({
   );
 }
 
-function RuntimeEventLogList({
+function ProtocolEventList({
   entries,
   entriesCount,
   listHandleRef,
@@ -958,14 +958,14 @@ function RuntimeEventLogList({
 }: {
   entries: RuntimeEventLogEntry[];
   entriesCount: number;
-  listHandleRef: Ref<RuntimeLogListHandle>;
+  listHandleRef: Ref<ObservationListHandle>;
   pinned: boolean;
   onPinnedChange(pinned: boolean): void;
 }) {
   return (
-    <VirtualRuntimeLogList
+    <VirtualObservationList
       entries={entries}
-      emptyText={getRuntimeLogEmptyText({
+      emptyText={getObservationEmptyText({
         emptyText: "暂无事件",
         entriesCount,
         filteredEmptyText: "没有匹配筛选条件的事件",
@@ -973,12 +973,12 @@ function RuntimeEventLogList({
       listHandleRef={listHandleRef}
       pinned={pinned}
       onPinnedChange={onPinnedChange}
-      renderRow={(entry) => <RuntimeEventLogRow entry={entry} />}
+      renderRow={(entry) => <ProtocolEventRow entry={entry} />}
     />
   );
 }
 
-function ProtocolMessageLogList({
+function ProtocolMessageList({
   entries,
   entriesCount,
   listHandleRef,
@@ -987,14 +987,14 @@ function ProtocolMessageLogList({
 }: {
   entries: ProtocolMessageLogEntry[];
   entriesCount: number;
-  listHandleRef: Ref<RuntimeLogListHandle>;
+  listHandleRef: Ref<ObservationListHandle>;
   pinned: boolean;
   onPinnedChange(pinned: boolean): void;
 }) {
   return (
-    <VirtualRuntimeLogList
+    <VirtualObservationList
       entries={entries}
-      emptyText={getRuntimeLogEmptyText({
+      emptyText={getObservationEmptyText({
         emptyText: "暂无报文",
         entriesCount,
         filteredEmptyText: "没有匹配筛选条件的报文",
@@ -1002,29 +1002,29 @@ function ProtocolMessageLogList({
       listHandleRef={listHandleRef}
       pinned={pinned}
       onPinnedChange={onPinnedChange}
-      renderRow={(entry) => <ProtocolMessageLogRow entry={entry} />}
+      renderRow={(entry) => <ProtocolMessageRow entry={entry} />}
     />
   );
 }
 
-interface RuntimeLogListEntry {
+interface ObservationListEntry {
   id: string;
 }
 
-interface RuntimeLogScrollAnchor {
+interface ObservationScrollAnchor {
   id: string;
   offset: number;
   scrollTop: number;
 }
 
-interface RuntimeLogListHandle {
+interface ObservationListHandle {
   resetToTop(): void;
   togglePinned(): void;
 }
 
 const RUNTIME_LOG_TOP_THRESHOLD = 8;
 
-function VirtualRuntimeLogList<TEntry extends RuntimeLogListEntry>({
+function VirtualObservationList<TEntry extends ObservationListEntry>({
   entries,
   emptyText,
   listHandleRef,
@@ -1034,13 +1034,13 @@ function VirtualRuntimeLogList<TEntry extends RuntimeLogListEntry>({
 }: {
   entries: TEntry[];
   emptyText: string;
-  listHandleRef: Ref<RuntimeLogListHandle>;
+  listHandleRef: Ref<ObservationListHandle>;
   pinned: boolean;
   onPinnedChange(pinned: boolean): void;
   renderRow(entry: TEntry): ReactNode;
 }) {
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
-  const anchorRef = useRef<RuntimeLogScrollAnchor | null>(null);
+  const anchorRef = useRef<ObservationScrollAnchor | null>(null);
   const previousEntriesRef = useRef(entries);
   const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: entries.length,
@@ -1136,7 +1136,7 @@ function VirtualRuntimeLogList<TEntry extends RuntimeLogListEntry>({
         onScroll={updateAnchor}
       >
         {entries.length === 0 ? (
-          <RuntimeLogEmptyState text={emptyText} />
+          <ObservationEmptyState text={emptyText} />
         ) : (
           <div
             className="relative w-full"
@@ -1169,7 +1169,7 @@ function VirtualRuntimeLogList<TEntry extends RuntimeLogListEntry>({
   );
 }
 
-function RuntimeEventLogRow({ entry }: { entry: RuntimeEventLogEntry }) {
+function ProtocolEventRow({ entry }: { entry: RuntimeEventLogEntry }) {
   return (
     <details className="group border-b border-border/40">
       <summary className="grid cursor-pointer grid-cols-[5.5rem_minmax(8rem,0.9fr)_minmax(6rem,0.7fr)_minmax(8rem,1fr)_minmax(0,1.4fr)] gap-3 px-3 py-2 text-sm hover:bg-muted/40">
@@ -1182,15 +1182,15 @@ function RuntimeEventLogRow({ entry }: { entry: RuntimeEventLogEntry }) {
         <span className="truncate text-muted-foreground">{entry.resource}</span>
         <span className="truncate font-medium">{entry.summary}</span>
         <span className="truncate font-mono text-xs text-muted-foreground group-open:hidden">
-          {formatRuntimeLogPreview(entry.detail)}
+          {formatObservationPreview(entry.detail)}
         </span>
       </summary>
-      <RuntimeLogJsonBlock value={entry.detail} />
+      <ObservationJsonBlock value={entry.detail} />
     </details>
   );
 }
 
-function ProtocolMessageLogRow({ entry }: { entry: ProtocolMessageLogEntry }) {
+function ProtocolMessageRow({ entry }: { entry: ProtocolMessageLogEntry }) {
   return (
     <details className="group border-b border-border/40">
       <summary className="grid cursor-pointer grid-cols-[5.5rem_4rem_minmax(8rem,0.8fr)_minmax(8rem,1fr)_minmax(0,1.6fr)] gap-3 px-3 py-2 text-sm hover:bg-muted/40">
@@ -1203,10 +1203,10 @@ function ProtocolMessageLogRow({ entry }: { entry: ProtocolMessageLogEntry }) {
           {entry.messageId}
         </span>
         <span className="truncate font-mono text-xs text-muted-foreground group-open:hidden">
-          {formatRuntimeLogPreview(entry.detail)}
+          {formatObservationPreview(entry.detail)}
         </span>
       </summary>
-      <RuntimeLogJsonBlock value={entry.detail} />
+      <ObservationJsonBlock value={entry.detail} />
     </details>
   );
 }
@@ -1234,7 +1234,7 @@ function ProtocolDirectionBadge({
   );
 }
 
-function RuntimeLogJsonBlock({ value }: { value: unknown }) {
+function ObservationJsonBlock({ value }: { value: unknown }) {
   return (
     <pre className="max-h-80 overflow-auto border-t border-border/40 bg-muted/30 p-3 font-mono text-xs leading-relaxed">
       {JSON.stringify(value, null, 2)}
@@ -1242,12 +1242,12 @@ function RuntimeLogJsonBlock({ value }: { value: unknown }) {
   );
 }
 
-function formatRuntimeLogPreview(value: unknown) {
+function formatObservationPreview(value: unknown) {
   const preview = JSON.stringify(value);
   return preview ?? String(value);
 }
 
-function RuntimeLogEmptyState({ text }: { text: string }) {
+function ObservationEmptyState({ text }: { text: string }) {
   return (
     <div className="rounded-lg border border-dashed border-border/60 px-3 py-8 text-center text-sm text-muted-foreground">
       {text}

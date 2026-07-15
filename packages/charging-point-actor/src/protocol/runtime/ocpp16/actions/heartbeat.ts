@@ -3,7 +3,7 @@ import { cloneDate, cloneNullableDate } from "../../../../shared/utils";
 import { toRequestErrorInfo } from "../requestErrors";
 import { parseHeartbeatCurrentTime } from "../responseParsers";
 import { requireRegisteredChargingPoint } from "../connectorSelection";
-import { traceOcpp16RuntimeOperation } from "../runtimeLogs";
+import { traceOcpp16RuntimeOperation } from "../actorLogs";
 import type { Ocpp16RuntimeContext } from "../state";
 import type {
   Ocpp16HeartbeatLoopOptions,

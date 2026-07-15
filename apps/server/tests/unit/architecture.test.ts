@@ -62,10 +62,10 @@ describe("server architecture", () => {
       .sort();
 
     expect(libFiles).toEqual([
+      "actorLogWriter.ts",
       "chargingPointActor.ts",
       "chargingPointActorHost.ts",
       "chargingPointEventStreamHub.ts",
-      "chargingPointRuntimeLogWriter.ts",
       "chargingPointRuntimeProjection.ts",
     ]);
   });

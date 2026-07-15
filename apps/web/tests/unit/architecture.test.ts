@@ -39,8 +39,8 @@ describe("web architecture", () => {
     expect(detailPageSource).not.toContain("api/chargingPoints");
     expect(detailPageSource).not.toContain("chargingPointQueries");
     expect(detailPageSource).not.toContain("useChargingPointRuntimeEvents");
-    expect(detailPageSource).not.toContain('value="runtime-logs"');
-    expect(detailPageSource).not.toContain("usePersistedRuntimeLogs");
+    expect(detailPageSource).not.toContain('value="actor-logs"');
+    expect(detailPageSource).not.toContain("usePersistedActorLogs");
     expect(workbenchSource).toContain("useQuery");
     expect(workbenchSource).toContain("useMutation");
     expect(workbenchSource).toContain("useChargingPointRuntimeEvents");
@@ -349,11 +349,11 @@ describe("web architecture", () => {
     expect(detailPageSource).not.toContain(">运行状态</span>");
     expect(detailPageSource).toContain("@tanstack/react-virtual");
     expect(detailPageSource).toContain("useVirtualizer");
-    expect(detailPageSource).toContain("VirtualRuntimeLogList");
+    expect(detailPageSource).toContain("VirtualObservationList");
     expect(detailPageSource).toContain("RuntimeObservationToolbar");
-    expect(detailPageSource).toContain("RUNTIME_LOG_TIME_FILTER_OPTIONS");
-    expect(detailPageSource).toContain("filterRuntimeLogEntries");
-    expect(detailPageSource).toContain("buildRuntimeLogTypeFilterOptions");
+    expect(detailPageSource).toContain("OBSERVATION_TIME_FILTER_OPTIONS");
+    expect(detailPageSource).toContain("filterObservationEntries");
+    expect(detailPageSource).toContain("buildObservationTypeFilterOptions");
     expect(detailPageSource).toContain("报文 {filteredProtocolMessages.length}");
     expect(detailPageSource).toContain("事件 {filteredEvents.length}");
     expect(detailPageSource).not.toContain("显示 {filteredCount}");
@@ -424,8 +424,8 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain(
       "grid-cols-[5.5rem_minmax(8rem,0.9fr)_minmax(6rem,0.7fr)_minmax(8rem,1fr)_minmax(0,1.4fr)]",
     );
-    expect(detailPageSource).toContain("formatRuntimeLogPreview(entry.detail)");
-    expect(detailPageSource.match(/formatRuntimeLogPreview\(entry.detail\)/g)?.length).toBe(2);
+    expect(detailPageSource).toContain("formatObservationPreview(entry.detail)");
+    expect(detailPageSource.match(/formatObservationPreview\(entry.detail\)/g)?.length).toBe(2);
     expect(detailPageSource).toContain("group-open:hidden");
     expect(detailPageSource).toContain("启动充电");
     expect(detailPageSource).toContain('const [idTag, setIdTag] = useState("");');

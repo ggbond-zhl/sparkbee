@@ -1,23 +1,23 @@
 import { Writable } from "node:stream";
 
 import { describe, expect, test, vi } from "vitest";
-import { listRuntimeLogsResponseSchema } from "@spark-bee/contracts";
+import { listActorLogsResponseSchema } from "@spark-bee/contracts";
 
 import { createApp } from "../../src/app";
 import { createServerLogger } from "../../src/config/logger";
-import { ChargingPointRuntimeLogWriter } from "../../src/lib/chargingPointRuntimeLogWriter";
-import { RuntimeLogRetentionScheduler } from "../../src/modules/runtimeLog/runtimeLogRetentionScheduler";
+import { ActorLogWriter } from "../../src/lib/actorLogWriter";
+import { ActorLogRetentionScheduler } from "../../src/modules/actorLog/actorLogRetentionScheduler";
 import { createTestDatabase } from "../support/testDatabase";
 
-describe("运行日志持久化", () => {
-  test("完整保留运行日志上下文并通过后端 API 查询", async () => {
+describe("Actor 日志持久化", () => {
+  test("完整保留 Actor 日志上下文并通过后端 API 查询", async () => {
     const database = await createTestDatabase();
     const app = createApp({ database });
     const chargingPoint = await createChargingPoint(app);
-    const writer = new ChargingPointRuntimeLogWriter(database, { batchSize: 1 });
+    const writer = new ActorLogWriter(database, { batchSize: 1 });
 
     writer.createSink(chargingPoint.id).write({
-      id: "runtime-log-1",
+      id: "actor-log-1",
       sequence: 1,
       chargingPointId: chargingPoint.id,
       occurredAt: "2026-07-12T00:00:00.000Z",
@@ -35,13 +35,13 @@ describe("运行日志持久化", () => {
     await writer.flush();
 
     const response = await app.request(
-      `/api/charging-points/${chargingPoint.id}/runtime-logs?operationId=operation-1`,
+      `/api/charging-points/${chargingPoint.id}/actor-logs?operationId=operation-1`,
     );
     expect(response.status).toBe(200);
-    const result = listRuntimeLogsResponseSchema.parse(await response.json());
+    const result = listActorLogsResponseSchema.parse(await response.json());
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({
-      id: "runtime-log-1",
+      id: "actor-log-1",
       code: "OCPP_ACTION_FAILED",
       context: {
         operationId: "operation-1",
@@ -57,32 +57,32 @@ describe("运行日志持久化", () => {
     const database = await createTestDatabase();
     const app = createApp({ database });
     const chargingPoint = await createChargingPoint(app);
-    const writer = new ChargingPointRuntimeLogWriter(database, { batchSize: 10 });
+    const writer = new ActorLogWriter(database, { batchSize: 10 });
     const sink = writer.createSink(chargingPoint.id);
     sink.write(createLog(chargingPoint.id, "old", "2026-07-01T00:00:00.000Z"));
     sink.write(createLog(chargingPoint.id, "recent", "2026-07-10T00:00:00.000Z"));
     await writer.flush();
 
-    const scheduler = new RuntimeLogRetentionScheduler(database, {
+    const scheduler = new ActorLogRetentionScheduler(database, {
       now: () => new Date("2026-07-12T00:00:00.000Z"),
       batchSize: 1,
     });
     expect(await scheduler.cleanup()).toBe(1);
-    let result = listRuntimeLogsResponseSchema.parse(await (
-      await app.request(`/api/charging-points/${chargingPoint.id}/runtime-logs`)
+    let result = listActorLogsResponseSchema.parse(await (
+      await app.request(`/api/charging-points/${chargingPoint.id}/actor-logs`)
     ).json());
     expect(result.items.map((item) => item.id)).toEqual(["recent"]);
 
     expect((await app.request(`/api/charging-points/${chargingPoint.id}`, {
       method: "DELETE",
     })).status).toBe(204);
-    result = listRuntimeLogsResponseSchema.parse(await (
-      await app.request(`/api/charging-points/${chargingPoint.id}/runtime-logs`)
+    result = listActorLogsResponseSchema.parse(await (
+      await app.request(`/api/charging-points/${chargingPoint.id}/actor-logs`)
     ).json());
     expect(result.items).toEqual([]);
   });
 
-  test("数据库持续失败时记录并上报运行日志写入故障", async () => {
+  test("数据库持续失败时记录并上报 Actor 日志写入故障", async () => {
     const failure = new Error("database unavailable");
     const insert = vi.fn(() => ({
       values: () => ({
@@ -91,8 +91,13 @@ describe("运行日志持久化", () => {
     }));
     const lines: string[] = [];
     const captured: Array<{ error: unknown; context: Record<string, unknown> }> = [];
-    const writer = new ChargingPointRuntimeLogWriter(
-      { insert } as never,
+    const writer = new ActorLogWriter(
+      {
+        execute: () => ({
+          rows: [{ actor_logs: "actor_logs", runtime_logs: null }],
+        }),
+        insert,
+      } as never,
       {
         batchSize: 1,
         logger: createServerLogger({
@@ -123,10 +128,10 @@ describe("运行日志持久化", () => {
     expect(insert).toHaveBeenCalledTimes(2);
     expect(captured).toEqual([{
       error: failure,
-      context: { module: "runtimeLogWriter", batchSize: 1 },
+      context: { module: "actorLogWriter", batchSize: 1 },
     }]);
     expect(JSON.parse(lines.join(""))).toMatchObject({
-      event: "runtime-log.persist.failed",
+      event: "actor-log.persist.failed",
       batchSize: 1,
       error: { message: "database unavailable" },
     });
@@ -136,7 +141,7 @@ describe("运行日志持久化", () => {
     const failure = new Error("cleanup unavailable");
     const lines: string[] = [];
     const captured: Array<{ error: unknown; context: Record<string, unknown> }> = [];
-    const scheduler = new RuntimeLogRetentionScheduler(
+    const scheduler = new ActorLogRetentionScheduler(
       { execute: () => Promise.reject(failure) } as never,
       {
         intervalMs: 60_000,
@@ -164,10 +169,10 @@ describe("运行日志持久化", () => {
 
     expect(captured).toEqual([{
       error: failure,
-      context: { module: "runtimeLogRetention" },
+      context: { module: "actorLogRetention" },
     }]);
     expect(JSON.parse(lines.join(""))).toMatchObject({
-      event: "runtime-log.retention.failed",
+      event: "actor-log.retention.failed",
       error: { message: "cleanup unavailable" },
     });
   });

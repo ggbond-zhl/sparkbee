@@ -4,13 +4,13 @@ import type { Logger } from "pino";
 import { noopErrorReporter } from "../../config/errorReporter";
 import type { ErrorReporter } from "../../config/errorReporter";
 import type { ServerDatabase } from "../../db";
-import { RuntimeLogRepository } from "./runtimeLog.repo";
+import { ActorLogRepository } from "./actorLog.repo";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const RETENTION_MS = 7 * DAY_MS;
 
-export class RuntimeLogRetentionScheduler {
-  private readonly repository: RuntimeLogRepository;
+export class ActorLogRetentionScheduler {
+  private readonly repository: ActorLogRepository;
   private timer?: NodeJS.Timeout;
   private stopped = false;
   private readonly logger: Logger;
@@ -26,7 +26,7 @@ export class RuntimeLogRetentionScheduler {
       errorReporter?: ErrorReporter;
     } = {},
   ) {
-    this.repository = new RuntimeLogRepository(database);
+    this.repository = new ActorLogRepository(database);
     this.logger = options.logger ?? pino({ level: "silent" });
     this.errorReporter = options.errorReporter ?? noopErrorReporter;
   }
@@ -57,11 +57,11 @@ export class RuntimeLogRetentionScheduler {
     try {
       await this.cleanup();
     } catch (error) {
-      const context = { module: "runtimeLogRetention" };
+      const context = { module: "actorLogRetention" };
       this.logger.error({
-        event: "runtime-log.retention.failed",
+        event: "actor-log.retention.failed",
         error,
-      }, "清理过期运行日志失败");
+      }, "清理过期 Actor 日志失败");
       this.errorReporter.captureException(error, context);
     }
     if (this.stopped) return;

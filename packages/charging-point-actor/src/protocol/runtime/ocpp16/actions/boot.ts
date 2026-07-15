@@ -5,7 +5,7 @@ import type {
 import { shouldSyncProtocolClock, type Ocpp16RuntimeContext } from "../state";
 import type { Ocpp16BootResult } from "../types";
 import { getOcpp16TransactionDelivery } from "../Ocpp16TransactionDelivery";
-import { traceOcpp16RuntimeOperation } from "../runtimeLogs";
+import { traceOcpp16RuntimeOperation } from "../actorLogs";
 
 export async function boot(
   context: Ocpp16RuntimeContext,

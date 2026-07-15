@@ -253,7 +253,7 @@ function toRuntimeSummaryItems(
     runtimeEventState,
   );
 
-  const runtimeLogs: HeaderMetricItem[] = [
+  const summaryItems: HeaderMetricItem[] = [
     {
       label: "Boot 状态",
       value: toBootSummaryItemValue(runtimeStatus, statusQueryState),
@@ -275,7 +275,7 @@ function toRuntimeSummaryItems(
       runtimeEventState?.chargingPointStatus,
     ),
   ];
-  return runtimeLogs;
+  return summaryItems;
 }
 
 function toFinalConnectionUrl(

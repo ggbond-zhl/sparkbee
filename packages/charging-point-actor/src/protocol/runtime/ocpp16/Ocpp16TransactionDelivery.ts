@@ -1,5 +1,5 @@
 import type { Ocpp16RuntimeContext } from "./state";
-import { traceOcpp16RuntimeOperation } from "./runtimeLogs";
+import { traceOcpp16RuntimeOperation } from "./actorLogs";
 import type {
   Ocpp16MeterValueInput,
   Ocpp16MeterValuesResult,

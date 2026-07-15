@@ -53,17 +53,17 @@ export type Ocpp16ErrorCode =
   | "OverVoltage"
   | "WeakSignal";
 
-export type Ocpp16RuntimeLogLevel = "info" | "warn" | "error";
+export type Ocpp16ActorLogLevel = "info" | "warn" | "error";
 
-export interface Ocpp16RuntimeLog {
-  level: Ocpp16RuntimeLogLevel;
+export interface Ocpp16ActorLog {
+  level: Ocpp16ActorLogLevel;
   message: string;
   code: string;
   context?: Record<string, unknown>;
 }
 
-export type Ocpp16RuntimeLogEmitter = (
-  runtimeLog: Ocpp16RuntimeLog,
+export type Ocpp16ActorLogEmitter = (
+  actorLog: Ocpp16ActorLog,
 ) => void;
 
 export interface Ocpp16RuntimeOptions {
@@ -80,7 +80,7 @@ export interface Ocpp16RuntimeOptions {
     sync(currentTime: Date): void;
   };
   idGenerator?: () => string;
-  emitRuntimeLog?: Ocpp16RuntimeLogEmitter;
+  emitActorLog?: Ocpp16ActorLogEmitter;
   offlineTransactionOutbox?: OfflineTransactionOutbox;
   heartbeatUnstableThreshold?: number;
   heartbeatReconnectThreshold?: number;
