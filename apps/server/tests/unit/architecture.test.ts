@@ -240,6 +240,30 @@ describe("server architecture", () => {
     expect(existsSync(rootMigrationsDir)).toBe(false);
   });
 
+  test("applies pending database migrations before starting the development server", () => {
+    const packageJson = JSON.parse(
+      readFileSync(join(serverRoot, "package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+
+    expect(packageJson.scripts?.dev).toBe(
+      "pnpm db:migrate && tsx watch src/index.ts",
+    );
+  });
+
+  test("waits for the development server before starting the web app", () => {
+    const packageJson = JSON.parse(
+      readFileSync(join(repositoryRoot, "package.json"), "utf8"),
+    ) as {
+      scripts?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.dev).toBe(
+      "start-server-and-test \"pnpm --filter @spark-bee/server dev\" http://127.0.0.1:3000/api/ready \"pnpm --filter @spark-bee/web dev\"",
+    );
+    expect(packageJson.devDependencies).toHaveProperty("start-server-and-test");
+  });
+
   test("uses a valid charging point list query in the test deployment smoke check", () => {
     const workflowSource = readFileSync(
       join(repositoryRoot, ".github/workflows/deploy-test.yml"),
