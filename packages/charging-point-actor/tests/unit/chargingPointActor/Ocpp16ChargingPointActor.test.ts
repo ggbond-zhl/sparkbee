@@ -2502,7 +2502,7 @@ describe("Ocpp16ChargingPointActor", () => {
 
     expect(result).toEqual({
       status: "rejected",
-      reason: "枪口 1/2 不存在",
+      reason: "枪口 2 不存在",
     });
     expect(protocolRuntime.startLocalTransactionInput).toBeNull();
     expect(protocolRuntime.calls).not.toContain("startLocalTransaction");
@@ -2514,14 +2514,14 @@ describe("Ocpp16ChargingPointActor", () => {
     protocolRuntime.plugConnector = () => {
       throw new ProtocolRuntimeError(
         "PROTOCOL_RUNTIME_INVALID_OPERATION",
-        "枪口 1/1 当前不可插枪",
+        "枪口 1 当前不可插枪",
       );
     };
     await actor.start();
 
     await expect(actor.plug({ evseId: 1, connectorId: 1 })).rejects.toMatchObject({
       code: "CHARGING_POINT_ACTOR_INVALID_OPERATION",
-      message: "枪口 1/1 当前不可插枪",
+      message: "枪口 1 当前不可插枪",
     });
   });
 

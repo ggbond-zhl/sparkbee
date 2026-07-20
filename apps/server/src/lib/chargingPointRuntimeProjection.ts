@@ -245,7 +245,7 @@ function reduceConnectorStatus(
 
   if (event.error !== undefined) {
     return withIssue(nextProjection, {
-      label: `枪口 ${key} 异常: ${event.error.message}`,
+      label: `${formatConnectorLabel(event.resource.connectorId)} 异常: ${event.error.message}`,
       tone: "destructive",
       occurredAt: event.occurredAt,
     });
@@ -253,7 +253,7 @@ function reduceConnectorStatus(
 
   return event.currentStatus === "faulted"
     ? withIssue(nextProjection, {
-        label: `枪口 ${key} 故障`,
+        label: `${formatConnectorLabel(event.resource.connectorId)} 故障`,
         tone: "destructive",
         occurredAt: event.occurredAt,
       })
@@ -436,4 +436,8 @@ function formatSessionStatus(status: "online" | "reconnecting" | "offline") {
 
 function connectorKey(evseId: number, connectorId: number) {
   return `${evseId}/${connectorId}`;
+}
+
+function formatConnectorLabel(connectorId: number) {
+  return `枪口 ${connectorId}`;
 }

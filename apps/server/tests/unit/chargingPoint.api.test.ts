@@ -1729,7 +1729,7 @@ describe("chargingPoint management API", () => {
     const actor = createActorDouble({
       plugError: new ChargingPointActorError(
         "CHARGING_POINT_ACTOR_INVALID_OPERATION",
-        "枪口 1/1 当前不可插枪",
+        "枪口 1 当前不可插枪",
       ),
     });
     const app = createApp({
@@ -1769,7 +1769,7 @@ describe("chargingPoint management API", () => {
     expect(apiErrorResponseSchema.parse(await response.json())).toEqual({
       error: {
         code: "CONNECTOR_OPERATION_CONFLICT",
-        message: "枪口 1/1 当前不可插枪",
+        message: "枪口 1 当前不可插枪",
       },
     });
   });

@@ -23,7 +23,7 @@ export function AppShell({ children }: PropsWithChildren) {
           <header className="hidden h-12 shrink-0 items-center justify-center border-b border-border/40 px-2 md:flex">
             <span>{currentPageTitle ?? "SparkBee"}</span>
           </header>
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/40 px-2 md:hidden">
+          <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-border/40 bg-background px-2 md:hidden">
             <SidebarTrigger />
             <img
               src="/logo.svg"

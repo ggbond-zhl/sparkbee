@@ -116,7 +116,7 @@ describe("Ocpp16Runtime connector actions", () => {
     await expect(
       protocolRuntime.plugConnector({ evseId: 1, connectorId: 1 }),
     ).rejects.toThrow(
-      "枪口 1/1 当前不可插枪",
+      "枪口 1 当前不可插枪",
     );
   });
 

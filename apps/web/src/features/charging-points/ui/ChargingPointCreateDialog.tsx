@@ -61,7 +61,7 @@ export function ChargingPointCreateDialog() {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button type="button">
+        <Button aria-label="新增充电桩" type="button">
           <PlusIcon data-icon="inline-start" />
           新增
         </Button>

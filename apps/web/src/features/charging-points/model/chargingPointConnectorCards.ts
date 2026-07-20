@@ -30,7 +30,6 @@ export interface ConnectorCardStatusItem {
   label: string;
   value: string;
   tone?: HeaderTone;
-  span?: "full";
 }
 
 export interface ConnectorCardAction {
@@ -173,25 +172,22 @@ function toConnectorStatusField(
       label: "枪口状态",
       value: runtimeStatus === undefined ? "未同步" : "未运行",
       tone: "neutral",
-      span: "full",
     };
   }
 
   if (connectorStatus === "available") {
     return {
       label: "枪口状态",
-      value: "可用 / 未插枪",
+      value: "未插枪",
       tone: "success",
-      span: "full",
     };
   }
 
   if (connectorStatus === "occupied") {
     return {
       label: "枪口状态",
-      value: "占用 / 已插枪",
+      value: "已插枪",
       tone: "waiting",
-      span: "full",
     };
   }
 
@@ -200,7 +196,6 @@ function toConnectorStatusField(
       label: "枪口状态",
       value: "不可用",
       tone: "warning",
-      span: "full",
     };
   }
 
@@ -208,7 +203,6 @@ function toConnectorStatusField(
     label: "枪口状态",
     value: connectorStatus === undefined ? "等待同步" : "故障",
     tone: connectorStatus === undefined ? "waiting" : "destructive",
-    span: "full",
   };
 }
 

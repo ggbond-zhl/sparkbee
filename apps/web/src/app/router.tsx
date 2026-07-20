@@ -39,7 +39,7 @@ const routeTree = rootRoute.addChildren([
   chargingPointDetailRoute,
 ]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({ routeTree, scrollRestoration: true });
 
 declare module "@tanstack/react-router" {
   interface Register {

@@ -400,7 +400,7 @@ describe("charging point detail header model", () => {
         },
       ],
       recentIssue: {
-        label: "枪口 1/1 故障",
+        label: "枪口 1 故障",
         tone: "destructive",
         occurredAt: "2026-07-04T09:00:00.000Z",
       },
@@ -417,7 +417,7 @@ describe("charging point detail header model", () => {
       runtimeEventState,
     });
 
-    expect(model.recentIssue?.label).toBe("枪口 1/1 故障");
+    expect(model.recentIssue?.label).toBe("枪口 1 故障");
   });
 
   test("does not default unknown runtime status to stopped", () => {

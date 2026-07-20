@@ -243,7 +243,7 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     if (this.ocpp16Runtime.getConnectorStatus(input) === undefined) {
       return {
         status: "rejected",
-        reason: `枪口 ${input.evseId}/${input.connectorId} 不存在`,
+        reason: `枪口 ${input.connectorId} 不存在`,
       };
     }
 

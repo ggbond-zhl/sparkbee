@@ -283,7 +283,7 @@ export function reduceChargingPointRuntimeEventState(
       };
       if (message.data.error !== undefined) {
         return withIssue(nextState, {
-          label: `枪口 ${key} 异常: ${message.data.error.message}`,
+          label: `${formatConnectorLabel(connectorId)} 异常: ${message.data.error.message}`,
           tone: "destructive",
           occurredAt: message.data.occurredAt,
         });
@@ -291,7 +291,7 @@ export function reduceChargingPointRuntimeEventState(
 
       return message.data.currentStatus === "faulted"
         ? withIssue(nextState, {
-            label: `枪口 ${key} 故障`,
+            label: `${formatConnectorLabel(connectorId)} 故障`,
             tone: "destructive",
             occurredAt: message.data.occurredAt,
           })
@@ -546,15 +546,13 @@ function formatRuntimeEventSummary(
         formatEVSEStatus(message.data.currentStatus)
       }`;
     case "connector.status":
-      return `枪口 ${
-        connectorKey(message.data.resource.evseId, message.data.resource.connectorId)
-      }: ${
+      return `${formatConnectorLabel(message.data.resource.connectorId)}: ${
         formatConnectorStatus(message.data.currentStatus)
       }`;
     case "connector.availability":
-      return `枪口 ${
-        connectorKey(message.data.resource.evseId, message.data.resource.connectorId)
-      } 可用性: ${formatRuntimeAvailabilityDetail(message.data)}`;
+      return `${formatConnectorLabel(message.data.resource.connectorId)} 可用性: ${
+        formatRuntimeAvailabilityDetail(message.data)
+      }`;
     case "authorization.status":
       return `idTag ${message.data.resource.idTag}: ${
         formatAuthorizationStatus(message.data.status)
@@ -584,18 +582,18 @@ function formatResource(resource: ChargingPointActorEvent["resource"]) {
   }
 
   if (resource.scope === "connector") {
-    return `枪口 ${connectorKey(resource.evseId, resource.connectorId)}`;
+    return formatConnectorLabel(resource.connectorId);
   }
 
   if (resource.scope === "authorization") {
     return resource.connectorId === undefined || resource.evseId === undefined
       ? `鉴权 ${resource.idTag}`
-      : `枪口 ${connectorKey(resource.evseId, resource.connectorId)}`;
+      : formatConnectorLabel(resource.connectorId);
   }
 
   if (resource.scope === "transaction") {
     return resource.transactionId === undefined
-      ? `枪口 ${connectorKey(resource.evseId, resource.connectorId)}`
+      ? formatConnectorLabel(resource.connectorId)
       : `交易 ${resource.transactionId}`;
   }
 
@@ -720,4 +718,8 @@ function createLogEntryId(
 
 function connectorKey(evseId: number, connectorId: number) {
   return `${evseId}/${connectorId}`;
+}
+
+function formatConnectorLabel(connectorId: number) {
+  return `枪口 ${connectorId}`;
 }

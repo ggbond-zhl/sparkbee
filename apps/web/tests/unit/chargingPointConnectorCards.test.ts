@@ -126,7 +126,7 @@ describe("charging point connector cards", () => {
     expect(model?.connector).toBe(connector);
     expect(model?.description).toBe("EVSE 1 · 欧标交流 Type 2 · 插座型 · 交流");
     expect(model?.fields).toEqual([
-      { label: "枪口状态", value: "可用 / 未插枪", tone: "success", span: "full" },
+      { label: "枪口状态", value: "未插枪", tone: "success" },
       { label: "交易状态", value: "无交易", tone: "neutral" },
       { label: "可用性", value: "可用", tone: "success" },
     ]);
@@ -182,9 +182,8 @@ describe("charging point connector cards", () => {
 
     expect(model?.fields[0]).toEqual({
       label: "枪口状态",
-      value: "占用 / 已插枪",
+      value: "已插枪",
       tone: "waiting",
-      span: "full",
     });
     expect(model?.fields[2]).toEqual({
       label: "可用性",
@@ -285,7 +284,6 @@ describe("charging point connector cards", () => {
       label: "枪口状态",
       value: "未运行",
       tone: "neutral",
-      span: "full",
     });
     expect(model?.fields.some((field) => field.value === "--")).toBe(false);
     expect(model?.actions).toEqual([]);
@@ -307,7 +305,6 @@ describe("charging point connector cards", () => {
       label: "枪口状态",
       value: "不可用",
       tone: "warning",
-      span: "full",
     });
     expect(model?.fields[2]).toEqual({
       label: "可用性",
@@ -334,7 +331,7 @@ describe("charging point connector cards", () => {
 
     expect(model?.fields[0]).toMatchObject({
       label: "枪口状态",
-      value: "占用 / 已插枪",
+      value: "已插枪",
     });
     expect(model?.fields[2]).toEqual({
       label: "可用性",
@@ -375,7 +372,6 @@ describe("charging point connector cards", () => {
       label: "枪口状态",
       value: "故障",
       tone: "destructive",
-      span: "full",
     });
     expect(model?.fields.some((field) => field.value === "--")).toBe(false);
     expect(model?.issue).toEqual({

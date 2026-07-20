@@ -1,4 +1,8 @@
-import { keepPreviousData, queryOptions } from "@tanstack/react-query";
+import {
+  infiniteQueryOptions,
+  keepPreviousData,
+  queryOptions,
+} from "@tanstack/react-query";
 
 import {
   getChargingPoint,
@@ -24,6 +28,28 @@ export function chargingPointListQueryOptions(input: ListChargingPointsInput) {
     queryKey: chargingPointListQueryKey(input),
     queryFn: () => listChargingPoints(input),
     placeholderData: keepPreviousData,
+  });
+}
+
+export function chargingPointInfiniteListQueryOptions(
+  input: Omit<ListChargingPointsInput, "page">,
+) {
+  return infiniteQueryOptions({
+    queryKey: [
+      "charging-points",
+      "infinite",
+      {
+        keyword: input.keyword ?? "",
+        pageSize: input.pageSize ?? 20,
+      },
+    ] as const,
+    queryFn: ({ pageParam }) =>
+      listChargingPoints({ ...input, page: pageParam }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.pageSize < lastPage.total
+        ? lastPage.page + 1
+        : undefined,
   });
 }
 

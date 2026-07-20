@@ -47,6 +47,7 @@ import {
   CardAction,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -163,14 +164,6 @@ export function ChargingPointDetailPage() {
               <PencilIcon data-icon="inline-start" />
               编辑
             </Button>
-            <Button
-              disabled={headerModel.primaryAction.disabled || runtime.pending}
-              type="button"
-              variant={headerModel.primaryAction.kind === "stop" ? "destructive" : "default"}
-              onClick={runtime.applyPrimaryAction}
-            >
-              {runtime.pending ? "处理中" : headerModel.primaryAction.label}
-            </Button>
           </CardAction>
           {headerModel.finalConnectionUrl && (
             <div className="col-span-full min-w-0">
@@ -196,6 +189,16 @@ export function ChargingPointDetailPage() {
             </p>
           )}
         </CardContent>
+        <CardFooter className="flex-wrap justify-end gap-2">
+          <Button
+            disabled={headerModel.primaryAction.disabled || runtime.pending}
+            type="button"
+            variant={headerModel.primaryAction.kind === "stop" ? "destructive" : "default"}
+            onClick={runtime.applyPrimaryAction}
+          >
+            {runtime.pending ? "处理中" : headerModel.primaryAction.label}
+          </Button>
+        </CardFooter>
       </Card>
       <section className="grid gap-3">
         {connectorItems.map(({ model, samples }) => (
@@ -328,22 +331,11 @@ function ConnectorRuntimeCard({
             label={`编辑${model.title}`}
             onEdit={onEdit}
           />
-          {model.actions.map((action) => (
-            <ConnectorActionButton
-              key={action.kind}
-              action={action}
-              disabled={disabled}
-              onPlug={onPlug}
-              onStartCharging={onStartCharging}
-              onStopCharging={onStopCharging}
-              onUnplug={onUnplug}
-            />
-          ))}
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="grid gap-3 xl:grid-cols-[13rem_minmax(20rem,1fr)_minmax(20rem,1fr)]">
-          <div className="grid gap-2">
+          <div className="grid grid-cols-3 gap-2 xl:grid-cols-1">
             {model.fields.map((field) => (
               <ConnectorField key={field.label} field={field} />
             ))}
@@ -365,6 +357,21 @@ function ConnectorRuntimeCard({
           </div>
         )}
       </CardContent>
+      {model.actions.length > 0 && (
+        <CardFooter className="flex-wrap justify-end gap-2">
+          {model.actions.map((action) => (
+            <ConnectorActionButton
+              key={action.kind}
+              action={action}
+              disabled={disabled}
+              onPlug={onPlug}
+              onStartCharging={onStartCharging}
+              onStopCharging={onStopCharging}
+              onUnplug={onUnplug}
+            />
+          ))}
+        </CardFooter>
+      )}
     </Card>
   );
 }
@@ -375,12 +382,7 @@ function ConnectorField({
   field: ConnectorCardModel["fields"][number];
 }) {
   return (
-    <dl
-      className={cn(
-        "min-w-0 rounded-lg bg-muted/40 px-3 py-2",
-        field.span === "full" && "col-span-full",
-      )}
-    >
+    <dl className="min-w-0 rounded-lg bg-muted/40 px-3 py-2">
       <dt className="text-xs text-muted-foreground">{field.label}</dt>
       <dd
         className={cn(
@@ -1066,7 +1068,7 @@ function VirtualObservationList<TEntry extends ObservationListEntry>({
     <div>
       <div
         ref={scrollParentRef}
-        className="h-[min(60vh,640px)] min-h-80 overflow-auto rounded-lg border border-border/40"
+        className="h-[min(60vh,640px)] min-h-80 overflow-x-hidden overflow-y-auto rounded-lg border border-border/40"
         onScroll={updateAnchor}
       >
         {entries.length === 0 ? (
@@ -1106,16 +1108,16 @@ function VirtualObservationList<TEntry extends ObservationListEntry>({
 function ProtocolEventRow({ entry }: { entry: RuntimeEventLogEntry }) {
   return (
     <details className="group border-b border-border/40">
-      <summary className="grid cursor-pointer grid-cols-[5.5rem_minmax(8rem,0.9fr)_minmax(6rem,0.7fr)_minmax(8rem,1fr)_minmax(0,1.4fr)] gap-3 px-3 py-2 text-sm hover:bg-muted/40">
-        <span className="text-xs text-muted-foreground">
+      <summary className="grid cursor-pointer grid-cols-[4.75rem_minmax(0,1fr)] gap-x-2 gap-y-1 px-3 py-2 text-sm hover:bg-muted/40 md:grid-cols-[5.5rem_minmax(0,0.9fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,1.4fr)] md:gap-3">
+        <span className="min-w-0 text-xs text-muted-foreground">
           {formatLogTime(entry.occurredAt)}
         </span>
-        <span className="truncate font-mono text-xs text-muted-foreground">
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
           {entry.eventType}
         </span>
-        <span className="truncate text-muted-foreground">{entry.resource}</span>
-        <span className="truncate font-medium">{entry.summary}</span>
-        <span className="truncate font-mono text-xs text-muted-foreground group-open:hidden">
+        <span className="min-w-0 truncate text-muted-foreground">{entry.resource}</span>
+        <span className="min-w-0 truncate font-medium">{entry.summary}</span>
+        <span className="hidden min-w-0 truncate font-mono text-xs text-muted-foreground md:block md:group-open:hidden">
           {formatObservationPreview(entry.detail)}
         </span>
       </summary>
@@ -1127,16 +1129,16 @@ function ProtocolEventRow({ entry }: { entry: RuntimeEventLogEntry }) {
 function ProtocolMessageRow({ entry }: { entry: ProtocolMessageLogEntry }) {
   return (
     <details className="group border-b border-border/40">
-      <summary className="grid cursor-pointer grid-cols-[5.5rem_4rem_minmax(8rem,0.8fr)_minmax(8rem,1fr)_minmax(0,1.6fr)] gap-3 px-3 py-2 text-sm hover:bg-muted/40">
-        <span className="text-xs text-muted-foreground">
+      <summary className="grid cursor-pointer grid-cols-[4.75rem_4rem_minmax(0,1fr)] gap-x-2 gap-y-1 px-3 py-2 text-sm hover:bg-muted/40 md:grid-cols-[5.5rem_4rem_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1.6fr)] md:gap-3">
+        <span className="min-w-0 text-xs text-muted-foreground">
           {formatLogTime(entry.occurredAt)}
         </span>
         <ProtocolDirectionBadge direction={entry.direction} />
-        <span className="truncate font-medium">{entry.action}</span>
-        <span className="truncate font-mono text-xs text-muted-foreground">
+        <span className="min-w-0 truncate font-medium">{entry.action}</span>
+        <span className="col-span-3 min-w-0 truncate font-mono text-xs text-muted-foreground md:col-span-1">
           {entry.messageId}
         </span>
-        <span className="truncate font-mono text-xs text-muted-foreground group-open:hidden">
+        <span className="hidden min-w-0 truncate font-mono text-xs text-muted-foreground md:block md:group-open:hidden">
           {formatObservationPreview(entry.detail)}
         </span>
       </summary>
@@ -1170,7 +1172,7 @@ function ProtocolDirectionBadge({
 
 function ObservationJsonBlock({ value }: { value: unknown }) {
   return (
-    <pre className="max-h-80 overflow-auto border-t border-border/40 bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+    <pre className="max-h-80 overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-all border-t border-border/40 bg-muted/30 p-3 font-mono text-xs leading-relaxed md:overflow-auto md:whitespace-pre md:break-normal">
       {JSON.stringify(value, null, 2)}
     </pre>
   );

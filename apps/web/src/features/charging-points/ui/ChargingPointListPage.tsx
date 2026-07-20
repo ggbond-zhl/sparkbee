@@ -1,11 +1,11 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  ColumnDef,
-  OnChangeFn,
-  RowSelectionState,
-} from "@tanstack/react-table";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   PAGE_SIZE_OPTIONS,
   type ListChargingPointsResponse,
@@ -14,13 +14,11 @@ import {
 import {
   CableIcon,
   ChevronDownIcon,
-  MoreHorizontalIcon,
   PencilIcon,
   SearchIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { UseFormRegisterReturn } from "react-hook-form";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -39,19 +37,16 @@ import {
   CardAction,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -61,7 +56,6 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { DataTable } from "@/components/data-table/DataTable";
 import {
   Tooltip,
   TooltipContent,
@@ -72,11 +66,15 @@ import {
   chargingPointListSearchFormSchema,
   type ChargingPointListSearchFormValues,
 } from "@/features/charging-points/model/chargingPointListForm";
-import { chargingPointListQueryOptions } from "@/features/charging-points/model/chargingPointQueries";
+import {
+  chargingPointInfiniteListQueryOptions,
+  chargingPointListQueryOptions,
+} from "@/features/charging-points/model/chargingPointQueries";
 import { useChargingPointListStore } from "@/features/charging-points/model/chargingPointListStore";
 import { ChargingPointCreateDialog } from "@/features/charging-points/ui/ChargingPointCreateDialog";
 import { ChargingPointConnectorManagementDialog } from "@/features/charging-points/ui/ChargingPointConnectorManagementDialog";
 import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingPointEditDialog";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type ChargingPointListItem = ListChargingPointsResponse["items"][number];
 
@@ -99,25 +97,39 @@ function TruncatedText({
 
 export function ChargingPointListPage() {
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const keyword = useChargingPointListStore((state) => state.keyword);
   const page = useChargingPointListStore((state) => state.page);
   const pageSize = useChargingPointListStore((state) => state.pageSize);
   const setKeyword = useChargingPointListStore((state) => state.setKeyword);
   const setPage = useChargingPointListStore((state) => state.setPage);
   const setPageSize = useChargingPointListStore((state) => state.setPageSize);
-  const selectedIds = useChargingPointListStore((state) => state.selectedIds);
-  const setSelectedIds = useChargingPointListStore(
-    (state) => state.setSelectedIds,
-  );
   const form = useForm<ChargingPointListSearchFormValues>({
     resolver: standardSchemaResolver(chargingPointListSearchFormSchema),
     values: { keyword },
   });
-  const chargingPointsQuery = useQuery(
-    chargingPointListQueryOptions({ keyword, page, pageSize }),
-  );
-  const items = chargingPointsQuery.data?.items ?? [];
-  const total = chargingPointsQuery.data?.total ?? 0;
+  const chargingPointsQuery = useQuery({
+    ...chargingPointListQueryOptions({ keyword, page, pageSize }),
+    enabled: !isMobile,
+  });
+  const chargingPointsInfiniteQuery = useInfiniteQuery({
+    ...chargingPointInfiniteListQueryOptions({ keyword, pageSize }),
+    enabled: isMobile,
+  });
+  const desktopItems = chargingPointsQuery.data?.items ?? [];
+  const mobileItems =
+    chargingPointsInfiniteQuery.data?.pages.flatMap((result) => result.items) ??
+    [];
+  const items = isMobile ? mobileItems : desktopItems;
+  const total = isMobile
+    ? (chargingPointsInfiniteQuery.data?.pages[0]?.total ?? 0)
+    : (chargingPointsQuery.data?.total ?? 0);
+  const isLoading = isMobile
+    ? chargingPointsInfiniteQuery.isLoading
+    : chargingPointsQuery.isLoading;
+  const isError = isMobile
+    ? chargingPointsInfiniteQuery.isError && mobileItems.length === 0
+    : chargingPointsQuery.isError;
 
   function handlePageSizeChange(nextPageSize: PageSize) {
     setPageSize(nextPageSize);
@@ -131,11 +143,14 @@ export function ChargingPointListPage() {
   return (
     <section className="flex flex-col gap-5">
       <form
-        className="md:hidden"
+        className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
         onSubmit={form.handleSubmit(handleListSearch)}
       >
-        <FieldGroup>
-          <Field data-invalid={Boolean(form.formState.errors.keyword)}>
+        <FieldGroup className="min-w-0 flex-row gap-2 sm:max-w-md">
+          <Field
+            className="min-w-0"
+            data-invalid={Boolean(form.formState.errors.keyword)}
+          >
             <FieldLabel className="sr-only" htmlFor="charging-point-keyword">
               关键词
             </FieldLabel>
@@ -151,31 +166,23 @@ export function ChargingPointListPage() {
             <SearchIcon data-icon="inline-start" />
             搜索
           </Button>
+          <ChargingPointCreateDialog />
         </FieldGroup>
       </form>
 
-      <ChargingPointMobileCardList
-        isError={chargingPointsQuery.isError}
-        isLoading={chargingPointsQuery.isLoading}
+      <ChargingPointCardList
+        hasNextPage={chargingPointsInfiniteQuery.hasNextPage}
+        isError={isError}
+        isFetchingNextPage={chargingPointsInfiniteQuery.isFetchingNextPage}
+        isLoadMoreError={chargingPointsInfiniteQuery.isFetchNextPageError}
+        isLoading={isLoading}
+        isMobile={isMobile}
         items={items}
+        onLoadMore={chargingPointsInfiniteQuery.fetchNextPage}
         onPageChange={setPage}
         onPageSizeChange={handlePageSizeChange}
         page={page}
         pageSize={pageSize}
-        total={total}
-      />
-      <ChargingPointTable
-        isError={chargingPointsQuery.isError}
-        isLoading={chargingPointsQuery.isLoading}
-        items={items}
-        onPageChange={setPage}
-        onPageSizeChange={handlePageSizeChange}
-        onSearch={form.handleSubmit(handleListSearch)}
-        onSelectedIdsChange={setSelectedIds}
-        page={page}
-        pageSize={pageSize}
-        searchInput={form.register("keyword")}
-        selectedIds={selectedIds}
         total={total}
       />
     </section>
@@ -183,9 +190,14 @@ export function ChargingPointListPage() {
 }
 
 interface ChargingPointListViewProps {
+  hasNextPage: boolean;
   isError: boolean;
+  isFetchingNextPage: boolean;
+  isLoadMoreError: boolean;
   isLoading: boolean;
+  isMobile: boolean;
   items: ChargingPointListItem[];
+  onLoadMore(): Promise<unknown>;
   onPageChange(page: number): void;
   onPageSizeChange(pageSize: PageSize): void;
   page: number;
@@ -193,17 +205,15 @@ interface ChargingPointListViewProps {
   total: number;
 }
 
-interface ChargingPointTableProps extends ChargingPointListViewProps {
-  onSelectedIdsChange(ids: string[]): void;
-  onSearch(): void;
-  searchInput: UseFormRegisterReturn<"keyword">;
-  selectedIds: string[];
-}
-
-function ChargingPointMobileCardList({
+function ChargingPointCardList({
+  hasNextPage,
   isError,
+  isFetchingNextPage,
+  isLoadMoreError,
   isLoading,
+  isMobile,
   items,
+  onLoadMore,
   onPageChange,
   onPageSizeChange,
   page,
@@ -211,259 +221,162 @@ function ChargingPointMobileCardList({
   total,
 }: ChargingPointListViewProps) {
   if (isLoading) {
-    return <ListState className="md:hidden" text="加载中" />;
+    return <ListState text="加载中" />;
   }
 
   if (isError) {
-    return (
-      <ListState className="text-destructive md:hidden" text="列表加载失败" />
-    );
+    return <ListState className="text-destructive" text="列表加载失败" />;
   }
 
   if (items.length === 0) {
-    return <ListState className="md:hidden" text="暂无桩实例" />;
+    return <ListState text="暂无桩实例" />;
   }
 
   return (
-    <div className="flex flex-col gap-3 md:hidden">
-      {items.map((item) => (
-        <Link
-          key={item.id}
-          className="appearance-none border-0 bg-transparent p-0 text-left text-inherit outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          params={{ chargingPointId: item.id }}
-          to="/charging-points/$chargingPointId"
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle>{item.name}</CardTitle>
-              {item.description && (
-                <CardDescription>{item.description}</CardDescription>
-              )}
-              <CardAction className="text-sm tabular-nums text-muted-foreground">
-                {item.connectorCount} 枪
-              </CardAction>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
-                <dt className="text-muted-foreground">桩身份</dt>
-                <dd className="truncate font-mono text-xs">
-                  <TruncatedText
-                    className="block truncate"
-                    value={item.identity}
-                  />
-                </dd>
-                <dt className="text-muted-foreground">CSMS</dt>
-                <dd className="truncate">
-                  <TruncatedText
-                    className="block truncate"
-                    value={item.centralSystemUrl}
-                  />
-                </dd>
-                <dt className="text-muted-foreground">型号</dt>
-                <dd className="truncate">
-                  <TruncatedText
-                    className="block truncate"
-                    value={`${item.vendor} / ${item.model}`}
-                  />
-                </dd>
-              </dl>
-            </CardContent>
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {items.map((item) => (
+          <Card key={item.id} className="h-full">
+            <Link
+              className="flex flex-1 flex-col gap-(--card-spacing) rounded-t-xl text-inherit outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
+              params={{ chargingPointId: item.id }}
+              to="/charging-points/$chargingPointId"
+            >
+              <CardHeader>
+                <CardTitle>{item.name}</CardTitle>
+                {item.description && (
+                  <CardDescription>{item.description}</CardDescription>
+                )}
+                <CardAction className="text-sm tabular-nums text-muted-foreground">
+                  {item.connectorCount} 枪
+                </CardAction>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+                  <dt className="text-muted-foreground">桩身份</dt>
+                  <dd className="truncate font-mono text-xs">
+                    <TruncatedText
+                      className="block truncate"
+                      value={item.identity}
+                    />
+                  </dd>
+                  <dt className="text-muted-foreground">CSMS</dt>
+                  <dd className="truncate">
+                    <TruncatedText
+                      className="block truncate"
+                      value={item.centralSystemUrl}
+                    />
+                  </dd>
+                  <dt className="text-muted-foreground">型号</dt>
+                  <dd className="truncate">
+                    <TruncatedText
+                      className="block truncate"
+                      value={`${item.vendor} / ${item.model}`}
+                    />
+                  </dd>
+                </dl>
+              </CardContent>
+            </Link>
+            <CardFooter className="mt-auto justify-end gap-1">
+              <ChargingPointCardActions item={item} />
+            </CardFooter>
           </Card>
-        </Link>
-      ))}
-      <MobilePagination
-        onPageChange={onPageChange}
-        onPageSizeChange={onPageSizeChange}
-        page={page}
-        pageSize={pageSize}
-        total={total}
-      />
+        ))}
+      </div>
+      {isMobile ? (
+        <MobileInfiniteListStatus
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          isLoadMoreError={isLoadMoreError}
+          onLoadMore={onLoadMore}
+          total={total}
+        />
+      ) : (
+        <ListPagination
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+        />
+      )}
     </div>
   );
 }
 
-function ChargingPointTable({
-  isError,
-  isLoading,
-  items,
-  onPageChange,
-  onPageSizeChange,
-  onSelectedIdsChange,
-  onSearch,
-  page,
-  pageSize,
-  searchInput,
-  selectedIds,
+function MobileInfiniteListStatus({
+  hasNextPage,
+  isFetchingNextPage,
+  isLoadMoreError,
+  onLoadMore,
   total,
-}: ChargingPointTableProps) {
-  const columns = useMemo<ColumnDef<ChargingPointListItem>[]>(
-    () => [
-      {
-        id: "select",
-        header: ({ table }) => (
-          <Checkbox
-            aria-label="全选当前列表"
-            checked={
-              table.getIsAllPageRowsSelected()
-                ? true
-                : table.getIsSomePageRowsSelected()
-                  ? "indeterminate"
-                  : false
-            }
-            disabled={table.getRowModel().rows.length === 0}
-            onCheckedChange={(value) =>
-              table.toggleAllPageRowsSelected(Boolean(value))
-            }
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            aria-label={`选择 ${row.original.name}`}
-            checked={row.getIsSelected()}
-            onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
-          />
-        ),
-        enableHiding: false,
-        enableSorting: false,
+}: {
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  isLoadMoreError: boolean;
+  onLoadMore(): Promise<unknown>;
+  total: number;
+}) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (
+      !sentinel ||
+      !hasNextPage ||
+      isFetchingNextPage ||
+      isLoadMoreError ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void onLoadMore();
+        }
       },
-      {
-        accessorKey: "name",
-        header: "名称",
-        cell: ({ row }) => (
-          <Link
-            className="flex max-w-56 appearance-none flex-col gap-0.5 rounded-md border-0 bg-transparent p-0 text-left text-inherit outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            params={{ chargingPointId: row.original.id }}
-            to="/charging-points/$chargingPointId"
-          >
-            <TruncatedText
-              className="block max-w-full truncate font-medium"
-              value={row.original.name}
-            />
-            {row.original.description && (
-              <TruncatedText
-                className="block max-w-full truncate text-muted-foreground"
-                value={row.original.description}
-              />
-            )}
-          </Link>
-        ),
-      },
-      {
-        accessorKey: "identity",
-        header: "桩身份",
-        cell: ({ row }) => (
-          <span className="font-mono">{row.original.identity}</span>
-        ),
-      },
-      {
-        accessorKey: "centralSystemUrl",
-        header: "CSMS",
-        cell: ({ row }) => (
-          <TruncatedText
-            className="block w-full truncate"
-            value={row.original.centralSystemUrl}
-          />
-        ),
-      },
-      {
-        id: "model",
-        header: "型号",
-        cell: ({ row }) => (
-          <TruncatedText
-            className="block max-w-48 truncate"
-            value={`${row.original.vendor} / ${row.original.model}`}
-          />
-        ),
-      },
-      {
-        accessorKey: "connectorCount",
-        header: () => <div className="text-right">枪口</div>,
-        cell: ({ row }) => (
-          <div className="text-right tabular-nums">
-            {row.original.connectorCount}
-          </div>
-        ),
-      },
-      {
-        id: "actions",
-        header: () => <span className="sr-only">操作</span>,
-        cell: ({ row }) => (
-          <div className="text-right">
-            <ChargingPointRowActionMenu item={row.original} />
-          </div>
-        ),
-        enableHiding: false,
-        enableSorting: false,
-      },
-    ],
-    [],
-  );
-  const rowSelection = useMemo<RowSelectionState>(
-    () => Object.fromEntries(selectedIds.map((id) => [id, true] as const)),
-    [selectedIds],
-  );
-  const handleRowSelectionChange: OnChangeFn<RowSelectionState> = (updater) => {
-    const nextSelection =
-      typeof updater === "function" ? updater(rowSelection) : updater;
-    onSelectedIdsChange(
-      Object.entries(nextSelection)
-        .filter(([, selected]) => selected)
-        .map(([id]) => id),
+      { rootMargin: "240px" },
     );
-  };
-  const tableItems = isLoading || isError ? [] : items;
-  const emptyText = isLoading
-    ? "加载中"
-    : isError
-      ? "列表加载失败"
-      : "暂无桩实例";
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, isLoadMoreError, onLoadMore]);
+
+  if (isLoadMoreError) {
+    return (
+      <div className="flex justify-center">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void onLoadMore()}
+        >
+          重试加载
+        </Button>
+      </div>
+    );
+  }
+
+  if (isFetchingNextPage) {
+    return (
+      <div className="text-center text-sm text-muted-foreground" role="status">
+        正在加载更多…
+      </div>
+    );
+  }
+
+  if (hasNextPage) {
+    return <div ref={sentinelRef} className="h-px" aria-hidden="true" />;
+  }
 
   return (
-    <div className="hidden flex-col gap-3 md:flex">
-      <form
-        className="flex items-center justify-between gap-2"
-        onSubmit={onSearch}
-      >
-        <div className="flex items-center gap-2">
-          <Input
-            aria-label="搜索充电桩"
-            className="max-w-sm"
-            placeholder="搜索名称、桩身份、厂商或型号"
-            {...searchInput}
-          />
-          <Button type="submit">
-            <SearchIcon data-icon="inline-start" />
-            搜索
-          </Button>
-        </div>
-        <div className="flex items-center gap-2">
-          <ChargingPointCreateDialog />
-        </div>
-      </form>
-
-      <DataTable
-        columns={columns}
-        data={tableItems}
-        emptyClassName={isError ? "text-destructive" : undefined}
-        emptyText={emptyText}
-        getRowId={(item) => item.id}
-        onPageChange={onPageChange}
-        onPageSizeChange={(nextPageSize) =>
-          onPageSizeChange(nextPageSize as PageSize)
-        }
-        onRowSelectionChange={handleRowSelectionChange}
-        page={page}
-        pageSize={pageSize}
-        pageSizeOptions={PAGE_SIZE_OPTIONS}
-        rowSelection={rowSelection}
-        tableClassName="min-w-[840px]"
-        total={total}
-      />
+    <div className="text-center text-sm text-muted-foreground">
+      已加载全部 {total} 台充电桩
     </div>
   );
 }
 
-function MobilePagination({
+function ListPagination({
   onPageChange,
   onPageSizeChange,
   page,
@@ -479,7 +392,7 @@ function MobilePagination({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+    <div className="hidden flex-wrap items-center justify-between gap-2 text-sm md:flex">
       <div className="text-muted-foreground tabular-nums">
         第 {page} / {totalPages} 页，共 {total} 条
       </div>
@@ -538,7 +451,7 @@ function PageSizeMenu({
   );
 }
 
-function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
+function ChargingPointCardActions({ item }: { item: ChargingPointListItem }) {
   const [editOpen, setEditOpen] = useState(false);
   const [connectorManagementOpen, setConnectorManagementOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -564,54 +477,6 @@ function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
   return (
     <>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              aria-label={`打开 ${item.name} 操作菜单`}
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <MoreHorizontalIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-32">
-            <DropdownMenuLabel>操作</DropdownMenuLabel>
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setEditOpen(true);
-                }}
-              >
-                <PencilIcon />
-                编辑
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setConnectorManagementOpen(true);
-                }}
-              >
-                <CableIcon />
-                枪口管理
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                disabled={deleteMutation.isPending}
-                variant="destructive"
-                onSelect={(event) => {
-                  event.preventDefault();
-                  deleteMutation.reset();
-                  setConfirmOpen(true);
-                }}
-              >
-                <Trash2Icon />
-                删除
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除</AlertDialogTitle>
@@ -643,6 +508,37 @@ function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <Button
+        size="sm"
+        type="button"
+        variant="ghost"
+        onClick={() => setEditOpen(true)}
+      >
+        <PencilIcon data-icon="inline-start" />
+        编辑
+      </Button>
+      <Button
+        size="sm"
+        type="button"
+        variant="ghost"
+        onClick={() => setConnectorManagementOpen(true)}
+      >
+        <CableIcon data-icon="inline-start" />
+        枪口管理
+      </Button>
+      <Button
+        disabled={deleteMutation.isPending}
+        size="sm"
+        type="button"
+        variant="destructive"
+        onClick={() => {
+          deleteMutation.reset();
+          setConfirmOpen(true);
+        }}
+      >
+        <Trash2Icon data-icon="inline-start" />
+        删除
+      </Button>
       <ChargingPointEditDialog
         item={item}
         open={editOpen}
@@ -657,7 +553,7 @@ function ChargingPointRowActionMenu({ item }: { item: ChargingPointListItem }) {
   );
 }
 
-function ListState({ className, text }: { className: string; text: string }) {
+function ListState({ className, text }: { className?: string; text: string }) {
   return (
     <Card className={className}>
       <CardContent>{text}</CardContent>

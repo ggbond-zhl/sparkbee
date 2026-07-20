@@ -246,7 +246,7 @@ export function requireDomainConnector(
   if (connector === undefined) {
     throw new ProtocolRuntimeError(
       "PROTOCOL_RUNTIME_CONNECTOR_NOT_FOUND",
-      `枪口 ${input.evseId}/${input.connectorId} 不存在`,
+      `枪口 ${input.connectorId} 不存在`,
     );
   }
 

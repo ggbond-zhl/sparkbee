@@ -12,6 +12,22 @@ function readSource(...paths: string[]) {
 }
 
 describe("web architecture", () => {
+  test("charging point collection documents its Card exception to DataTable", () => {
+    const repoRoot = join(webRoot, "../..");
+    const adrPath = join(
+      repoRoot,
+      "docs",
+      "adr",
+      "0028-charging-point-collection-card-grid.md",
+    );
+    const adrSource = existsSync(adrPath) ? readFileSync(adrPath, "utf8") : "";
+
+    expect(existsSync(adrPath)).toBe(true);
+    expect(adrSource).toContain("Card");
+    expect(adrSource).toContain("DataTable");
+    expect(adrSource).toContain("无限滚动");
+  });
+
   test("charging point detail renders through the feature workbench seam", () => {
     const legacyWorkbenchPath = join(srcRoot, "useChargingPointWorkbench.ts");
     const workbenchPath = join(
@@ -104,8 +120,16 @@ describe("web architecture", () => {
       "ui",
       "ChargingPointDetailPage.tsx",
     );
-    const createDialogPath = join(featureRoot, "ui", "ChargingPointCreateDialog.tsx");
-    const editDialogPath = join(featureRoot, "ui", "ChargingPointEditDialog.tsx");
+    const createDialogPath = join(
+      featureRoot,
+      "ui",
+      "ChargingPointCreateDialog.tsx",
+    );
+    const editDialogPath = join(
+      featureRoot,
+      "ui",
+      "ChargingPointEditDialog.tsx",
+    );
     const connectorDialogPath = join(
       featureRoot,
       "ui",
@@ -121,7 +145,11 @@ describe("web architecture", () => {
       "ui",
       "ChargingPointConnectorFormFields.tsx",
     );
-    const formFieldsPath = join(featureRoot, "ui", "ChargingPointFormFields.tsx");
+    const formFieldsPath = join(
+      featureRoot,
+      "ui",
+      "ChargingPointFormFields.tsx",
+    );
     const apiPath = join(featureRoot, "api", "chargingPoints.ts");
     const queryPath = join(featureRoot, "model", "chargingPointQueries.ts");
     const workbenchPath = join(
@@ -156,9 +184,18 @@ describe("web architecture", () => {
       "connectorDisplay.ts",
     );
     const formPath = join(featureRoot, "model", "chargingPointListForm.ts");
-    const createFormPath = join(featureRoot, "model", "chargingPointCreateForm.ts");
+    const createFormPath = join(
+      featureRoot,
+      "model",
+      "chargingPointCreateForm.ts",
+    );
     const storePath = join(featureRoot, "model", "chargingPointListStore.ts");
-    const dataTablePath = join(srcRoot, "components", "data-table", "DataTable.tsx");
+    const dataTablePath = join(
+      srcRoot,
+      "components",
+      "data-table",
+      "DataTable.tsx",
+    );
     const chartPath = join(srcRoot, "components", "ui", "chart.tsx");
     const routerSource = readFileSync(routerPath, "utf8");
     const routeSource = readFileSync(routePath, "utf8");
@@ -166,7 +203,9 @@ describe("web architecture", () => {
     const detailPageSource = existsSync(detailPagePath)
       ? readFileSync(detailPagePath, "utf8")
       : "";
-    const chartSource = existsSync(chartPath) ? readFileSync(chartPath, "utf8") : "";
+    const chartSource = existsSync(chartPath)
+      ? readFileSync(chartPath, "utf8")
+      : "";
     const createDialogSource = readFileSync(createDialogPath, "utf8");
     const editDialogSource = readFileSync(editDialogPath, "utf8");
     const connectorDialogSource = readFileSync(connectorDialogPath, "utf8");
@@ -226,6 +265,7 @@ describe("web architecture", () => {
     expect(routeSource).toContain("ChargingPointListPage");
     expect(routerSource).toContain("/charging-points/$chargingPointId");
     expect(routerSource).toContain("ChargingPointDetailRoute");
+    expect(routerSource).toContain("scrollRestoration: true");
     expect(routeSource).not.toContain("useQuery");
     expect(routeSource).not.toContain("useForm");
     expect(routeSource).not.toContain("fetch(");
@@ -235,38 +275,43 @@ describe("web architecture", () => {
     expect(pageSource).toContain("useForm");
     expect(pageSource).toContain("useChargingPointListStore");
     expect(pageSource).toContain("handleListSearch");
-    expect(pageSource).toContain("onSearch={form.handleSubmit(handleListSearch)}");
-    expect(pageSource).toContain("ChargingPointMobileCardList");
-    expect(pageSource).toContain("ChargingPointTable");
-    expect(pageSource).toContain("md:hidden");
-    expect(pageSource).toContain("hidden flex-col gap-3 md:flex");
-    expect(pageSource).toContain("DataTable");
+    expect(pageSource).toContain("useInfiniteQuery");
+    expect(pageSource).toContain("ChargingPointCardList");
+    expect(pageSource).toContain("MobileInfiniteListStatus");
+    expect(pageSource).toContain(
+      "grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3",
+    );
+    expect(pageSource).toContain("CardFooter");
     expect(pageSource).toContain('to="/charging-points/$chargingPointId"');
     expect(pageSource).toContain("chargingPointId");
-    expect(pageSource).toContain("ColumnDef");
+    expect(pageSource).not.toContain("ChargingPointMobileCardList");
+    expect(pageSource).not.toContain("ChargingPointTable");
+    expect(pageSource).not.toContain("DataTable");
+    expect(pageSource).not.toContain("ColumnDef");
     expect(pageSource).not.toContain("TableHeader");
     expect(pageSource).toContain("Card");
-    expect(pageSource).toContain("Checkbox");
+    expect(pageSource).not.toContain("Checkbox");
+    expect(pageSource).not.toContain("selectedIds");
     expect(pageSource).toContain("DropdownMenuTrigger");
     expect(pageSource).toContain("DropdownMenuLabel");
     expect(pageSource).toContain("DropdownMenuRadioItem");
-    expect(pageSource).toContain("DropdownMenuSeparator");
-    expect(pageSource).toContain("ChargingPointRowActionMenu");
+    expect(pageSource).toContain("ChargingPointCardActions");
     expect(pageSource).toContain("ChargingPointCreateDialog");
     expect(pageSource).toContain("ChargingPointEditDialog");
     expect(pageSource).toContain("ChargingPointConnectorManagementDialog");
     expect(pageSource).toContain("toast");
     expect(pageSource).toContain("AlertDialogContent");
-    expect(pageSource).toContain("操作");
     expect(pageSource).toContain("编辑");
+    expect(pageSource).toContain("枪口管理");
     expect(pageSource).toContain("删除");
     expect(pageSource).toContain("确认删除");
     expect(pageSource).toContain("useMutation");
     expect(pageSource).toContain("invalidateQueries");
     expect(pageSource).toContain("FieldGroup");
     expect(pageSource).toContain("FieldLabel");
-    expect(pageSource).not.toContain('type="hidden" {...form.register("protocol")}');
-    expect(pageSource).toContain("全选当前列表");
+    expect(pageSource).not.toContain(
+      'type="hidden" {...form.register("protocol")}',
+    );
     expect(pageSource).not.toContain("chargingPointCreateFormSchema");
     expect(createDialogSource).toContain("DialogTrigger");
     expect(createDialogSource).toContain("新增");
@@ -302,7 +347,9 @@ describe("web architecture", () => {
     expect(connectorDialogSource).not.toContain("Table");
     expect(connectorEditDialogSource).toContain("编辑枪口");
     expect(connectorEditDialogSource).toContain("connectorToFormValues");
-    expect(connectorEditDialogSource).toContain("ChargingPointConnectorFormFields");
+    expect(connectorEditDialogSource).toContain(
+      "ChargingPointConnectorFormFields",
+    );
     expect(connectorEditDialogSource).toContain("updateConnector");
     expect(connectorEditDialogSource).toContain("onSaved");
     expect(connectorEditDialogSource).not.toContain("deleteConnector");
@@ -313,7 +360,9 @@ describe("web architecture", () => {
     expect(connectorFormFieldsSource).toContain("CONNECTOR_TYPE_OPTIONS");
     expect(connectorFormFieldsSource).toContain("CONNECTOR_FORMAT_OPTIONS");
     expect(connectorFormFieldsSource).toContain("CONNECTOR_POWER_TYPE_OPTIONS");
-    expect(connectorFormFieldsSource).not.toContain('placeholder="Type2 / CCS2"');
+    expect(connectorFormFieldsSource).not.toContain(
+      'placeholder="Type2 / CCS2"',
+    );
     expect(connectorFormFieldsSource).not.toContain(
       '<SelectItem value="socket">socket</SelectItem>',
     );
@@ -348,7 +397,9 @@ describe("web architecture", () => {
       "拔枪将以车辆断开原因停止当前交易，并将枪口设为未插枪。",
     );
     expect(detailPageSource).toContain("connectorEditor.target");
-    expect(detailPageSource).toContain("onEdit={() => connectorEditor.open(model.connector)}");
+    expect(detailPageSource).toContain(
+      "onEdit={() => connectorEditor.open(model.connector)}",
+    );
     expect(detailPageSource).not.toContain("运行摘要");
     expect(detailPageSource).not.toContain(">运行状态</span>");
     expect(detailPageSource).toContain("@tanstack/react-virtual");
@@ -358,7 +409,9 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("OBSERVATION_TIME_FILTER_OPTIONS");
     expect(detailPageSource).toContain("filterObservationEntries");
     expect(detailPageSource).toContain("buildObservationTypeFilterOptions");
-    expect(detailPageSource).toContain("报文 {filteredProtocolMessages.length}");
+    expect(detailPageSource).toContain(
+      "报文 {filteredProtocolMessages.length}",
+    );
     expect(detailPageSource).toContain("事件 {filteredEvents.length}");
     expect(detailPageSource).not.toContain("显示 {filteredCount}");
     expect(detailPageSource).toContain("时间筛选");
@@ -369,14 +422,17 @@ describe("web architecture", () => {
     expect(detailPageSource).not.toContain("清空当前列表");
     expect(detailPageSource).not.toContain("当前页面会话内实时观察");
     expect(detailPageSource).not.toContain("当前页面打开后收到的最近 200 条");
-    expect(detailPageSource).not.toContain("<StatusBadge item={headerModel.sessionStatus}");
+    expect(detailPageSource).not.toContain(
+      "<StatusBadge item={headerModel.sessionStatus}",
+    );
     expect(detailPageSource).not.toContain("最终连接");
     expect(detailPageSource).toContain("headerModel.finalConnectionUrl");
     expect(detailPageSource).toContain("col-span-full");
     expect(detailPageSource).toContain("gap-x-3 gap-y-1");
     expect(
-      detailPageSource.match(/<CardAction className="flex flex-wrap justify-end gap-2">/g)
-        ?.length,
+      detailPageSource.match(
+        /<CardAction className="flex flex-wrap justify-end gap-2">/g,
+      )?.length,
     ).toBe(2);
     expect(detailPageSource).toContain(
       "xl:grid-cols-[13rem_minmax(20rem,1fr)_minmax(20rem,1fr)]",
@@ -399,19 +455,22 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("tickFormatter={formatEnergyAxisTick}");
     expect(detailPageSource).toContain("formatEnergyTooltipValue");
     expect(detailPageSource).toContain("getEnergyChartDomain");
-    expect(detailPageSource).toContain("domain={getEnergyChartDomain(samples)}");
+    expect(detailPageSource).toContain(
+      "domain={getEnergyChartDomain(samples)}",
+    );
     expect(detailPageSource).toContain('className="flex h-40 flex-col gap-2"');
-    expect(detailPageSource).toContain('<div className="grid gap-2">');
+    expect(detailPageSource).toContain(
+      '<div className="grid grid-cols-3 gap-2 xl:grid-cols-1">',
+    );
     expect(detailPageSource).toContain(
       '<div className="grid grid-cols-2 gap-2 md:grid-cols-4">',
     );
-    expect(detailPageSource).toContain('field.span === "full" && "col-span-full"');
     expect(detailPageSource).not.toContain('yAxisId="powerW"');
     expect(detailPageSource).not.toContain('yAxisId="currentA"');
     expect(detailPageSource).not.toContain('yAxisId="voltageV"');
     expect(detailPageSource).toContain("md:grid-cols-4");
     expect(detailPageSource).toContain("activeObservationTab");
-    expect(detailPageSource).toContain('value={activeObservationTab}');
+    expect(detailPageSource).toContain("value={activeObservationTab}");
     expect(detailPageSource.indexOf('value="messages"')).toBeLessThan(
       detailPageSource.indexOf('value="events"'),
     );
@@ -428,22 +487,31 @@ describe("web architecture", () => {
       "<StatusBadge item={headerModel.chargingPointStatus}",
     );
     expect(detailPageSource).toContain(
-      "grid-cols-[5.5rem_minmax(8rem,0.9fr)_minmax(6rem,0.7fr)_minmax(8rem,1fr)_minmax(0,1.4fr)]",
+      "md:grid-cols-[5.5rem_minmax(0,0.9fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,1.4fr)]",
     );
-    expect(detailPageSource).toContain("formatObservationPreview(entry.detail)");
-    expect(detailPageSource.match(/formatObservationPreview\(entry.detail\)/g)?.length).toBe(2);
+    expect(detailPageSource).toContain(
+      "formatObservationPreview(entry.detail)",
+    );
+    expect(
+      detailPageSource.match(/formatObservationPreview\(entry.detail\)/g)
+        ?.length,
+    ).toBe(2);
     expect(detailPageSource).toContain("group-open:hidden");
     expect(detailPageSource).toContain("启动充电");
-    expect(detailPageSource).toContain('const [idTag, setIdTag] = useState("");');
-    expect(detailPageSource).not.toContain('const [idTag, setIdTag] = useState("CARD001");');
+    expect(detailPageSource).toContain(
+      'const [idTag, setIdTag] = useState("");',
+    );
+    expect(detailPageSource).not.toContain(
+      'const [idTag, setIdTag] = useState("CARD001");',
+    );
     expect(detailPageSource).toContain("停止充电");
     expect(detailPageSource).toContain("ArrowRightIcon");
     expect(detailPageSource).toContain("ArrowLeftIcon");
     expect(detailPageSource).toContain(
-      "direction === \"received\" ? ArrowLeftIcon : ArrowRightIcon",
+      'direction === "received" ? ArrowLeftIcon : ArrowRightIcon',
     );
     expect(detailPageSource).toContain(
-      "grid-cols-[5.5rem_4rem_minmax(8rem,0.8fr)_minmax(8rem,1fr)_minmax(0,1.6fr)]",
+      "md:grid-cols-[5.5rem_4rem_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1.6fr)]",
     );
     expect(detailPageSource).not.toContain(
       '<span className="truncate text-muted-foreground">{entry.summary}</span>',
@@ -460,10 +528,9 @@ describe("web architecture", () => {
     expect(detailHeaderModelSource).not.toContain("staticDetails");
     expect(connectorCardsModelSource).toContain("buildConnectorCardModels");
     expect(connectorCardsModelSource).not.toContain("statusBadge");
-    expect(connectorCardsModelSource).toContain('span?: "full"');
     expect(connectorCardsModelSource).toContain("toConnectorStatusField");
-    expect(connectorCardsModelSource).toContain("可用 / 未插枪");
-    expect(connectorCardsModelSource).toContain("占用 / 已插枪");
+    expect(connectorCardsModelSource).toContain("未插枪");
+    expect(connectorCardsModelSource).toContain("已插枪");
     expect(connectorCardsModelSource).not.toContain("插枪状态");
     expect(connectorCardsModelSource).toContain("toConnectorAvailability");
     expect(connectorCardsModelSource).toContain("可用性");
@@ -489,12 +556,14 @@ describe("web architecture", () => {
     expect(formFieldsSource).toContain("SelectTrigger");
     expect(formFieldsSource).toContain("SelectItem");
     expect(formFieldsSource).toContain("OCPP 1.6J");
-    expect(formFieldsSource).not.toContain('type="hidden" {...form.register("protocol")}');
+    expect(formFieldsSource).not.toContain(
+      'type="hidden" {...form.register("protocol")}',
+    );
     expect(formFieldsSource).toContain("configurationLocked");
     expect(formFieldsSource).toContain("Textarea");
     expect(formFieldsSource).toContain("CSMS 地址");
-    expect(storeSource).toContain("selectedIds");
-    expect(storeSource).toContain("setSelectedIds");
+    expect(storeSource).not.toContain("selectedIds");
+    expect(storeSource).not.toContain("setSelectedIds");
     expect(storeSource).toContain("pageSize");
     expect(storeSource).toContain("setPageSize");
     expect(storeSource).toContain("removeDeletedId");
@@ -589,14 +658,24 @@ describe("web architecture", () => {
 
     expect(routerSource).toContain("createRootRoute");
     expect(routerSource).toContain("/charging-points");
-    expect(routerSource).toContain("features/charging-points/routes/ChargingPointsRoute");
-    expect(existsSync(join(srcRoot, "components", "ui", "button.tsx"))).toBe(true);
-    expect(existsSync(join(srcRoot, "components", "ui", "badge.tsx"))).toBe(true);
-    expect(existsSync(join(srcRoot, "components", "ui", "alert-dialog.tsx"))).toBe(
+    expect(routerSource).toContain(
+      "features/charging-points/routes/ChargingPointsRoute",
+    );
+    expect(existsSync(join(srcRoot, "components", "ui", "button.tsx"))).toBe(
       true,
     );
-    expect(existsSync(join(srcRoot, "components", "ui", "dialog.tsx"))).toBe(true);
-    expect(existsSync(join(srcRoot, "components", "ui", "sonner.tsx"))).toBe(true);
+    expect(existsSync(join(srcRoot, "components", "ui", "badge.tsx"))).toBe(
+      true,
+    );
+    expect(
+      existsSync(join(srcRoot, "components", "ui", "alert-dialog.tsx")),
+    ).toBe(true);
+    expect(existsSync(join(srcRoot, "components", "ui", "dialog.tsx"))).toBe(
+      true,
+    );
+    expect(existsSync(join(srcRoot, "components", "ui", "sonner.tsx"))).toBe(
+      true,
+    );
     expect(
       existsSync(join(srcRoot, "components", "ui", "dropdown-menu.tsx")),
     ).toBe(true);

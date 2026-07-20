@@ -55,7 +55,7 @@ async function plugConnectorCore(
   if (connector.status !== "available") {
     throw new ProtocolRuntimeError(
       "PROTOCOL_RUNTIME_INVALID_OPERATION",
-      `枪口 ${input.evseId}/${input.connectorId} 当前不可插枪`,
+      `枪口 ${input.connectorId} 当前不可插枪`,
     );
   }
 

@@ -59,8 +59,8 @@ describe("charging point runtime events", () => {
     expect(feedState.events).toHaveLength(1);
     expect(feedState.events[0]).toMatchObject({
       eventType: "connector.status",
-      resource: "枪口 1/1",
-      summary: "枪口 1/1: 占用",
+      resource: "枪口 1",
+      summary: "枪口 1: 占用",
     });
     expect(feedState.protocolMessages).toHaveLength(1);
     expect(feedState.protocolMessages[0]).toMatchObject({
@@ -157,7 +157,7 @@ describe("charging point runtime events", () => {
     expect(feedState.protocolMessages).toHaveLength(500);
     expect(feedState.events).toHaveLength(500);
     expect(feedState.protocolMessages[0]?.messageId).toBe("msg-500");
-    expect(feedState.events[0]?.resource).toBe("枪口 1/501");
+    expect(feedState.events[0]?.resource).toBe("枪口 501");
   });
 
   test("initializes state from a runtime snapshot", () => {
@@ -563,7 +563,7 @@ describe("charging point runtime events", () => {
         currentStatus: "faulted",
       },
     });
-    expect(state.recentIssue?.label).toBe("枪口 1/2 故障");
+    expect(state.recentIssue?.label).toBe("枪口 2 故障");
 
     state = reduceChargingPointRuntimeEventState(state, {
       event: "transaction.status",
