@@ -212,6 +212,15 @@ export function recordOfflineTransactionStopDelivery(
     idTag?: string;
   },
 ): EndedTransactionDelivery {
+  const binding = resolveTransactionDeliveryBinding(context, input.transaction);
+  if (binding.status === "bound") {
+    ensureBoundTransactionOutboxRecord(context, {
+      transaction: input.transaction,
+      connectorId: input.connectorRef.connectorId,
+      ocppTransactionId: binding.ocppTransactionId,
+    });
+  }
+
   const delivery = endTransactionDelivery(context, input);
   recordOfflineTransactionStop(context, delivery.endedTransaction.id, {
     meterStopWh: delivery.meterStop,

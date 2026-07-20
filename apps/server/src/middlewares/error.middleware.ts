@@ -45,7 +45,7 @@ export function createErrorMiddleware(
       event: "http.request.failed",
       ...reportContext,
       error,
-    }, "HTTP 请求发生非预期异常");
+    }, "Unexpected HTTP request error");
     errorReporter.captureException(error, reportContext);
     return context.json(
       {

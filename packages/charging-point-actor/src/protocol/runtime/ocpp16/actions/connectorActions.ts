@@ -20,6 +20,7 @@ import {
   publishConnectorStatusTransition,
   reportConnectorStatusTransition,
 } from "./connectorStatusTransition";
+import { stopTransaction } from "./stopTransaction";
 
 export async function plugConnector(
   context: Ocpp16RuntimeContext,
@@ -107,9 +108,19 @@ async function unplugConnectorCore(
   const at = context.clock();
   requireDomainConnector(context, input);
   const transition = captureConnectorStatusTransition(context, input);
+  const activeTransaction = [...context.transactions.values()].find((transaction) => {
+    const target = transaction.target;
+    return transaction.state !== "ended" &&
+      target.scope === "connector" &&
+      target.evseId === input.evseId &&
+      target.connectorId === input.connectorId;
+  });
 
-  if (hasActiveTransactionOnConnector(context, input)) {
-    throw new ProtocolRuntimeError("PROTOCOL_RUNTIME_INVALID_OPERATION", "枪口存在活跃交易，拔枪前需要先停止交易");
+  if (activeTransaction?.state === "ending") {
+    throw new ProtocolRuntimeError(
+      "PROTOCOL_RUNTIME_INVALID_OPERATION",
+      "交易正在结束，请稍后拔枪",
+    );
   }
 
   context.chargingPoint = context.chargingPoint.updateEvse(input.evseId, (evse) =>
@@ -121,6 +132,25 @@ async function unplugConnectorCore(
         .setLockState("unlocked", at)
     )
   );
+
+  if (activeTransaction !== undefined) {
+    await stopTransaction(context, {
+      transactionId: activeTransaction.id,
+      reason: "ev-disconnected",
+      stoppedAt: at,
+    });
+
+    const connector = requireDomainConnector(context, input);
+    return {
+      evseId: input.evseId,
+      connectorId: input.connectorId,
+      ocppConnectorId: input.connectorId,
+      plugState: "unplugged",
+      vehiclePresence: "absent",
+      connectorStatus: connector.status,
+    };
+  }
+
   emitConnectorStatusTransition(context, transition, at);
 
   const availabilityTransition = captureConnectorStatusTransition(context, input);

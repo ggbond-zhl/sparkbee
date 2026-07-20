@@ -20,13 +20,13 @@ export function requestLogMiddleware(logger: Logger): MiddlewareHandler {
     };
 
     if (status >= 500) {
-      logger.error(fields, "HTTP 请求处理失败");
+      logger.error(fields, "HTTP request failed");
     } else if (status >= 400) {
-      logger.warn(fields, "HTTP 请求未成功");
+      logger.warn(fields, "HTTP request completed with client error");
     } else if (HEALTH_PATHS.has(path)) {
-      logger.info(fields, "健康检查完成");
+      logger.info(fields, "Health check completed");
     } else {
-      logger.info(fields, "HTTP 请求完成");
+      logger.info(fields, "HTTP request completed");
     }
   };
 }

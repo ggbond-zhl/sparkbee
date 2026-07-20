@@ -4,7 +4,6 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   PencilIcon,
-  PinIcon,
   PlayIcon,
   PlugZapIcon,
   SquareIcon,
@@ -281,7 +280,7 @@ function DetailMetric({
 function RuntimeSummaryPanel({ items }: { items: HeaderMetricItem[] }) {
   return (
     <section>
-      <div className="grid gap-2 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {items.map((item) => (
           <DetailMetric key={item.label} {...item} />
         ))}
@@ -708,8 +707,6 @@ function RuntimeObservationTabs({
   const [eventTypeFilter, setEventTypeFilter] = useState(
     ALL_RUNTIME_LOG_TYPE_FILTER,
   );
-  const [messagesPinned, setMessagesPinned] = useState(false);
-  const [eventsPinned, setEventsPinned] = useState(false);
   const messagesListHandleRef = useRef<ObservationListHandle | null>(null);
   const eventsListHandleRef = useRef<ObservationListHandle | null>(null);
   const filterNowMs = Date.now();
@@ -751,8 +748,6 @@ function RuntimeObservationTabs({
   );
   const activeListHandleRef =
     activeObservationTab === "messages" ? messagesListHandleRef : eventsListHandleRef;
-  const activeListPinned =
-    activeObservationTab === "messages" ? messagesPinned : eventsPinned;
   const activeListLength =
     activeObservationTab === "messages" ? protocolMessages.length : events.length;
   const activeTimeFilter =
@@ -765,24 +760,20 @@ function RuntimeObservationTabs({
   function handleActiveTimeFilterChange(timeFilter: ObservationTimeFilter) {
     activeListHandleRef.current?.resetToTop();
     if (activeObservationTab === "messages") {
-      setMessagesPinned(false);
       setMessageTimeFilter(timeFilter);
       return;
     }
 
-    setEventsPinned(false);
     setEventTimeFilter(timeFilter);
   }
 
   function handleActiveTypeFilterChange(typeFilter: string) {
     activeListHandleRef.current?.resetToTop();
     if (activeObservationTab === "messages") {
-      setMessagesPinned(false);
       setMessageTypeFilter(typeFilter);
       return;
     }
 
-    setEventsPinned(false);
     setEventTypeFilter(typeFilter);
   }
 
@@ -802,11 +793,9 @@ function RuntimeObservationTabs({
           </TabsList>
           <RuntimeObservationToolbar
             disabled={activeListLength === 0}
-            pinned={activeListPinned}
             timeFilter={activeTimeFilter}
             typeFilter={activeTypeFilter}
             typeOptions={activeTypeOptions}
-            onPinnedToggle={() => activeListHandleRef.current?.togglePinned()}
             onTimeFilterChange={handleActiveTimeFilterChange}
             onTypeFilterChange={handleActiveTypeFilterChange}
           />
@@ -816,8 +805,6 @@ function RuntimeObservationTabs({
             entries={filteredProtocolMessages}
             entriesCount={protocolMessages.length}
             listHandleRef={messagesListHandleRef}
-            pinned={messagesPinned}
-            onPinnedChange={setMessagesPinned}
           />
         </TabsContent>
         <TabsContent className="mt-3" value="events">
@@ -825,8 +812,6 @@ function RuntimeObservationTabs({
             entries={filteredEvents}
             entriesCount={events.length}
             listHandleRef={eventsListHandleRef}
-            pinned={eventsPinned}
-            onPinnedChange={setEventsPinned}
           />
         </TabsContent>
       </Tabs>
@@ -838,20 +823,16 @@ type RuntimeObservationTab = "messages" | "events";
 
 function RuntimeObservationToolbar({
   disabled,
-  pinned,
   timeFilter,
   typeFilter,
   typeOptions,
-  onPinnedToggle,
   onTimeFilterChange,
   onTypeFilterChange,
 }: {
   disabled: boolean;
-  pinned: boolean;
   timeFilter: ObservationTimeFilter;
   typeFilter: string;
   typeOptions: ObservationTypeFilterOption[];
-  onPinnedToggle(): void;
   onTimeFilterChange(timeFilter: ObservationTimeFilter): void;
   onTypeFilterChange(typeFilter: string): void;
 }) {
@@ -894,23 +875,6 @@ function RuntimeObservationToolbar({
           </SelectGroup>
         </SelectContent>
       </Select>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            aria-label={pinned ? "取消滚动钉住" : "滚动钉住"}
-            aria-pressed={pinned}
-            size="icon-sm"
-            type="button"
-            variant={pinned ? "secondary" : "outline"}
-            onClick={onPinnedToggle}
-          >
-            <PinIcon />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {pinned ? "取消滚动钉住" : "滚动钉住"}
-        </TooltipContent>
-      </Tooltip>
     </div>
   );
 }
@@ -953,14 +917,10 @@ function ProtocolEventList({
   entries,
   entriesCount,
   listHandleRef,
-  pinned,
-  onPinnedChange,
 }: {
   entries: RuntimeEventLogEntry[];
   entriesCount: number;
   listHandleRef: Ref<ObservationListHandle>;
-  pinned: boolean;
-  onPinnedChange(pinned: boolean): void;
 }) {
   return (
     <VirtualObservationList
@@ -971,8 +931,6 @@ function ProtocolEventList({
         filteredEmptyText: "没有匹配筛选条件的事件",
       })}
       listHandleRef={listHandleRef}
-      pinned={pinned}
-      onPinnedChange={onPinnedChange}
       renderRow={(entry) => <ProtocolEventRow entry={entry} />}
     />
   );
@@ -982,14 +940,10 @@ function ProtocolMessageList({
   entries,
   entriesCount,
   listHandleRef,
-  pinned,
-  onPinnedChange,
 }: {
   entries: ProtocolMessageLogEntry[];
   entriesCount: number;
   listHandleRef: Ref<ObservationListHandle>;
-  pinned: boolean;
-  onPinnedChange(pinned: boolean): void;
 }) {
   return (
     <VirtualObservationList
@@ -1000,8 +954,6 @@ function ProtocolMessageList({
         filteredEmptyText: "没有匹配筛选条件的报文",
       })}
       listHandleRef={listHandleRef}
-      pinned={pinned}
-      onPinnedChange={onPinnedChange}
       renderRow={(entry) => <ProtocolMessageRow entry={entry} />}
     />
   );
@@ -1019,7 +971,6 @@ interface ObservationScrollAnchor {
 
 interface ObservationListHandle {
   resetToTop(): void;
-  togglePinned(): void;
 }
 
 const RUNTIME_LOG_TOP_THRESHOLD = 8;
@@ -1028,15 +979,11 @@ function VirtualObservationList<TEntry extends ObservationListEntry>({
   entries,
   emptyText,
   listHandleRef,
-  pinned,
-  onPinnedChange,
   renderRow,
 }: {
   entries: TEntry[];
   emptyText: string;
   listHandleRef: Ref<ObservationListHandle>;
-  pinned: boolean;
-  onPinnedChange(pinned: boolean): void;
   renderRow(entry: TEntry): ReactNode;
 }) {
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
@@ -1079,7 +1026,7 @@ function VirtualObservationList<TEntry extends ObservationListEntry>({
     const previousEntries = previousEntriesRef.current;
     const anchor = anchorRef.current;
     const shouldKeepAnchor =
-      pinned || (anchor?.scrollTop ?? 0) > RUNTIME_LOG_TOP_THRESHOLD;
+      (anchor?.scrollTop ?? 0) > RUNTIME_LOG_TOP_THRESHOLD;
 
     if (entries.length > previousEntries.length && anchor && shouldKeepAnchor) {
       const targetIndex = entries.findIndex((entry) => entry.id === anchor.id);
@@ -1095,35 +1042,22 @@ function VirtualObservationList<TEntry extends ObservationListEntry>({
     }
 
     previousEntriesRef.current = entries;
-  }, [entries, pinned, rowVirtualizer]);
+  }, [entries, rowVirtualizer]);
 
   useLayoutEffect(() => {
     updateAnchor();
   }, [updateAnchor]);
 
-  const handlePinnedChange = useCallback(() => {
-    if (!pinned) {
-      updateAnchor();
-      onPinnedChange(true);
-      return;
-    }
-
-    onPinnedChange(false);
-    rowVirtualizer.scrollToIndex(0, { align: "start" });
-  }, [onPinnedChange, pinned, rowVirtualizer, updateAnchor]);
-
   const resetToTop = useCallback(() => {
-    onPinnedChange(false);
     rowVirtualizer.scrollToIndex(0, { align: "start" });
-  }, [onPinnedChange, rowVirtualizer]);
+  }, [rowVirtualizer]);
 
   useImperativeHandle(
     listHandleRef,
     () => ({
       resetToTop,
-      togglePinned: handlePinnedChange,
     }),
-    [handlePinnedChange, resetToTop],
+    [resetToTop],
   );
 
   const virtualItems = rowVirtualizer.getVirtualItems();
@@ -1287,15 +1221,11 @@ function ConnectorActionButton({
 
   if (action.kind === "unplug") {
     return (
-      <Button
+      <UnplugConnectorButton
+        action={action}
         disabled={disabled}
-        type="button"
-        variant="outline"
-        onClick={onUnplug}
-      >
-        <UnplugIcon />
-        {action.label}
-      </Button>
+        onConfirm={onUnplug}
+      />
     );
   }
 
@@ -1315,6 +1245,53 @@ function ConnectorActionButton({
       disabled={disabled}
       onConfirm={onStopCharging}
     />
+  );
+}
+
+function UnplugConnectorButton({
+  action,
+  disabled,
+  onConfirm,
+}: {
+  action: ConnectorCardAction;
+  disabled: boolean;
+  onConfirm(): void;
+}) {
+  const button = (
+    <Button
+      disabled={disabled}
+      type="button"
+      variant="outline"
+      {...(action.requiresConfirmation ? {} : { onClick: onConfirm })}
+    >
+      <UnplugIcon />
+      {action.label}
+    </Button>
+  );
+
+  if (!action.requiresConfirmation) {
+    return button;
+  }
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>{button}</AlertDialogTrigger>
+      <AlertDialogContent size="sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>充电中拔枪</AlertDialogTitle>
+          <AlertDialogDescription>
+            拔枪将以车辆断开原因停止当前交易，并将枪口设为未插枪。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>
+            <UnplugIcon />
+            确认拔枪
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

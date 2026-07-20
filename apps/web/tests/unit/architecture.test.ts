@@ -343,6 +343,10 @@ describe("web architecture", () => {
     expect(workbenchSource).toContain("chargingPointRuntimeStatusQueryOptions");
     expect(detailPageSource).toContain("ChargingPointEditDialog");
     expect(detailPageSource).toContain("ChargingPointConnectorEditDialog");
+    expect(detailPageSource).toContain("UnplugConnectorButton");
+    expect(detailPageSource).toContain(
+      "拔枪将以车辆断开原因停止当前交易，并将枪口设为未插枪。",
+    );
     expect(detailPageSource).toContain("connectorEditor.target");
     expect(detailPageSource).toContain("onEdit={() => connectorEditor.open(model.connector)}");
     expect(detailPageSource).not.toContain("运行摘要");
@@ -359,8 +363,8 @@ describe("web architecture", () => {
     expect(detailPageSource).not.toContain("显示 {filteredCount}");
     expect(detailPageSource).toContain("时间筛选");
     expect(detailPageSource).toContain("类型筛选");
-    expect(detailPageSource).toContain("PinIcon");
-    expect(detailPageSource).toContain("滚动钉住");
+    expect(detailPageSource).not.toContain("PinIcon");
+    expect(detailPageSource).not.toContain("滚动钉住");
     expect(detailPageSource).not.toContain("Trash2Icon");
     expect(detailPageSource).not.toContain("清空当前列表");
     expect(detailPageSource).not.toContain("当前页面会话内实时观察");
@@ -398,7 +402,9 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("domain={getEnergyChartDomain(samples)}");
     expect(detailPageSource).toContain('className="flex h-40 flex-col gap-2"');
     expect(detailPageSource).toContain('<div className="grid gap-2">');
-    expect(detailPageSource).not.toContain('<div className="grid grid-cols-2 gap-2">');
+    expect(detailPageSource).toContain(
+      '<div className="grid grid-cols-2 gap-2 md:grid-cols-4">',
+    );
     expect(detailPageSource).toContain('field.span === "full" && "col-span-full"');
     expect(detailPageSource).not.toContain('yAxisId="powerW"');
     expect(detailPageSource).not.toContain('yAxisId="currentA"');

@@ -195,7 +195,7 @@ const unplugConnectorRoute = createRoute({
   tags: ["RuntimeOperation"],
   summary: "拔枪",
   description:
-    "在运行中的桩实例上执行车辆离开枪口模拟动作；存在未结束交易时不会自动停止交易。",
+    "在运行中的桩实例上执行车辆离开枪口模拟动作；存在活动交易时，以车辆断开原因为交易收尾后完成拔枪。",
   request: {
     params: connectorActionParamSchema,
   },

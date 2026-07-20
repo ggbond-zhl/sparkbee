@@ -96,7 +96,7 @@ export async function startServer({
     logger.error({
       event: "database.connection.failed",
       error,
-    }, "数据库连接校验失败，服务启动已终止");
+    }, "Database connection check failed; server startup aborted");
     errorReporter.captureException(error, { module: "database.startup" });
     throw error;
   }

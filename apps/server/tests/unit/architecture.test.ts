@@ -35,6 +35,22 @@ function moduleDirectories(): string[] {
 }
 
 describe("server architecture", () => {
+  test("uses English for server runtime log messages", () => {
+    const nonEnglishMessages = sourceFiles().flatMap((filePath) => {
+      const source = readFileSync(filePath, "utf8");
+      const messages = source.matchAll(
+        /(?:\b|this\.)logger\.(?:trace|debug|info|warn|error|fatal)\([\s\S]*?,\s*"([^"]+)"\s*\)/g,
+      );
+
+      return [...messages]
+        .flatMap((match) => match[1] === undefined ? [] : [match[1]])
+        .filter((message) => /[\u3400-\u9fff]/.test(message))
+        .map((message) => `${relative(serverRoot, filePath)} -> ${message}`);
+    });
+
+    expect(nonEnglishMessages).toEqual([]);
+  });
+
   test("keeps backend source areas explicit", () => {
     const allowedTopLevelEntries = new Set([
       "app.ts",
@@ -240,17 +256,15 @@ describe("server architecture", () => {
     expect(existsSync(rootMigrationsDir)).toBe(false);
   });
 
-  test("applies pending database migrations before starting the development server", () => {
+  test("starts the development server without running database migrations", () => {
     const packageJson = JSON.parse(
       readFileSync(join(serverRoot, "package.json"), "utf8"),
     ) as { scripts?: Record<string, string> };
 
-    expect(packageJson.scripts?.dev).toBe(
-      "pnpm db:migrate && tsx watch src/index.ts",
-    );
+    expect(packageJson.scripts?.dev).toBe("tsx watch src/index.ts");
   });
 
-  test("waits for the development server before starting the web app", () => {
+  test("starts the server and web app in parallel during development", () => {
     const packageJson = JSON.parse(
       readFileSync(join(repositoryRoot, "package.json"), "utf8"),
     ) as {
@@ -259,9 +273,9 @@ describe("server architecture", () => {
     };
 
     expect(packageJson.scripts?.dev).toBe(
-      "start-server-and-test \"pnpm --filter @spark-bee/server dev\" http://127.0.0.1:3000/api/ready \"pnpm --filter @spark-bee/web dev\"",
+      "pnpm --parallel --filter @spark-bee/server --filter @spark-bee/web dev",
     );
-    expect(packageJson.devDependencies).toHaveProperty("start-server-and-test");
+    expect(packageJson.devDependencies).not.toHaveProperty("start-server-and-test");
   });
 
   test("uses a valid charging point list query in the test deployment smoke check", () => {

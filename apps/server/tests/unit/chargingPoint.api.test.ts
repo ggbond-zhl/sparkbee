@@ -108,6 +108,12 @@ describe("chargingPoint management API", () => {
       document.paths["/api/charging-points/{id}/connectors/{connectorId}/unplug"].post.tags,
     ).toEqual(["RuntimeOperation"]);
     expect(
+      document.paths["/api/charging-points/{id}/connectors/{connectorId}/unplug"].post
+        .description,
+    ).toBe(
+      "在运行中的桩实例上执行车辆离开枪口模拟动作；存在活动交易时，以车辆断开原因为交易收尾后完成拔枪。",
+    );
+    expect(
       document.paths["/api/charging-points/{id}/connectors/{connectorId}/authorize"].post.summary,
     ).toBe("鉴权");
     expect(

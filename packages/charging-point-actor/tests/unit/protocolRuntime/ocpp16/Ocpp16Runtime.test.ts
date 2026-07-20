@@ -1774,7 +1774,7 @@ describe("Ocpp16Runtime", () => {
     expect(connector?.status).toBe("occupied");
   });
 
-  test("continues sending StopTransaction after session offline", async () => {
+  test("queues StopTransaction after session offline", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
@@ -1805,16 +1805,13 @@ describe("Ocpp16Runtime", () => {
 
     expect(result).toMatchObject({
       outcome: "Accepted",
-      ocppTransactionId: 1001,
-      platformCommunicationStatus: "online",
+      ocppTransactionId: null,
+      platformCommunicationStatus: "offline",
     });
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StatusNotification",
       "StartTransaction",
-      "StatusNotification",
-      "StatusNotification",
-      "StopTransaction",
       "StatusNotification",
     ]);
     const state = runtimeState(protocolRuntime);

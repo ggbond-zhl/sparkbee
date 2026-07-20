@@ -37,6 +37,7 @@ export interface ConnectorCardAction {
   kind: ConnectorCardActionKind;
   label: string;
   transactionId?: string;
+  requiresConfirmation?: boolean;
 }
 
 export interface ConnectorCardModel {
@@ -127,6 +128,10 @@ function toConnectorActions(
     return [];
   }
 
+  if (transaction?.currentStatus === "ending") {
+    return [];
+  }
+
   const activeTransaction = transaction === null || !isActiveTransaction(transaction)
     ? null
     : transaction;
@@ -136,6 +141,11 @@ function toConnectorActions(
         kind: "stopCharging",
         label: "停止充电",
         transactionId: activeTransaction.transactionId,
+      },
+      {
+        kind: "unplug",
+        label: "拔枪",
+        requiresConfirmation: true,
       },
     ];
   }

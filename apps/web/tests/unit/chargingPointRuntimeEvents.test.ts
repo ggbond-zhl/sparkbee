@@ -72,10 +72,33 @@ describe("charging point runtime events", () => {
     });
   });
 
-  test("keeps newest runtime feed records first without truncating the page feed", () => {
+  test("keeps only the newest 500 protocol messages", () => {
     let feedState = createChargingPointRuntimeEventFeedState();
 
-    for (let index = 0; index < 201; index += 1) {
+    for (let index = 0; index < 501; index += 1) {
+      feedState = reduceChargingPointRuntimeEventFeedState(feedState, {
+        event: "protocol.message",
+        data: {
+          type: "protocol.message",
+          chargingPointId: "cp-1",
+          occurredAt: "2026-07-04T09:00:00.000Z",
+          resource: { scope: "protocol" },
+          direction: "received",
+          action: "Heartbeat",
+          messageId: `msg-${index}`,
+        },
+      });
+    }
+
+    expect(feedState.protocolMessages).toHaveLength(500);
+    expect(feedState.protocolMessages[0]?.messageId).toBe("msg-500");
+    expect(feedState.protocolMessages.at(-1)?.messageId).toBe("msg-1");
+  });
+
+  test("keeps only the newest 500 protocol events", () => {
+    let feedState = createChargingPointRuntimeEventFeedState();
+
+    for (let index = 0; index < 501; index += 1) {
       feedState = reduceChargingPointRuntimeEventFeedState(feedState, {
         event: "transaction.meterValue",
         data: {
@@ -97,9 +120,44 @@ describe("charging point runtime events", () => {
       });
     }
 
-    expect(feedState.events).toHaveLength(201);
-    expect(feedState.events[0]?.summary).toBe("交易 tx-200: 200.123 Wh");
-    expect(feedState.events.at(-1)?.summary).toBe("交易 tx-0: 0.123 Wh");
+    expect(feedState.events).toHaveLength(500);
+    expect(feedState.events[0]?.summary).toBe("交易 tx-500: 500.123 Wh");
+    expect(feedState.events.at(-1)?.summary).toBe("交易 tx-1: 1.123 Wh");
+  });
+
+  test("keeps protocol message and event capacities independent", () => {
+    let feedState = createChargingPointRuntimeEventFeedState();
+
+    for (let index = 0; index < 501; index += 1) {
+      feedState = reduceChargingPointRuntimeEventFeedState(feedState, {
+        event: "protocol.message",
+        data: {
+          type: "protocol.message",
+          chargingPointId: "cp-1",
+          occurredAt: "2026-07-04T09:00:00.000Z",
+          resource: { scope: "protocol" },
+          direction: "received",
+          action: "Heartbeat",
+          messageId: `msg-${index}`,
+        },
+      });
+      feedState = reduceChargingPointRuntimeEventFeedState(feedState, {
+        event: "connector.status",
+        data: {
+          type: "connector.status",
+          chargingPointId: "cp-1",
+          occurredAt: "2026-07-04T09:00:00.000Z",
+          resource: { scope: "connector", evseId: 1, connectorId: index + 1 },
+          previousStatus: "available",
+          currentStatus: "occupied",
+        },
+      });
+    }
+
+    expect(feedState.protocolMessages).toHaveLength(500);
+    expect(feedState.events).toHaveLength(500);
+    expect(feedState.protocolMessages[0]?.messageId).toBe("msg-500");
+    expect(feedState.events[0]?.resource).toBe("枪口 1/501");
   });
 
   test("initializes state from a runtime snapshot", () => {

@@ -49,7 +49,7 @@ describe("startServer", () => {
     expect(loggerError).toHaveBeenCalledWith({
       event: "database.connection.failed",
       error: connectionError,
-    }, "数据库连接校验失败，服务启动已终止");
+    }, "Database connection check failed; server startup aborted");
     expect(captureException).toHaveBeenCalledWith(connectionError, {
       module: "database.startup",
     });

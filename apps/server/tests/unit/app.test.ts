@@ -107,6 +107,7 @@ describe("createApp", () => {
       event: "http.request.completed",
       path: "/missing",
       status: 404,
+      msg: "HTTP request completed with client error",
     });
   });
 
@@ -141,6 +142,7 @@ describe("createApp", () => {
       method: "GET",
       path: "/api/health",
       status: 200,
+      msg: "Health check completed",
     });
     expect(record.durationMs).toBeGreaterThanOrEqual(0);
     expect(lines.join("")).not.toContain("secret-query");
@@ -197,11 +199,13 @@ describe("createApp", () => {
         method: "GET",
         path: "/failure",
         error: expect.objectContaining({ message: "controlled failure" }),
+        msg: "Unexpected HTTP request error",
       }),
       expect.objectContaining({
         event: "http.request.completed",
         requestId: "request-500",
         status: 500,
+        msg: "HTTP request failed",
       }),
     ]));
   });

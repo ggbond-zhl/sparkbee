@@ -44,7 +44,7 @@ function createRuntimeState(input: {
     requestedAvailability?: "operative" | "inoperative";
   } | null;
   transaction?: {
-    status: "active" | "ended" | "rejected";
+    status: "starting" | "active" | "suspended" | "ending" | "ended" | "rejected";
     meterWh?: number;
   };
 }) {
@@ -197,7 +197,7 @@ describe("charging point connector cards", () => {
     ]);
   });
 
-  test("shows only stop charging action when the connector has an active transaction", () => {
+  test("shows stop charging and confirmed unplug actions for an active transaction", () => {
     const state = createRuntimeState({
       connectorStatus: "occupied",
       transaction: {
@@ -228,7 +228,27 @@ describe("charging point connector cards", () => {
         label: "停止充电",
         transactionId: "tx-1",
       },
+      {
+        kind: "unplug",
+        label: "拔枪",
+        requiresConfirmation: true,
+      },
     ]);
+  });
+
+  test("shows no actions while the transaction is ending", () => {
+    const state = createRuntimeState({
+      connectorStatus: "occupied",
+      transaction: { status: "ending", meterWh: 1200 },
+    });
+
+    const [model] = buildConnectorCardModels({
+      connectors: [connector],
+      runtimeStatus: runtimeStatus("running"),
+      runtimeEventState: state,
+    });
+
+    expect(model?.actions).toEqual([]);
   });
 
   test("shows no transaction after the transaction has ended", () => {

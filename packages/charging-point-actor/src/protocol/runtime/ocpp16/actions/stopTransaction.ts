@@ -53,7 +53,7 @@ export async function stopTransaction(
     context,
     chargingTransaction,
   );
-  if (deliveryBinding.status === "offline") {
+  if (deliveryBinding.status === "offline" || !context.session.isConnected()) {
     return stopOfflineTransaction(context, {
       input,
       at,

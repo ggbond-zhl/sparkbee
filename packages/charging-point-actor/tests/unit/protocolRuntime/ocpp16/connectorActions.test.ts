@@ -156,8 +156,110 @@ describe("Ocpp16Runtime connector actions", () => {
     );
   });
 
-  test("unplug rejects active transaction", async () => {
-    const { protocolRuntime } = createProtocolRuntime([]);
+  test("unplug ends an active transaction with EVDisconnected before reporting Available", async () => {
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      response("Authorize", { idTagInfo: { status: "Accepted" } }),
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: { status: "Accepted" },
+      }),
+      response("StatusNotification", {}),
+      response("StatusNotification", {}),
+      response("StopTransaction", {}),
+      response("StatusNotification", {}),
+    ], {
+      chargingPoint: createChargingPoint({
+        plugState: "unplugged",
+        vehiclePresence: "absent",
+      }),
+    });
+
+    await protocolRuntime.boot();
+    await protocolRuntime.plugConnector({ evseId: 1, connectorId: 1 });
+    await protocolRuntime.authorize({ connectorId: 1, idTag: "CARD001" });
+    await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "CARD001",
+      meterStartWh: 0,
+    });
+
+    await expect(
+      protocolRuntime.unplugConnector({ evseId: 1, connectorId: 1 }),
+    ).resolves.toMatchObject({
+      plugState: "unplugged",
+      vehiclePresence: "absent",
+      connectorStatus: "available",
+    });
+
+    const unplugRequests = session.requests.slice(5);
+    expect(unplugRequests.map((request) => request.action)).toEqual([
+      "StatusNotification",
+      "StopTransaction",
+      "StatusNotification",
+    ]);
+    expect(unplugRequests[0]?.payload).toMatchObject({ status: "Finishing" });
+    expect(unplugRequests[1]?.payload).toMatchObject({
+      transactionId: 1001,
+      meterStop: 0,
+      reason: "EVDisconnected",
+    });
+    expect(unplugRequests[2]?.payload).toMatchObject({ status: "Available" });
+  });
+
+  test("unplug ends the local transaction while offline without waiting for CSMS", async () => {
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      response("Authorize", { idTagInfo: { status: "Accepted" } }),
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: { status: "Accepted" },
+      }),
+      response("StatusNotification", {}),
+    ], {
+      chargingPoint: createChargingPoint({
+        plugState: "unplugged",
+        vehiclePresence: "absent",
+      }),
+    });
+
+    await protocolRuntime.boot();
+    await protocolRuntime.plugConnector({ evseId: 1, connectorId: 1 });
+    await protocolRuntime.authorize({ connectorId: 1, idTag: "CARD001" });
+    const start = await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "CARD001",
+      meterStartWh: 0,
+    });
+    session.emitOffline("unexpected_disconnect");
+
+    await expect(
+      protocolRuntime.unplugConnector({ evseId: 1, connectorId: 1 }),
+    ).resolves.toMatchObject({
+      plugState: "unplugged",
+      vehiclePresence: "absent",
+      connectorStatus: "available",
+    });
+
+    expect(start.status).toBe("Accepted");
+    if (start.status !== "Accepted") {
+      throw new Error("交易启动失败");
+    }
+    expect(protocolRuntime.getTransactionState(start.transactionId)).toBe("ended");
+    expect(session.requests.map((request) => request.action)).not.toContain(
+      "StopTransaction",
+    );
+  });
+
+  test("unplug rejects a transaction that is already ending", async () => {
+    const { protocolRuntime } = createProtocolRuntime([], {
+      chargingPoint: createChargingPoint({
+        plugState: "plugged",
+        vehiclePresence: "detected",
+      }),
+    });
     runtimeContext(protocolRuntime).transactions.set(
       "transaction-1",
       new Transaction({
@@ -169,11 +271,11 @@ describe("Ocpp16Runtime connector actions", () => {
           connectorId: 1,
         },
         credentialId: "CARD001",
-        state: "active",
-        chargingState: "charging",
+        state: "ending",
+        chargingState: "idle",
         startedAt: new Date("2026-01-01T00:00:00.000Z"),
         startMeterWh: 0,
-        latestMeterWh: 0,
+        latestMeterWh: 100,
         endedAt: null,
         stopReason: null,
       }),
@@ -181,9 +283,49 @@ describe("Ocpp16Runtime connector actions", () => {
 
     await expect(
       protocolRuntime.unplugConnector({ evseId: 1, connectorId: 1 }),
-    ).rejects.toThrow(
-      "枪口存在活跃交易，拔枪前需要先停止交易",
+    ).rejects.toThrow("交易正在结束，请稍后拔枪");
+    expect(
+      protocolRuntime.getRuntimeSnapshot().chargingPoint.evses[0]
+        ?.getConnector(1)?.plugState,
+    ).toBe("plugged");
+  });
+
+  test("unplug treats an already ended transaction as a normal physical disconnect", async () => {
+    const { protocolRuntime } = createProtocolRuntime([], {
+      chargingPoint: createChargingPoint({
+        plugState: "plugged",
+        vehiclePresence: "detected",
+      }),
+    });
+    runtimeContext(protocolRuntime).transactions.set(
+      "transaction-1",
+      new Transaction({
+        id: "transaction-1",
+        target: {
+          scope: "connector",
+          chargingPointId: "cp-1",
+          evseId: 1,
+          connectorId: 1,
+        },
+        credentialId: "CARD001",
+        state: "ended",
+        chargingState: "idle",
+        startedAt: new Date("2026-01-01T00:00:00.000Z"),
+        startMeterWh: 0,
+        latestMeterWh: 100,
+        endMeterWh: 100,
+        endedAt: new Date("2026-01-01T00:10:00.000Z"),
+        stopReason: "local",
+      }),
     );
+
+    await expect(
+      protocolRuntime.unplugConnector({ evseId: 1, connectorId: 1 }),
+    ).resolves.toMatchObject({
+      plugState: "unplugged",
+      vehiclePresence: "absent",
+      connectorStatus: "available",
+    });
   });
 
   test("unplug returns available connector state when there is no active transaction", async () => {

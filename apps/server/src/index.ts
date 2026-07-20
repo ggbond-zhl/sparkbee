@@ -51,7 +51,7 @@ await startServer({
       event: "server.started",
       port: config.port,
       environment: config.environment,
-    }, "SparkBee 服务已启动");
+    }, "SparkBee server started");
     retentionScheduler.start();
   },
 }).catch(() => process.exit(1));
@@ -61,10 +61,10 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     if (shuttingDown) return;
     shuttingDown = true;
-    logger.info({ event: "server.stopping", signal }, "SparkBee 服务正在停止");
+    logger.info({ event: "server.stopping", signal }, "SparkBee server stopping");
     retentionScheduler.stop();
     void actorLogWriter.flush().finally(() => {
-      logger.info({ event: "server.stopped", signal }, "SparkBee 服务已停止");
+      logger.info({ event: "server.stopped", signal }, "SparkBee server stopped");
       process.exit(0);
     });
   });

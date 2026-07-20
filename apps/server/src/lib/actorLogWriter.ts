@@ -80,7 +80,7 @@ export class ActorLogWriter implements ActorLogSinkFactory {
           event: "actor-log.persist.failed",
           batchSize: batch.length,
           error,
-        }, "写入 Actor 日志失败");
+        }, "Failed to persist Actor logs");
         this.errorReporter.captureException(error, context);
       }
     }

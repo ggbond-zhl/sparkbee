@@ -61,7 +61,7 @@ export class ActorLogRetentionScheduler {
       this.logger.error({
         event: "actor-log.retention.failed",
         error,
-      }, "清理过期 Actor 日志失败");
+      }, "Failed to remove expired Actor logs");
       this.errorReporter.captureException(error, context);
     }
     if (this.stopped) return;

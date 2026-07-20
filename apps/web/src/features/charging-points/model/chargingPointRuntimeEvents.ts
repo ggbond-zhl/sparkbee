@@ -137,6 +137,8 @@ export interface ChargingPointRuntimeEventFeedState {
   protocolMessages: ProtocolMessageLogEntry[];
 }
 
+const OBSERVATION_LIST_CAPACITY = 500;
+
 export function createChargingPointRuntimeEventState(): ChargingPointRuntimeEventState {
   return {
     sessionStatus: null,
@@ -401,13 +403,16 @@ export function reduceChargingPointRuntimeEventFeedState(
       protocolMessages: prepend(
         state.protocolMessages,
         toProtocolMessageLogEntry(message.data),
-      ),
+      ).slice(0, OBSERVATION_LIST_CAPACITY),
     };
   }
 
   return {
     ...state,
-    events: prepend(state.events, toRuntimeEventLogEntry(message)),
+    events: prepend(state.events, toRuntimeEventLogEntry(message)).slice(
+      0,
+      OBSERVATION_LIST_CAPACITY,
+    ),
   };
 }
 

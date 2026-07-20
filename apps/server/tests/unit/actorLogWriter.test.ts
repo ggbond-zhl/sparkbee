@@ -131,6 +131,7 @@ describe("Actor 日志持久化", () => {
       event: "actor-log.persist.failed",
       batchSize: 1,
       error: { message: "database unavailable" },
+      msg: "Failed to persist Actor logs",
     });
   });
 
@@ -171,6 +172,7 @@ describe("Actor 日志持久化", () => {
     expect(JSON.parse(lines.join(""))).toMatchObject({
       event: "actor-log.retention.failed",
       error: { message: "cleanup unavailable" },
+      msg: "Failed to remove expired Actor logs",
     });
   });
 });

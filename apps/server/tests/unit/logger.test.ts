@@ -23,7 +23,7 @@ describe("createServerLogger", () => {
       event: "server.started",
       password: "password-value",
       nested: { token: "token-value" },
-    }, "服务已启动");
+    }, "Server started");
 
     const record = JSON.parse(lines.join(""));
     expect(record).toMatchObject({
@@ -31,7 +31,7 @@ describe("createServerLogger", () => {
       event: "server.started",
       password: "[Redacted]",
       nested: { token: "[Redacted]" },
-      msg: "服务已启动",
+      msg: "Server started",
     });
   });
 
@@ -49,12 +49,12 @@ describe("createServerLogger", () => {
       destination,
     });
 
-    logger.info({ event: "server.started" }, "服务已启动");
+    logger.info({ event: "server.started" }, "Server started");
     await new Promise((resolve) => setImmediate(resolve));
 
     const output = lines.join("");
     expect(output.trimStart().startsWith("{")).toBe(false);
     expect(output).toContain("INFO");
-    expect(output).toContain("服务已启动");
+    expect(output).toContain("Server started");
   });
 });
