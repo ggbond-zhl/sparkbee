@@ -56,11 +56,6 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { deleteChargingPoint } from "@/features/charging-points/api/chargingPoints";
 import {
   chargingPointListSearchFormSchema,
@@ -77,23 +72,6 @@ import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingP
 import { useIsMobile } from "@/hooks/use-mobile";
 
 type ChargingPointListItem = ListChargingPointsResponse["items"][number];
-
-function TruncatedText({
-  className,
-  value,
-}: {
-  className?: string;
-  value: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className={className}>{value}</span>
-      </TooltipTrigger>
-      <TooltipContent className="break-all">{value}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 export function ChargingPointListPage() {
   const queryClient = useQueryClient();
@@ -146,9 +124,9 @@ export function ChargingPointListPage() {
         className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
         onSubmit={form.handleSubmit(handleListSearch)}
       >
-        <FieldGroup className="min-w-0 flex-row gap-2 sm:max-w-md">
+        <FieldGroup className="min-w-0 flex-row gap-2">
           <Field
-            className="min-w-0"
+            className="min-w-0 md:max-w-md"
             data-invalid={Boolean(form.formState.errors.keyword)}
           >
             <FieldLabel className="sr-only" htmlFor="charging-point-keyword">
@@ -166,7 +144,9 @@ export function ChargingPointListPage() {
             <SearchIcon data-icon="inline-start" />
             搜索
           </Button>
-          <ChargingPointCreateDialog />
+          <div className="md:ml-auto">
+            <ChargingPointCreateDialog />
+          </div>
         </FieldGroup>
       </form>
 
@@ -255,24 +235,19 @@ function ChargingPointCardList({
                 <dl className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
                   <dt className="text-muted-foreground">桩身份</dt>
                   <dd className="truncate font-mono text-xs">
-                    <TruncatedText
-                      className="block truncate"
-                      value={item.identity}
-                    />
+                    <span className="block truncate">{item.identity}</span>
                   </dd>
                   <dt className="text-muted-foreground">CSMS</dt>
                   <dd className="truncate">
-                    <TruncatedText
-                      className="block truncate"
-                      value={item.centralSystemUrl}
-                    />
+                    <span className="block truncate">
+                      {item.centralSystemUrl}
+                    </span>
                   </dd>
                   <dt className="text-muted-foreground">型号</dt>
                   <dd className="truncate">
-                    <TruncatedText
-                      className="block truncate"
-                      value={`${item.vendor} / ${item.model}`}
-                    />
+                    <span className="block truncate">
+                      {item.vendor} / {item.model}
+                    </span>
                   </dd>
                 </dl>
               </CardContent>

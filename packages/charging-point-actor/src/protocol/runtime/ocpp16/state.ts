@@ -15,6 +15,9 @@ import {
   normalizePositiveInteger,
 } from "./constants";
 import type {
+  ChargingPointActorTransactionStore,
+} from "../../../chargingPointActor/types";
+import type {
   Ocpp16HeartbeatLoopOptions,
   Ocpp16RuntimeEvent,
   Ocpp16RuntimeOptions,
@@ -58,6 +61,7 @@ export interface Ocpp16RuntimeContext {
   transactions: Map<string, Transaction>;
   ocppTransactionIds: Map<string, number>;
   offlineTransactionOutbox: OfflineTransactionOutbox;
+  transactionStore: ChargingPointActorTransactionStore;
   offlineTransactionReplayInProgress: boolean;
   heartbeatTimerId: ReturnType<typeof setInterval> | null;
   heartbeatLoopOptions: Ocpp16HeartbeatLoopOptions | null;
@@ -133,10 +137,20 @@ export function createOcpp16RuntimeContext(
     ocppTransactionIds,
     offlineTransactionOutbox:
       options.offlineTransactionOutbox ?? new MemoryOfflineTransactionOutbox(),
+    transactionStore: options.transactionStore ?? createNoopTransactionStore(),
     offlineTransactionReplayInProgress: false,
     heartbeatTimerId: null,
     heartbeatLoopOptions: null,
     meterValueLoops,
+  };
+}
+
+function createNoopTransactionStore(): ChargingPointActorTransactionStore {
+  return {
+    loadActive: async () => [],
+    saveStarted: async () => undefined,
+    saveSample: async () => undefined,
+    saveEnded: async () => undefined,
   };
 }
 

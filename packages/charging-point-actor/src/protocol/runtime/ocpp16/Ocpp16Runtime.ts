@@ -35,6 +35,8 @@ import {
   emitChargingPointAvailabilitySnapshot,
   emitConnectorAvailabilitySnapshot,
 } from "./events";
+import { restartActiveMeterValueLoops } from "./actions/meterValues";
+import { restorePersistedTransactions } from "./transactionPersistence";
 import type {
   Ocpp16BootResult,
   Ocpp16AuthorizeInput,
@@ -165,6 +167,14 @@ export class Ocpp16Runtime {
     input: Ocpp16StartTransactionInput,
   ): Promise<Ocpp16TransactionStartResult> {
     return this.transactionDelivery.start(input);
+  }
+
+  restorePersistedTransactions(): Promise<void> {
+    return restorePersistedTransactions(this.context);
+  }
+
+  resumeActiveTransactionSampling(): void {
+    restartActiveMeterValueLoops(this.context);
   }
 
   reportMeterValue(

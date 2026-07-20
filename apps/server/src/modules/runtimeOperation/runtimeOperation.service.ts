@@ -4,6 +4,7 @@ import type {
   ConnectorResponse,
   RuntimeAuthorizeRequest,
   RuntimeAuthorizeResponse,
+  ActiveTransactionSamplesResponse,
   RuntimeOperationResponse,
   RuntimeStartTransactionRequest,
   RuntimeStartTransactionResponse,
@@ -33,6 +34,7 @@ import type { ChargingPointStreamEvent } from "../../lib/chargingPointEventStrea
 import { AppError } from "../../utils/errors";
 import { toChargingPointActorOptions } from "./chargingPointActorOptions";
 import { RuntimeOperationRepository } from "./runtimeOperation.repo";
+import { ChargingTransactionRepository } from "../chargingTransaction/chargingTransaction.repo";
 
 export type ChargingPointActorFactory = (
   options: ChargingPointActorOptions,
@@ -41,6 +43,7 @@ export type ChargingPointActorFactory = (
 export interface RuntimeOperationServiceDependencies {
   chargingPointActorHost?: ChargingPointActorHost;
   createChargingPointActor?: ChargingPointActorFactory;
+  chargingTransactionRepository?: ChargingTransactionRepository;
 }
 
 export function createRuntimeOperationService(
@@ -49,6 +52,8 @@ export function createRuntimeOperationService(
 ) {
   return new RuntimeOperationService(
     new RuntimeOperationRepository(database),
+    dependencies.chargingTransactionRepository ??
+      new ChargingTransactionRepository(database),
     dependencies,
   );
 }
@@ -59,6 +64,7 @@ export class RuntimeOperationService {
 
   constructor(
     private readonly repository: RuntimeOperationRepository,
+    private readonly chargingTransactionRepository: ChargingTransactionRepository,
     dependencies: RuntimeOperationServiceDependencies = {},
   ) {
     this.actorHost = dependencies.chargingPointActorHost ?? new ChargingPointActorHost();
@@ -111,6 +117,34 @@ export class RuntimeOperationService {
     const runtimeStatus = this.toStatusResponse(id, this.actorHost.get(id));
 
     return this.actorHost.getRuntimeSnapshot(id, runtimeStatus);
+  }
+
+  async getActiveTransactionSamples(
+    id: string,
+  ): Promise<ActiveTransactionSamplesResponse> {
+    await this.repository.getOperationDetail(id);
+    return this.chargingTransactionRepository.listActiveSamples(id);
+  }
+
+  async recoverActiveTransactions(): Promise<{
+    recovered: string[];
+    failed: Array<{ chargingPointId: string; error: unknown }>;
+  }> {
+    const chargingPointIds =
+      await this.chargingTransactionRepository.listRecoverableChargingPointIds();
+    const recovered: string[] = [];
+    const failed: Array<{ chargingPointId: string; error: unknown }> = [];
+
+    for (const chargingPointId of chargingPointIds) {
+      try {
+        await this.start(chargingPointId);
+        recovered.push(chargingPointId);
+      } catch (error) {
+        failed.push({ chargingPointId, error });
+      }
+    }
+
+    return { recovered, failed };
   }
 
   async subscribeToEvents(
@@ -177,6 +211,25 @@ export class RuntimeOperationService {
         meterStartWh: input.meterStartWh,
         reservationId: input.reservationId,
       });
+      if (result.status === "accepted") {
+        const parsedOcppTransactionId = Number(result.transactionId);
+        await this.chargingTransactionRepository
+          .forChargingPoint(chargingPoint.id)
+          .saveStarted({
+          transactionId: result.transactionId,
+          ...(Number.isSafeInteger(parsedOcppTransactionId)
+            ? { ocppTransactionId: parsedOcppTransactionId }
+            : {}),
+          evseId: connector.evseId,
+          connectorId: connector.connectorId,
+          idTag: input.idTag,
+          state: "active",
+          chargingState: "charging",
+          meterStartWh: input.meterStartWh ?? 0,
+          latestMeterWh: input.meterStartWh ?? 0,
+          startedAt: new Date(),
+          });
+      }
 
       return this.toStartTransactionResponse(
         chargingPoint.id,
@@ -217,6 +270,15 @@ export class RuntimeOperationService {
         meterStopWh: input.meterStopWh,
         idTag: input.idTag,
       });
+      if (result.status === "accepted") {
+        await this.chargingTransactionRepository
+          .forChargingPoint(chargingPoint.id)
+          .saveEnded({
+          transactionId: result.transactionId,
+          meterStopWh: result.meterStopWh,
+          stoppedAt: result.stoppedAt,
+          });
+      }
 
       return this.toStopTransactionResponse(
         chargingPoint.id,
@@ -511,13 +573,13 @@ export class RuntimeOperationService {
     actorLogSink?: ChargingPointActorLogSink,
   ): ChargingPointActorOptions {
     const options = toChargingPointActorOptions(chargingPoint);
-
-    return actorLogSink === undefined
-      ? options
-      : {
-          ...options,
-          actorLogSink,
-        };
+    return {
+      ...options,
+      transactionStore: this.chargingTransactionRepository.forChargingPoint(
+        chargingPoint.id,
+      ),
+      ...(actorLogSink === undefined ? {} : { actorLogSink }),
+    };
   }
 
   private mapStartError(error: unknown): AppError {

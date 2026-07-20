@@ -4,6 +4,7 @@ import type {
   Availability,
   ChargingPoint,
   ChargingPointOptions,
+  ChargingState,
   ChargingPointStatus,
   ConnectorStatus,
   EVSEStatus,
@@ -232,6 +233,37 @@ export interface ChargingPointActorLogSink {
   write(record: ChargingPointActorLogRecord): void | Promise<void>;
 }
 
+export interface ChargingPointActorPersistedTransaction {
+  transactionId: string;
+  ocppTransactionId?: number;
+  evseId: number;
+  connectorId: number;
+  idTag: string;
+  state: Exclude<TransactionState, "ended">;
+  chargingState: ChargingState;
+  meterStartWh: number;
+  latestMeterWh: number;
+  startedAt: Date;
+}
+
+export interface ChargingPointActorTransactionStore {
+  loadActive(): Promise<ChargingPointActorPersistedTransaction[]>;
+  saveStarted(transaction: ChargingPointActorPersistedTransaction): Promise<void>;
+  saveSample(input: {
+    transactionId: string;
+    sampledAt: Date;
+    meterWh: number;
+    powerW: number;
+    currentA: number;
+    voltageV: number;
+  }): Promise<void>;
+  saveEnded(input: {
+    transactionId: string;
+    stoppedAt: Date;
+    meterStopWh: number;
+  }): Promise<void>;
+}
+
 export type ChargingPointActorStartResult =
   | ChargingPointActorHeartbeatStartedResult
   | ChargingPointActorStartingStartResult;
@@ -370,6 +402,7 @@ export type Ocpp16ChargingPointActorOptions = {
   chargingPoint: ChargingPoint | ChargingPointOptions;
   configurationCatalog?: Ocpp16ConfigurationCatalogInput;
   actorLogSink?: ChargingPointActorLogSink;
+  transactionStore?: ChargingPointActorTransactionStore;
 };
 
 export type ChargingPointActorOptions = Ocpp16ChargingPointActorOptions;

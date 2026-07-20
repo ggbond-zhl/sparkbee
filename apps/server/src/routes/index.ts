@@ -11,6 +11,7 @@ import { createChargingPointRoute } from "../modules/chargingPoint/chargingPoint
 import { createConnectorRoute } from "../modules/connector/connector.route";
 import { createRuntimeOperationRoute } from "../modules/runtimeOperation/runtimeOperation.route";
 import { createActorLogRoute } from "../modules/actorLog/actorLog.route";
+import { ChargingTransactionRepository } from "../modules/chargingTransaction/chargingTransaction.repo";
 import { createHealthRoute } from "./health.route";
 
 export interface RouteDependencies {
@@ -22,6 +23,9 @@ export interface RouteDependencies {
 
 export function createRoutes(dependencies: RouteDependencies = {}) {
   const routes = new OpenAPIHono();
+  const chargingTransactionRepository = dependencies.database === undefined
+    ? undefined
+    : new ChargingTransactionRepository(dependencies.database);
   const chargingPointActorHost =
     dependencies.chargingPointActorHost ??
     (dependencies.database === undefined
@@ -29,6 +33,23 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
       : new ChargingPointActorHost({
           actorLogWriter:
             dependencies.actorLogWriter ?? new ActorLogWriter(dependencies.database),
+          actorEventSink: chargingTransactionRepository === undefined
+            ? undefined
+            : {
+                write: (event) => event.type === "transaction.meterValue" &&
+                    event.resource.transactionId !== undefined
+                  ? chargingTransactionRepository.recordSample(
+                      event.chargingPointId,
+                      {
+                        ...event,
+                        resource: {
+                          transactionId: event.resource.transactionId,
+                        },
+                      },
+                      { requireActiveTransaction: false },
+                    )
+                  : undefined,
+              },
         }));
 
   routes.route("/", createHealthRoute(dependencies.database));
@@ -45,6 +66,7 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
       createRuntimeOperationRoute(dependencies.database, {
         chargingPointActorHost,
         createChargingPointActor: dependencies.createChargingPointActor,
+        chargingTransactionRepository,
       }),
     );
     routes.route("/charging-points", createActorLogRoute(dependencies.database));

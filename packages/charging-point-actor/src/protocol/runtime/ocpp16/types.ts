@@ -14,6 +14,7 @@ import type {
   TransactionStopReason,
 } from "../../../model";
 import type { ISession } from "../../session/types";
+import type { ChargingPointActorTransactionStore } from "../../../chargingPointActor/types";
 import type { Ocpp16ConfigurationCatalogInput } from "./ConfigurationStore/index";
 import type { ConfigurationStore } from "./ConfigurationStore";
 import type { OfflineTransactionOutbox } from "./OfflineTransactionOutbox";
@@ -82,6 +83,7 @@ export interface Ocpp16RuntimeOptions {
   idGenerator?: () => string;
   emitActorLog?: Ocpp16ActorLogEmitter;
   offlineTransactionOutbox?: OfflineTransactionOutbox;
+  transactionStore?: ChargingPointActorTransactionStore;
   heartbeatUnstableThreshold?: number;
   heartbeatReconnectThreshold?: number;
   heartbeatTimeDriftThresholdMs?: number | null;

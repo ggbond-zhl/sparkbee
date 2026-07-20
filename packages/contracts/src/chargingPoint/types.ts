@@ -12,6 +12,9 @@ import type {
   runtimeStopTransactionRequestSchema,
   runtimeStopTransactionResponseSchema,
   runtimeTransactionStopReasonSchema,
+  activeTransactionSamplesResponseSchema,
+  activeTransactionChargingSamplesSchema,
+  chargingSampleResponseSchema,
   chargingPointSummaryResponseSchema,
   connectorResponseSchema,
   createChargingPointRequestSchema,
@@ -47,6 +50,13 @@ export type RuntimeStopTransactionRequest = z.infer<
 >;
 export type RuntimeStopTransactionResponse = z.infer<
   typeof runtimeStopTransactionResponseSchema
+>;
+export type ChargingSampleResponse = z.infer<typeof chargingSampleResponseSchema>;
+export type ActiveTransactionChargingSamples = z.infer<
+  typeof activeTransactionChargingSamplesSchema
+>;
+export type ActiveTransactionSamplesResponse = z.infer<
+  typeof activeTransactionSamplesResponseSchema
 >;
 export type ListChargingPointsQuery = z.infer<typeof listChargingPointsQuerySchema>;
 export type ListChargingPointsResponse = z.infer<typeof listChargingPointsResponseSchema>;

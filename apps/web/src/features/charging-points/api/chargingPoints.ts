@@ -1,4 +1,6 @@
 import {
+  activeTransactionSamplesResponseSchema,
+  type ActiveTransactionSamplesResponse,
   chargingPointDetailResponseSchema,
   chargingPointEventStreamMessageSchema,
   chargingPointEventStreamTypes,
@@ -158,6 +160,19 @@ export async function listActorLogs(
   ));
   if (!response.ok) throw new Error("Actor 日志加载失败");
   return listActorLogsResponseSchema.parse(await response.json());
+}
+
+export async function getActiveTransactionSamples(
+  id: string,
+): Promise<ActiveTransactionSamplesResponse> {
+  const response = await fetch(
+    toApiUrl(`/api/charging-points/${id}/active-transaction-samples`),
+  );
+  if (!response.ok) {
+    throw new Error("活动交易充电采样加载失败");
+  }
+
+  return activeTransactionSamplesResponseSchema.parse(await response.json());
 }
 
 async function applyChargingPointRuntimeOperation(

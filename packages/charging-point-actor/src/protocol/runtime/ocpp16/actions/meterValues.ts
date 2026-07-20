@@ -94,11 +94,33 @@ async function reportMeterValueWithContext(
   },
 ): Promise<Ocpp16MeterValuesResult> {
   const at = input.sampledAt ?? context.clock();
+  const previousTransaction = context.transactions.get(input.transactionId);
   const {
     binding: deliveryBinding,
     measurements,
     transaction: updatedTransaction,
   } = prepareMeterValueDelivery(context, input);
+  try {
+    await context.transactionStore.saveSample({
+      transactionId: updatedTransaction.id,
+      sampledAt: at,
+      meterWh: input.meterWh,
+      powerW: measurements.powerW,
+      currentA: measurements.currentA,
+      voltageV: measurements.voltageV,
+    });
+  } catch (error) {
+    if (previousTransaction !== undefined) {
+      context.transactions.set(previousTransaction.id, previousTransaction);
+    }
+    throw error;
+  }
+  emitPersistedMeterValue(context, updatedTransaction, {
+    meterWh: input.meterWh,
+    measurements,
+    sampledAt: at,
+    occurredAt: context.clock(),
+  });
   if (deliveryBinding.status === "offline") {
     return recordMeterValueForOfflineDelivery(context, {
       transaction: updatedTransaction,
@@ -152,7 +174,7 @@ async function reportMeterValueWithContext(
       });
     }
 
-    const meterValuesResult = recordMeterValuesSuccess(context, {
+    return recordMeterValuesSuccess(context, {
       transactionId: input.transactionId,
       connectorId,
       ocppTransactionId,
@@ -162,9 +184,6 @@ async function reportMeterValueWithContext(
       sentAt,
       payload: result.payload,
     });
-    emitAcceptedMeterValue(context, updatedTransaction, meterValuesResult);
-
-    return meterValuesResult;
   } catch (cause) {
     if (isOfflineDeliveryError(cause)) {
       return recordMeterValueForOfflineDelivery(context, {
@@ -227,10 +246,19 @@ function recordMeterValuesSuccess(
   };
 }
 
-function emitAcceptedMeterValue(
+function emitPersistedMeterValue(
   context: Ocpp16RuntimeContext,
   transaction: Transaction,
-  result: Extract<Ocpp16MeterValuesResult, { outcome: "Accepted" }>,
+  input: {
+    meterWh: number;
+    measurements: {
+      powerW: number;
+      currentA: number;
+      voltageV: number;
+    };
+    sampledAt: Date;
+    occurredAt: Date;
+  },
 ): void {
   const target = transaction.target;
   if (target.scope !== "connector") {
@@ -240,13 +268,13 @@ function emitAcceptedMeterValue(
   emitTransactionMeterValue(context, {
     evseId: target.evseId,
     connectorId: target.connectorId,
-    transactionId: result.transactionId,
-    meterWh: result.meterWh,
-    powerW: result.powerW,
-    currentA: result.currentA,
-    voltageV: result.voltageV,
-    sampledAt: result.sampledAt,
-    occurredAt: result.receivedAt,
+    transactionId: transaction.id,
+    meterWh: input.meterWh,
+    powerW: input.measurements.powerW,
+    currentA: input.measurements.currentA,
+    voltageV: input.measurements.voltageV,
+    sampledAt: input.sampledAt,
+    occurredAt: input.occurredAt,
   });
 }
 

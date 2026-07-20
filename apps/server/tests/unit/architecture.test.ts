@@ -133,10 +133,14 @@ describe("server architecture", () => {
 
   test("keeps business modules behind route and deep optional module seams", () => {
     const modules = moduleDirectories();
+    const routeOptionalDeepModules = new Set(["chargingTransaction"]);
 
     const missingRouteFiles = modules.flatMap((modulePath) => {
       const moduleName = modulePath.split(/[\\/]/).at(-1);
       if (moduleName === undefined) {
+        return [];
+      }
+      if (routeOptionalDeepModules.has(moduleName)) {
         return [];
       }
 
@@ -173,11 +177,22 @@ describe("server architecture", () => {
         .map((filePath) => relative(serverRoot, filePath));
     });
 
+    const allowedCrossModuleServiceRepoImports = new Set([
+      "../chargingTransaction/chargingTransaction.repo",
+    ]);
     const crossModuleServiceRepoImports = modules.flatMap((modulePath) =>
       walk(modulePath)
         .filter((filePath) => filePath.endsWith(".service.ts"))
-        .filter((filePath) => /\.\.\/.+\.repo/.test(readFileSync(filePath, "utf8")))
-        .map((filePath) => relative(serverRoot, filePath)),
+        .flatMap((filePath) => {
+          const source = readFileSync(filePath, "utf8");
+          const imports = [...source.matchAll(/from "(\.\.\/.+\.repo)"/g)]
+            .flatMap((match) => match[1] === undefined ? [] : [match[1]]);
+          return imports
+            .filter((specifier) =>
+              !allowedCrossModuleServiceRepoImports.has(specifier))
+            .map((specifier) =>
+              `${relative(serverRoot, filePath)} -> ${specifier}`);
+        }),
     );
 
     expect(missingRouteFiles).toEqual([]);
@@ -262,6 +277,10 @@ describe("server architecture", () => {
     ) as { scripts?: Record<string, string> };
 
     expect(packageJson.scripts?.dev).toBe("tsx watch src/index.ts");
+    const indexSource = readFileSync(join(srcRoot, "index.ts"), "utf8");
+    expect(indexSource).toContain(
+      "void runtimeOperationService.recoverActiveTransactions()",
+    );
   });
 
   test("starts the server and web app in parallel during development", () => {

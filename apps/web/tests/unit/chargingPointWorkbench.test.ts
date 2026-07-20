@@ -49,6 +49,7 @@ describe("charging point workbench", () => {
       runtimeStatusQueryState: "success",
       runtimeEventState: createChargingPointRuntimeEventState(),
       eventFeedState: createChargingPointRuntimeEventFeedState(),
+      activeTransactionSamples: { items: [] },
       pending: { runtime: false, connectors: false },
       actions: {
         startRuntime,
@@ -98,6 +99,7 @@ describe("charging point workbench", () => {
       runtimeStatusQueryState: "success",
       runtimeEventState: createChargingPointRuntimeEventState(),
       eventFeedState: createChargingPointRuntimeEventFeedState(),
+      activeTransactionSamples: { items: [] },
       pending: { runtime: true, connectors: false },
       actions: {
         startRuntime,

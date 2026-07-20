@@ -399,6 +399,30 @@ export const runtimeStopTransactionResponseSchema = z.discriminatedUnion("status
   }),
 ]);
 
+export const chargingSampleResponseSchema = z.object({
+  id: z.string().describe("充电采样的唯一标识。"),
+  sampledAt: z.string().datetime().describe("采样时间。"),
+  meterWh: z.number().nonnegative().describe("累计电量，单位 Wh。"),
+  powerW: z.number().nonnegative().describe("模拟功率，单位 W。"),
+  currentA: z.number().nonnegative().describe("模拟电流，单位 A。"),
+  voltageV: z.number().nonnegative().describe("模拟电压，单位 V。"),
+});
+
+export const activeTransactionChargingSamplesSchema = z.object({
+  transactionId: z.string().describe("当前活动交易的 SparkBee 交易 ID。"),
+  evseId: z.number().int().positive().describe("枪口内部映射的 EVSE ID。"),
+  connectorId: z.number().int().positive().describe("枪口编号。"),
+  samples: z
+    .array(chargingSampleResponseSchema)
+    .describe("当前活动交易最近 7 天的充电采样，按采样时间升序排列。"),
+});
+
+export const activeTransactionSamplesResponseSchema = z.object({
+  items: z
+    .array(activeTransactionChargingSamplesSchema)
+    .describe("桩实例各枪口当前活动交易的充电采样。"),
+});
+
 export const listChargingPointsQuerySchema = paginationQuerySchema.extend({
   keyword: z
     .string()

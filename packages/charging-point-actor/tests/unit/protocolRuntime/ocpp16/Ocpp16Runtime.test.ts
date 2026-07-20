@@ -901,6 +901,78 @@ describe("Ocpp16Runtime", () => {
     });
   });
 
+  test("persists a charging sample before sending MeterValues", async () => {
+    const persistenceError = new Error("database unavailable");
+    const transactionStore = {
+      loadActive: vi.fn(async () => []),
+      saveStarted: vi.fn(async () => undefined),
+      saveSample: vi.fn(async () => {
+        throw persistenceError;
+      }),
+      saveEnded: vi.fn(async () => undefined),
+    };
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: { status: "Accepted" },
+      }),
+      response("StatusNotification", {}),
+    ], { transactionStore });
+    await boot(protocolRuntime);
+    seedAcceptedAuthorization(protocolRuntime);
+    await plugConnector(protocolRuntime);
+    const start = await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-1",
+      meterStartWh: 100,
+    });
+
+    await expect(protocolRuntime.reportMeterValue({
+      transactionId: start.status === "Accepted" ? start.transactionId : "",
+      meterWh: 160,
+    })).rejects.toThrow("database unavailable");
+
+    expect(transactionStore.saveSample).toHaveBeenCalledOnce();
+    expect(session.requests.map((request) => request.action)).not.toContain(
+      "MeterValues",
+    );
+  });
+
+  test("restores persisted active transactions into runtime state", async () => {
+    const transactionStore = {
+      loadActive: vi.fn(async () => [
+        {
+          transactionId: "1001",
+          ocppTransactionId: 1001,
+          evseId: 1,
+          connectorId: 1,
+          idTag: "TAG-1",
+          state: "active" as const,
+          chargingState: "charging" as const,
+          meterStartWh: 100,
+          latestMeterWh: 160,
+          startedAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      ]),
+      saveStarted: vi.fn(async () => undefined),
+      saveSample: vi.fn(async () => undefined),
+      saveEnded: vi.fn(async () => undefined),
+    };
+    const { protocolRuntime } = createProtocolRuntime([], { transactionStore });
+
+    await protocolRuntime.restorePersistedTransactions();
+
+    expect(protocolRuntime.getTransactionState("1001")).toBe("active");
+    expect(protocolRuntime.getTransactionResource("1001")).toEqual({
+      evseId: 1,
+      connectorId: 1,
+      ocppTransactionId: 1001,
+    });
+    expect(getConnectorFact(protocolRuntime)?.plugState).toBe("plugged");
+  });
+
   test("emits runtime events from the local charging flow", async () => {
     const { protocolRuntime } = createProtocolRuntime([
       bootAccepted(),
@@ -3527,6 +3599,7 @@ describe("Ocpp16Runtime", () => {
       response("StatusNotification", {}),
       error("MeterValues", "meter rejected"),
     ]);
+    const events = collectRuntimeEvents(protocolRuntime);
 
     await boot(protocolRuntime);
     seedAcceptedAuthorization(protocolRuntime);
@@ -3554,6 +3627,18 @@ describe("Ocpp16Runtime", () => {
       shouldReconnect: false,
     });
     expect(session.requests.at(-1)?.action).toBe("MeterValues");
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "transaction.meterValue",
+      resource: {
+        scope: "transaction",
+        evseId: 1,
+        connectorId: 1,
+        transactionId: "1001",
+      },
+      meterWh: 150,
+    }));
+    expect(events.filter((event) => event.type === "transaction.meterValue"))
+      .toHaveLength(1);
     const state = runtimeState(protocolRuntime);
     expect(state.transactions[0]?.latestMeterWh).toBe(150);
     expect(state.transactions[0]?.state).toBe("active");

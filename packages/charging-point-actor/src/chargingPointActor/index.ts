@@ -42,5 +42,7 @@ export type {
   SessionStatusEvent,
   TransactionMeterValueEvent,
   ChargingPointActorTransactionStartResult,
+  ChargingPointActorPersistedTransaction,
+  ChargingPointActorTransactionStore,
   TransactionStatusEvent,
 } from "./types";

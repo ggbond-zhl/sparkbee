@@ -66,6 +66,11 @@ export async function stopTransaction(
     context,
     connectorRef,
   );
+  await context.transactionStore.saveEnded({
+    transactionId: chargingTransaction.id,
+    stoppedAt: at,
+    meterStopWh: input.meterStopWh ?? chargingTransaction.latestMeterWh,
+  });
   stopMeterValueLoop(context, chargingTransaction.id);
   const delivery = completeTransactionDelivery(context, {
     queueOffline: false,
@@ -137,7 +142,7 @@ export async function stopTransaction(
   return stopResult;
 }
 
-function stopOfflineTransaction(
+async function stopOfflineTransaction(
   context: Ocpp16RuntimeContext,
   input: {
     input: Ocpp16StopTransactionInput;
@@ -145,11 +150,17 @@ function stopOfflineTransaction(
     chargingTransaction: ReturnType<typeof resolveTransaction>;
     connectorRef: { evseId: number; connectorId: number };
   },
-): Extract<Ocpp16StopTransactionResult, { outcome: "Accepted" }> {
+  ): Promise<Extract<Ocpp16StopTransactionResult, { outcome: "Accepted" }>> {
   const connectorTransition = captureConnectorStatusTransition(
     context,
     input.connectorRef,
   );
+  await context.transactionStore.saveEnded({
+    transactionId: input.chargingTransaction.id,
+    stoppedAt: input.at,
+    meterStopWh:
+      input.input.meterStopWh ?? input.chargingTransaction.latestMeterWh,
+  });
   stopMeterValueLoop(context, input.chargingTransaction.id);
   const delivery = completeTransactionDelivery(context, {
     queueOffline: true,

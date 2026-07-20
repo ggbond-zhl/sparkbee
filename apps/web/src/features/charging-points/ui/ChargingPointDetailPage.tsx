@@ -53,8 +53,6 @@ import {
 } from "@/components/ui/card";
 import {
   ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
 import {
@@ -82,11 +80,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   type ConnectorCardAction,
   type ConnectorCardModel,
@@ -167,16 +160,9 @@ export function ChargingPointDetailPage() {
           </CardAction>
           {headerModel.finalConnectionUrl && (
             <div className="col-span-full min-w-0">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <p className="truncate text-xs text-muted-foreground">
-                    <span className="font-mono">{headerModel.finalConnectionUrl}</span>
-                  </p>
-                </TooltipTrigger>
-                <TooltipContent className="break-all">
-                  {headerModel.finalConnectionUrl}
-                </TooltipContent>
-              </Tooltip>
+              <p className="truncate text-xs text-muted-foreground">
+                <span className="font-mono">{headerModel.finalConnectionUrl}</span>
+              </p>
             </div>
           )}
         </CardHeader>
@@ -205,7 +191,6 @@ export function ChargingPointDetailPage() {
           <ConnectorRuntimeCard
             key={model.connectorId}
             configurationLocked={configuration.locked}
-            configurationLockedReason={configuration.connectorEditLockedReason}
             disabled={connectors.pending}
             model={model}
             samples={samples}
@@ -263,19 +248,14 @@ function DetailMetric({
       )}
     >
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <dd
-            className={cn(
-              "mt-1 truncate text-sm",
-              monospace && "font-mono text-xs",
-            )}
-          >
-            {value}
-          </dd>
-        </TooltipTrigger>
-        <TooltipContent className="break-all">{value}</TooltipContent>
-      </Tooltip>
+      <dd
+        className={cn(
+          "mt-1 truncate text-sm",
+          monospace && "font-mono text-xs",
+        )}
+      >
+        {value}
+      </dd>
     </dl>
   );
 }
@@ -294,7 +274,6 @@ function RuntimeSummaryPanel({ items }: { items: HeaderMetricItem[] }) {
 
 function ConnectorRuntimeCard({
   configurationLocked,
-  configurationLockedReason,
   disabled,
   model,
   samples,
@@ -305,7 +284,6 @@ function ConnectorRuntimeCard({
   onUnplug,
 }: {
   configurationLocked: boolean;
-  configurationLockedReason?: string;
   disabled: boolean;
   model: ConnectorCardModel;
   samples: ChargingSamplePoint[];
@@ -327,7 +305,6 @@ function ConnectorRuntimeCard({
         <CardAction className="flex flex-wrap justify-end gap-2">
           <ConnectorEditButton
             configurationLocked={configurationLocked}
-            configurationLockedReason={configurationLockedReason}
             label={`编辑${model.title}`}
             onEdit={onEdit}
           />
@@ -481,21 +458,6 @@ function ConnectorElectricalMetricChart({
             hide
           />
           <YAxis domain={getElectricalMetricDomain(samples, dataKey)} hide />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                formatter={(value) => (
-                  <>
-                    <span className="text-muted-foreground">{label}</span>
-                    <span className="font-mono font-medium tabular-nums text-foreground">
-                      {formatElectricalMetricValue(value, dataKey, unit)}
-                    </span>
-                  </>
-                )}
-                labelFormatter={(value) => formatChartTime(String(value))}
-              />
-            }
-          />
           <Line
             dataKey={dataKey}
             dot={samples.length <= 8}
@@ -539,21 +501,6 @@ function ConnectorEnergyChart({ samples }: { samples: ChargingSamplePoint[] }) {
             tickFormatter={formatEnergyAxisTick}
             tickLine={false}
             width={54}
-          />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                formatter={(value) => (
-                  <>
-                    <span className="text-muted-foreground">电量</span>
-                    <span className="font-mono font-medium tabular-nums text-foreground">
-                      {formatEnergyTooltipValue(value)}
-                    </span>
-                  </>
-                )}
-                labelFormatter={(value) => formatChartTime(String(value))}
-              />
-            }
           />
           <Line
             dataKey="meterKwh"
@@ -640,18 +587,6 @@ function toEnergyChartSamples(samples: ChargingSamplePoint[]) {
 
 function formatEnergyAxisTick(value: number) {
   return `${Math.round(value).toLocaleString("zh-CN")} kWh`;
-}
-
-function formatEnergyTooltipValue(value: string | number) {
-  const numericValue = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(numericValue)) {
-    return `${value} kWh`;
-  }
-
-  return `${numericValue.toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} kWh`;
 }
 
 function getElectricalMetricDomain(
@@ -883,35 +818,24 @@ function RuntimeObservationToolbar({
 
 function ConnectorEditButton({
   configurationLocked,
-  configurationLockedReason,
   label,
   onEdit,
 }: {
   configurationLocked: boolean;
-  configurationLockedReason?: string;
   label: string;
   onEdit(): void;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex">
-          <Button
-            aria-label={label}
-            disabled={configurationLocked}
-            type="button"
-            variant="outline"
-            onClick={onEdit}
-          >
-            <PencilIcon data-icon="inline-start" />
-            编辑
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>
-        {configurationLockedReason ?? "编辑枪口"}
-      </TooltipContent>
-    </Tooltip>
+    <Button
+      aria-label={label}
+      disabled={configurationLocked}
+      type="button"
+      variant="outline"
+      onClick={onEdit}
+    >
+      <PencilIcon data-icon="inline-start" />
+      编辑
+    </Button>
   );
 }
 
@@ -1407,24 +1331,13 @@ function StatusBadge({
 }: {
   item: ChargingPointDetailHeaderModel["mainStatus"];
 }) {
-  const badge = (
+  return (
     <Badge
       className={toBadgeToneClassName(item.tone)}
       variant={toBadgeVariant(item.tone)}
     >
       {item.label}
     </Badge>
-  );
-
-  if (!item.description) {
-    return badge;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{badge}</TooltipTrigger>
-      <TooltipContent>{item.description}</TooltipContent>
-    </Tooltip>
   );
 }
 

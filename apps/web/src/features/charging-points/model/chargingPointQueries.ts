@@ -6,6 +6,7 @@ import {
 
 import {
   getChargingPoint,
+  getActiveTransactionSamples,
   getChargingPointRuntimeSnapshot,
   getChargingPointRuntimeStatus,
   listChargingPoints,
@@ -83,5 +84,16 @@ export function chargingPointRuntimeSnapshotQueryOptions(id: string) {
   return queryOptions({
     queryKey: chargingPointRuntimeSnapshotQueryKey(id),
     queryFn: () => getChargingPointRuntimeSnapshot(id),
+  });
+}
+
+export function activeTransactionSamplesQueryKey(id: string) {
+  return ["charging-points", id, "active-transaction-samples"] as const;
+}
+
+export function activeTransactionSamplesQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: activeTransactionSamplesQueryKey(id),
+    queryFn: () => getActiveTransactionSamples(id),
   });
 }

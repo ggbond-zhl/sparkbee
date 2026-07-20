@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  ActiveTransactionSamplesResponse,
   ChargingPointDetailResponse,
   ConnectorResponse,
   RuntimeOperationResponse,
@@ -17,6 +18,8 @@ import {
 } from "@/features/charging-points/api/chargingPoints";
 import type { RuntimeStatusQueryState } from "@/features/charging-points/model/chargingPointDetailHeader";
 import {
+  activeTransactionSamplesQueryKey,
+  activeTransactionSamplesQueryOptions,
   chargingPointDetailQueryKey,
   chargingPointDetailQueryOptions,
   chargingPointRuntimeStatusQueryKey,
@@ -38,6 +41,9 @@ export function useChargingPointWorkbench(
     useState<ConnectorResponse | null>(null);
   const queryClient = useQueryClient();
   const detailQuery = useQuery(chargingPointDetailQueryOptions(chargingPointId));
+  const activeTransactionSamplesQuery = useQuery(
+    activeTransactionSamplesQueryOptions(chargingPointId),
+  );
   const detailQueryKey = chargingPointDetailQueryKey(chargingPointId);
   const runtimeStatusQuery = useQuery(
     chargingPointRuntimeStatusQueryOptions(chargingPointId),
@@ -49,11 +55,17 @@ export function useChargingPointWorkbench(
       runtimeStatus,
     );
   }, [chargingPointId, queryClient]);
+  const syncActiveTransactionSamples = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: activeTransactionSamplesQueryKey(chargingPointId),
+    });
+  }, [chargingPointId, queryClient]);
   const { eventFeedState, runtimeEventState } = useChargingPointRuntimeEvents(
     chargingPointId,
     {
       enabled: detailQuery.isSuccess,
       onRuntimeStatus: syncRuntimeStatus,
+      onSnapshot: syncActiveTransactionSamples,
     },
   );
   const startMutation = useMutation({
@@ -88,6 +100,9 @@ export function useChargingPointWorkbench(
     onSuccess: (result) => {
       if (result.status === "accepted") {
         toast.success("充电已启动");
+        void queryClient.invalidateQueries({
+          queryKey: activeTransactionSamplesQueryKey(chargingPointId),
+        });
         return;
       }
 
@@ -108,6 +123,14 @@ export function useChargingPointWorkbench(
     onSuccess: (result) => {
       if (result.status === "accepted") {
         toast.success("充电已停止");
+        queryClient.setQueryData<ActiveTransactionSamplesResponse>(
+          activeTransactionSamplesQueryKey(chargingPointId),
+          (current) => ({
+            items: current?.items.filter(
+              (item) => item.transactionId !== result.transactionId,
+            ) ?? [],
+          }),
+        );
         return;
       }
 
@@ -117,11 +140,16 @@ export function useChargingPointWorkbench(
       toast.error(error instanceof Error ? error.message : "停止充电失败");
     },
   });
-  if (detailQuery.isLoading) {
+  if (detailQuery.isLoading || activeTransactionSamplesQuery.isLoading) {
     return { status: "loading" };
   }
 
-  if (detailQuery.isError || detailQuery.data === undefined) {
+  if (
+    detailQuery.isError ||
+    detailQuery.data === undefined ||
+    activeTransactionSamplesQuery.isError ||
+    activeTransactionSamplesQuery.data === undefined
+  ) {
     return { status: "error" };
   }
 
@@ -131,6 +159,7 @@ export function useChargingPointWorkbench(
     runtimeStatusQueryState,
     runtimeEventState,
     eventFeedState,
+    activeTransactionSamples: activeTransactionSamplesQuery.data,
     pending: {
       runtime: startMutation.isPending || stopMutation.isPending,
       connectors:

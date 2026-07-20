@@ -9,7 +9,6 @@ import { cloneDate } from "../../../shared/utils";
 import { SessionError } from "../../session/types";
 import type { ConnectorSelection } from "./connectorSelection";
 import { ProtocolRuntimeError } from "./errors";
-import { emitTransactionMeterValue } from "./events";
 import type { MeterValueElectricalMeasurements } from "./payloadBuilders";
 import {
   bindEvseTransaction,
@@ -122,13 +121,14 @@ export function recordOnlineTransactionStart(
 export function recordOfflineTransactionStartDelivery(
   context: Ocpp16RuntimeContext,
   input: {
+    transactionId?: string;
     selection: ConnectorSelection;
     startInput: Ocpp16StartTransactionInput;
     startedAt: Date;
     authorizationSource: AuthorizationSource | undefined;
   },
 ): StartedTransactionDelivery {
-  const transactionId = context.idGenerator();
+  const transactionId = input.transactionId ?? context.idGenerator();
   const transaction = createActiveTransaction(context, {
     transactionId,
     selection: input.selection,
@@ -300,8 +300,6 @@ export function recordMeterValueForOfflineDelivery(
     measurements: input.measurements,
     sampledAt: input.sampledAt,
   });
-  emitAcceptedOfflineMeterValue(context, input.transaction, result);
-
   return result;
 }
 
@@ -510,29 +508,6 @@ function recordOfflineMeterValuesSuccess(input: {
     platformCommunicationStatus: "offline",
     shouldReconnect: false,
   };
-}
-
-function emitAcceptedOfflineMeterValue(
-  context: Ocpp16RuntimeContext,
-  transaction: Transaction,
-  result: Extract<Ocpp16MeterValuesResult, { outcome: "Accepted" }>,
-): void {
-  const target = transaction.target;
-  if (target.scope !== "connector") {
-    return;
-  }
-
-  emitTransactionMeterValue(context, {
-    evseId: target.evseId,
-    connectorId: target.connectorId,
-    transactionId: result.transactionId,
-    meterWh: result.meterWh,
-    powerW: result.powerW,
-    currentA: result.currentA,
-    voltageV: result.voltageV,
-    sampledAt: result.sampledAt,
-    occurredAt: result.receivedAt,
-  });
 }
 
 function resolveTransactionConnectorId(transaction: Transaction): number {

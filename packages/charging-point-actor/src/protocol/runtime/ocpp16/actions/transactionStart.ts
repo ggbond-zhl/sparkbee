@@ -188,7 +188,20 @@ export async function startTransaction(
     };
   }
 
-  const { transactionId } = recordTransactionStart(context, {
+  const transactionId = String(startTransactionResult.ocppTransactionId);
+  await context.transactionStore.saveStarted({
+    transactionId,
+    ocppTransactionId: startTransactionResult.ocppTransactionId,
+    evseId: selection.evseId,
+    connectorId: selection.connectorId,
+    idTag: input.idTag,
+    state: "active",
+    chargingState: "charging",
+    meterStartWh: input.meterStartWh,
+    latestMeterWh: input.meterStartWh,
+    startedAt: at,
+  });
+  recordTransactionStart(context, {
     mode: "online",
     selection,
     startInput: input,
@@ -219,7 +232,7 @@ export async function startTransaction(
   };
 }
 
-function startOfflineTransaction(
+async function startOfflineTransaction(
   context: Ocpp16RuntimeContext,
   input: {
     selection: ReturnType<typeof requireLocallyStartableConnector>;
@@ -227,9 +240,22 @@ function startOfflineTransaction(
     at: Date;
     authorizationSource: AuthorizationSource | undefined;
   },
-): Ocpp16TransactionStartResult {
-  const { transactionId } = recordTransactionStart(context, {
+): Promise<Ocpp16TransactionStartResult> {
+  const transactionId = context.idGenerator();
+  await context.transactionStore.saveStarted({
+    transactionId,
+    evseId: input.selection.evseId,
+    connectorId: input.selection.connectorId,
+    idTag: input.input.idTag,
+    state: "active",
+    chargingState: "charging",
+    meterStartWh: input.input.meterStartWh,
+    latestMeterWh: input.input.meterStartWh,
+    startedAt: input.at,
+  });
+  recordTransactionStart(context, {
     mode: "offline",
+    transactionId,
     selection: input.selection,
     startInput: input.input,
     startedAt: input.at,

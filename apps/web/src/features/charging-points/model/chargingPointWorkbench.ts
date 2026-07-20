@@ -1,4 +1,5 @@
 import type {
+  ActiveTransactionSamplesResponse,
   ChargingPointDetailResponse,
   ConnectorResponse,
   RuntimeOperationResponse,
@@ -9,7 +10,7 @@ import {
   type ConnectorCardModel,
 } from "./chargingPointConnectorCards";
 import {
-  buildChargingSampleSeriesByConnector,
+  buildActiveChargingSampleSeriesByConnector,
   chargingSampleConnectorKey,
   type ChargingSamplePoint,
 } from "./chargingPointChargingSamples";
@@ -84,6 +85,7 @@ export interface CreateReadyChargingPointWorkbenchInput {
   runtimeStatusQueryState: RuntimeStatusQueryState;
   runtimeEventState: ChargingPointRuntimeEventState;
   eventFeedState: ChargingPointRuntimeEventFeedState;
+  activeTransactionSamples: ActiveTransactionSamplesResponse;
   pending: {
     runtime: boolean;
     connectors: boolean;
@@ -110,9 +112,11 @@ export function createReadyChargingPointWorkbench(
     lastHeartbeatAt: null,
     runtimeEventState: input.runtimeEventState,
   });
-  const chargingSamplesByConnector = buildChargingSampleSeriesByConnector(
-    input.eventFeedState.events,
-  );
+  const chargingSamplesByConnector = buildActiveChargingSampleSeriesByConnector({
+    persisted: input.activeTransactionSamples,
+    events: input.eventFeedState.events,
+    transactionStatuses: input.runtimeEventState.transactionStatuses,
+  });
   const connectorItems = buildConnectorCardModels({
     connectors: input.detail.connectors,
     runtimeStatus: input.runtimeStatus,

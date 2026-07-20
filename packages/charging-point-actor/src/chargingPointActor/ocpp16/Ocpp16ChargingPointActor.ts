@@ -59,6 +59,7 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
   private readonly session: ISession;
   private readonly ocpp16Runtime: Ocpp16Runtime;
   private disposed = false;
+  private transactionsRestored = false;
 
   private readonly eventEnvelope: Ocpp16EventEnvelope;
   private readonly actorLogRecords: ActorLogRecordPublisher;
@@ -141,6 +142,10 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
       );
     }
 
+    if (!this.transactionsRestored) {
+      await this.ocpp16Runtime.restorePersistedTransactions();
+      this.transactionsRestored = true;
+    }
     this.transitionChargingPointActorStatus("starting");
     return this.startupLifecycle.start();
   }

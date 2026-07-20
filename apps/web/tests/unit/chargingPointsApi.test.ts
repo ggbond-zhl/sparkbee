@@ -4,6 +4,7 @@ import {
   createConnector,
   deleteConnector,
   getChargingPoint,
+  getActiveTransactionSamples,
   getChargingPointRuntimeSnapshot,
   getChargingPointRuntimeStatus,
   listConnectors,
@@ -233,6 +234,21 @@ describe("chargingPoints API client", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/charging-points/00000000-0000-4000-8000-000000000001/runtime-snapshot",
+    );
+  });
+
+  test("gets persisted active transaction samples by charging point id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getActiveTransactionSamples(
+      "00000000-0000-4000-8000-000000000001",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/active-transaction-samples",
     );
   });
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  buildActiveChargingSampleSeriesByConnector,
   buildChargingSampleSeriesByConnector,
   chargingSampleConnectorKey,
 } from "../../src/features/charging-points/model/chargingPointChargingSamples";
@@ -117,5 +118,51 @@ describe("charging point charging samples", () => {
     expect(samplesByConnector.get(chargingSampleConnectorKey(1, 2))).toMatchObject([
       { id: "other-connector", meterWh: 50, currentA: 16 },
     ]);
+  });
+
+  test("restores only the persisted active transaction after page recreation", () => {
+    const persisted = {
+      items: [
+        {
+          transactionId: "tx-1",
+          evseId: 1,
+          connectorId: 1,
+          samples: [
+            {
+              id: "sample-1",
+              sampledAt: "2026-07-04T09:00:00.000Z",
+              meterWh: 100,
+              powerW: 7000,
+              currentA: 31,
+              voltageV: 226,
+            },
+          ],
+        },
+      ],
+    };
+
+    const restored = buildActiveChargingSampleSeriesByConnector({
+      persisted,
+      events: [],
+      transactionStatuses: {},
+    });
+    expect(restored.get(chargingSampleConnectorKey(1, 1))).toMatchObject([
+      { id: "sample-1", transactionId: "tx-1", meterWh: 100 },
+    ]);
+
+    const ended = buildActiveChargingSampleSeriesByConnector({
+      persisted,
+      events: [],
+      transactionStatuses: {
+        "tx-1": {
+          transactionId: "tx-1",
+          evseId: 1,
+          connectorId: 1,
+          currentStatus: "ended",
+          occurredAt: "2026-07-04T09:01:00.000Z",
+        },
+      },
+    });
+    expect(ended.has(chargingSampleConnectorKey(1, 1))).toBe(false);
   });
 });

@@ -221,6 +221,7 @@ export function createProtocolRuntime(replies: QueuedReply[], options: {
   chargingPoint?: ChargingPoint;
   configurationCatalog?: Ocpp16RuntimeOptions["configurationCatalog"];
   actorLogs?: Ocpp16ActorLog[];
+  transactionStore?: Ocpp16RuntimeOptions["transactionStore"];
 } = {}): { protocolRuntime: Ocpp16Runtime; session: FakeSession } {
   const session = new FakeSession(replies);
   const protocolRuntime = new Ocpp16Runtime({
@@ -232,6 +233,7 @@ export function createProtocolRuntime(replies: QueuedReply[], options: {
     emitActorLog: (actorLog) => {
       options.actorLogs?.push(actorLog);
     },
+    transactionStore: options.transactionStore,
   });
 
   return { protocolRuntime, session };

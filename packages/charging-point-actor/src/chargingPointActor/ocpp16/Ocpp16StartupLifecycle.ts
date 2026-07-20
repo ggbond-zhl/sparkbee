@@ -153,6 +153,7 @@ export class Ocpp16StartupLifecycle {
       },
     });
     await this.reportStartupStatuses();
+    this.options.runtime.resumeActiveTransactionSampling();
     this.options.transitionStatus("running");
   }
 

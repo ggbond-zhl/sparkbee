@@ -1,6 +1,9 @@
+import type { ActiveTransactionSamplesResponse } from "@spark-bee/contracts";
+
 import type {
   RuntimeEventLogEntry,
   TransactionMeterValueEvent,
+  TransactionRuntimeSnapshot,
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
 
 export interface ChargingSamplePoint {
@@ -54,6 +57,65 @@ export function buildChargingSampleSeriesByConnector(
   }
 
   return samplesByConnector;
+}
+
+export function buildActiveChargingSampleSeriesByConnector(input: {
+  persisted: ActiveTransactionSamplesResponse;
+  events: RuntimeEventLogEntry[];
+  transactionStatuses: Record<string, TransactionRuntimeSnapshot>;
+}): Map<string, ChargingSamplePoint[]> {
+  const activeTransactionByConnector = new Map<string, string>();
+  const persistedSamplesByConnector = new Map<string, ChargingSamplePoint[]>();
+
+  for (const item of input.persisted.items) {
+    const key = chargingSampleConnectorKey(item.evseId, item.connectorId);
+    activeTransactionByConnector.set(key, item.transactionId);
+    persistedSamplesByConnector.set(
+      key,
+      item.samples.map((sample) => ({
+        ...sample,
+        evseId: item.evseId,
+        connectorId: item.connectorId,
+        transactionId: item.transactionId,
+      })),
+    );
+  }
+
+  for (const status of Object.values(input.transactionStatuses)) {
+    const key = chargingSampleConnectorKey(status.evseId, status.connectorId);
+    if (status.currentStatus === "active") {
+      activeTransactionByConnector.set(key, status.transactionId);
+      continue;
+    }
+
+    if (activeTransactionByConnector.get(key) === status.transactionId) {
+      activeTransactionByConnector.delete(key);
+    }
+  }
+
+  const eventSamplesByConnector = buildChargingSampleSeriesByConnector(input.events);
+  const result = new Map<string, ChargingSamplePoint[]>();
+  for (const [key, transactionId] of activeTransactionByConnector) {
+    const samplesById = new Map<string, ChargingSamplePoint>();
+    for (const sample of persistedSamplesByConnector.get(key) ?? []) {
+      if (sample.transactionId === transactionId) {
+        samplesById.set(sample.id, sample);
+      }
+    }
+    for (const sample of eventSamplesByConnector.get(key) ?? []) {
+      if (sample.transactionId === transactionId) {
+        samplesById.set(sample.id, sample);
+      }
+    }
+    result.set(
+      key,
+      [...samplesById.values()].sort(
+        (left, right) => Date.parse(left.sampledAt) - Date.parse(right.sampledAt),
+      ),
+    );
+  }
+
+  return result;
 }
 
 export function chargingSampleConnectorKey(evseId: number, connectorId: number) {

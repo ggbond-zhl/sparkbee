@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   chargingPointEventStreamMessageSchema,
   chargingPointConnectorActionResponseSchema,
+  activeTransactionSamplesResponseSchema,
   createChargingPointRequestSchema,
   createConnectorRequestSchema,
   listChargingPointsQuerySchema,
@@ -17,6 +18,28 @@ import {
 } from "../../src";
 
 describe("chargingPoint contract schemas", () => {
+  test("validates persisted active transaction charging samples", () => {
+    expect(activeTransactionSamplesResponseSchema.parse({
+      items: [
+        {
+          transactionId: "tx-1",
+          evseId: 1,
+          connectorId: 1,
+          samples: [
+            {
+              id: "sample-1",
+              sampledAt: "2026-07-04T09:00:00.000Z",
+              meterWh: 100,
+              powerW: 7000,
+              currentA: 31,
+              voltageV: 226,
+            },
+          ],
+        },
+      ],
+    }).items[0]?.samples).toHaveLength(1);
+  });
+
   test("validates the complete charging point event stream interface", () => {
     const chargingPointId = "00000000-0000-4000-8000-000000000001";
     const meterValueMessage = {

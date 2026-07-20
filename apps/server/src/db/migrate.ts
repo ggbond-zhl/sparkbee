@@ -76,5 +76,54 @@ export async function migrateDatabase(client: Pick<PGlite, "exec">): Promise<voi
     create index actor_logs_operation_id_idx
       on actor_logs (charging_point_id, ((context ->> 'operationId')));
     alter table actor_logs enable row level security;
+
+    create table charging_transactions (
+      id uuid primary key default gen_random_uuid(),
+      charging_point_id uuid not null references charging_points(id) on delete cascade,
+      transaction_id text not null,
+      ocpp_transaction_id integer,
+      evse_id integer not null,
+      connector_id integer not null,
+      id_tag text not null,
+      state text not null,
+      charging_state text not null,
+      meter_start_wh double precision not null,
+      latest_meter_wh double precision not null,
+      started_at timestamptz not null,
+      ended_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create unique index charging_transactions_point_transaction_unique
+      on charging_transactions (charging_point_id, transaction_id);
+    create unique index charging_transactions_active_connector_unique
+      on charging_transactions (charging_point_id, evse_id, connector_id)
+      where ended_at is null;
+    create index charging_transactions_active_point_idx
+      on charging_transactions (charging_point_id, started_at)
+      where ended_at is null;
+    create index charging_transactions_ended_at_idx
+      on charging_transactions (ended_at);
+
+    create table charging_samples (
+      id text primary key,
+      transaction_record_id uuid not null references charging_transactions(id) on delete cascade,
+      sampled_at timestamptz not null,
+      meter_wh double precision not null,
+      power_w double precision not null,
+      current_a double precision not null,
+      voltage_v double precision not null,
+      created_at timestamptz not null default now()
+    );
+
+    create index charging_samples_transaction_sampled_at_idx
+      on charging_samples (transaction_record_id, sampled_at, id);
+    create unique index charging_samples_transaction_sampled_at_unique
+      on charging_samples (transaction_record_id, sampled_at);
+    create index charging_samples_sampled_at_idx
+      on charging_samples (sampled_at);
+    alter table charging_transactions enable row level security;
+    alter table charging_samples enable row level security;
   `);
 }

@@ -6,7 +6,11 @@ import type {
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 
 import type { ServerDatabase } from "../../db";
-import { chargingPoints, connectors } from "../../db/schema";
+import {
+  chargingPoints,
+  chargingTransactions,
+  connectors,
+} from "../../db/schema";
 import { ActorLogRepository } from "../actorLog/actorLog.repo";
 import { AppError } from "../../utils/errors";
 import { toConnectorType } from "../connector/connectorType";
@@ -137,6 +141,9 @@ export class ChargingPointRepository {
 
     await this.db.transaction(async (transaction) => {
       await new ActorLogRepository(transaction as ServerDatabase).deleteForChargingPoint(id);
+      await transaction
+        .delete(chargingTransactions)
+        .where(eq(chargingTransactions.chargingPointId, id));
       await transaction
         .update(chargingPoints)
         .set({

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   apiErrorResponseSchema,
+  activeTransactionSamplesResponseSchema,
   chargingPointConnectorActionResponseSchema,
   chargingPointDetailResponseSchema,
   connectorResponseSchema,
@@ -33,6 +34,8 @@ import type {
 
 import { createApp } from "../../src/app";
 import { ChargingPointActorHost } from "../../src/lib/chargingPointActorHost";
+import { ChargingTransactionRepository } from "../../src/modules/chargingTransaction/chargingTransaction.repo";
+import { createRuntimeOperationService } from "../../src/modules/runtimeOperation/runtimeOperation.service";
 import { createTestDatabase } from "../support/testDatabase";
 
 describe("chargingPoint management API", () => {
@@ -73,6 +76,16 @@ describe("chargingPoint management API", () => {
     ).toBe("查询桩实例运行状态快照");
     expect(
       document.paths["/api/charging-points/{id}/runtime-snapshot"].get.tags,
+    ).toEqual(["RuntimeOperation"]);
+    expect(
+      document.paths[
+        "/api/charging-points/{id}/active-transaction-samples"
+      ].get.summary,
+    ).toBe("查询活动交易充电采样");
+    expect(
+      document.paths[
+        "/api/charging-points/{id}/active-transaction-samples"
+      ].get.tags,
     ).toEqual(["RuntimeOperation"]);
     expect(document.paths["/api/charging-points/{id}/events"].get.summary).toBe(
       "订阅桩事件流",
@@ -838,6 +851,113 @@ describe("chargingPoint management API", () => {
       event: "snapshot",
       data: expectedSnapshot,
     });
+  });
+
+  test("restores persisted active transaction samples after app recreation", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble({
+      startTransactionResults: [
+        { status: "accepted", transactionId: "tx-1" },
+      ],
+    });
+    const firstApp = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(firstApp, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const connector = await createConnector(firstApp, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "IEC_62196_T2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await firstApp.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+    const startResponse = await startTransaction(
+      firstApp,
+      chargingPoint.id,
+      connector.id,
+      "TAG-001",
+    );
+    expect(startResponse.status).toBe(200);
+
+    await actor.publish({
+      id: "sample-1",
+      sequence: 1,
+      type: "transaction.meterValue",
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      resource: {
+        scope: "transaction",
+        evseId: 1,
+        connectorId: 1,
+        transactionId: "tx-1",
+      },
+      occurredAt: "2026-07-04T09:00:06.000Z",
+      meterWh: 1200,
+      powerW: 7200,
+      currentA: 32,
+      voltageV: 225,
+      sampledAt: "2026-07-04T09:00:06.000Z",
+    });
+
+    const recreatedApp = createApp({ database });
+    const response = await recreatedApp.request(
+      `/api/charging-points/${chargingPoint.id}/active-transaction-samples`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(
+      activeTransactionSamplesResponseSchema.parse(await response.json()),
+    ).toEqual({
+      items: [
+        {
+          transactionId: "tx-1",
+          evseId: 1,
+          connectorId: 1,
+          samples: [
+            {
+              id: "sample-1",
+              sampledAt: "2026-07-04T09:00:06.000Z",
+              meterWh: 1200,
+              powerW: 7200,
+              currentA: 32,
+              voltageV: 225,
+            },
+          ],
+        },
+      ],
+    });
+
+    const recoveredActor = createActorDouble();
+    const recoveryService = createRuntimeOperationService(database, {
+      chargingTransactionRepository: new ChargingTransactionRepository(database),
+      createChargingPointActor: (options) => {
+        recoveredActor.id = options.id;
+        return recoveredActor;
+      },
+    });
+    await expect(recoveryService.recoverActiveTransactions()).resolves.toEqual({
+      recovered: [chargingPoint.id],
+      failed: [],
+    });
+    expect(recoveredActor.startCalls).toBe(1);
   });
 
   test("returns 404 when subscribing to a missing chargingPoint event stream", async () => {
@@ -2146,10 +2266,8 @@ function createActorDouble(
         };
       },
     },
-    publish(event: ChargingPointActorEvent) {
-      for (const listener of listeners) {
-        void listener(event);
-      }
+    async publish(event: ChargingPointActorEvent) {
+      await Promise.all([...listeners].map((listener) => listener(event)));
     },
     async start() {
       this.startCalls += 1;

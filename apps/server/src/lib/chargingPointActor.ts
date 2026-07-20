@@ -16,4 +16,6 @@ export type {
   ChargingPointActorStopTransactionInput,
   ChargingPointActorStopTransactionResult,
   ChargingPointActorTransactionStartResult,
+  ChargingPointActorPersistedTransaction,
+  ChargingPointActorTransactionStore,
 } from "@spark-bee/charging-point-actor";

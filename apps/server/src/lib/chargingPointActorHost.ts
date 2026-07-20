@@ -5,6 +5,7 @@ import type {
 
 import type {
   ChargingPointActor,
+  ChargingPointActorEvent,
   ChargingPointActorLogSink,
   ChargingPointActorStartResult,
 } from "./chargingPointActor";
@@ -28,6 +29,9 @@ export type ChargingPointActorHostStartResult =
 export interface ChargingPointActorHostDependencies {
   eventStreamHub?: ChargingPointEventStreamHub;
   actorLogWriter?: ActorLogSinkFactory;
+  actorEventSink?: {
+    write(event: ChargingPointActorEvent): void | Promise<void>;
+  };
   runtimeProjection?: ChargingPointRuntimeProjection;
 }
 
@@ -36,12 +40,14 @@ export class ChargingPointActorHost {
   private readonly actorUnsubscribers = new Map<string, () => void>();
   private readonly eventStreamHub: ChargingPointEventStreamHub;
   private readonly actorLogWriter?: ActorLogSinkFactory;
+  private readonly actorEventSink?: ChargingPointActorHostDependencies["actorEventSink"];
   private readonly runtimeProjection: ChargingPointRuntimeProjection;
 
   constructor(dependencies: ChargingPointActorHostDependencies = {}) {
     this.eventStreamHub =
       dependencies.eventStreamHub ?? new ChargingPointEventStreamHub();
     this.actorLogWriter = dependencies.actorLogWriter;
+    this.actorEventSink = dependencies.actorEventSink;
     this.runtimeProjection =
       dependencies.runtimeProjection ?? new ChargingPointRuntimeProjection();
   }
@@ -67,8 +73,9 @@ export class ChargingPointActorHost {
     this.actors.set(chargingPointId, actor);
     this.actorUnsubscribers.set(
       chargingPointId,
-      actor.events.subscribe((event) => {
+      actor.events.subscribe(async (event) => {
         this.runtimeProjection.projectActorEvent(event);
+        await this.actorEventSink?.write(event);
         this.eventStreamHub.publishActorEvent(event);
       }),
     );

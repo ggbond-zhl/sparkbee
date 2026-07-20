@@ -386,6 +386,9 @@ describe("web architecture", () => {
     expect(workbenchModelSource).not.toContain("api/chargingPoints");
     expect(detailPageSource).toContain("ChartContainer");
     expect(detailPageSource).toContain("LineChart");
+    expect(detailPageSource).not.toContain("@/components/ui/tooltip");
+    expect(detailPageSource).not.toContain("<Tooltip");
+    expect(detailPageSource).not.toContain("<ChartTooltip");
     expect(chartSource).toContain("RechartsPrimitive.ResponsiveContainer");
     expect(chartSource).toContain("ChartTooltipContent");
     expect(workbenchSource).toContain("chargingPointDetailQueryOptions");
@@ -453,7 +456,7 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("toEnergyChartSamples");
     expect(detailPageSource).toContain('dataKey="meterKwh"');
     expect(detailPageSource).toContain("tickFormatter={formatEnergyAxisTick}");
-    expect(detailPageSource).toContain("formatEnergyTooltipValue");
+    expect(detailPageSource).not.toContain("formatEnergyTooltipValue");
     expect(detailPageSource).toContain("getEnergyChartDomain");
     expect(detailPageSource).toContain(
       "domain={getEnergyChartDomain(samples)}",

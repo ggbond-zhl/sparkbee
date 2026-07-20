@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   apiErrorResponseSchema,
+  activeTransactionSamplesResponseSchema,
   chargingPointConnectorActionResponseSchema,
   chargingPointEventStreamMessageSchema,
   runtimeAuthorizeRequestSchema,
@@ -60,6 +61,11 @@ const runtimeSnapshotSuccessResponse = (description: string) => ({
   description,
   content: jsonContent(runtimeSnapshotResponseSchema),
 });
+
+const activeTransactionSamplesSuccessResponse = {
+  description: "桩实例各枪口当前活动交易最近 7 天的充电采样。",
+  content: jsonContent(activeTransactionSamplesResponseSchema),
+};
 
 const connectorActionSuccessResponse = (description: string) => ({
   description,
@@ -159,6 +165,23 @@ const getChargingPointRuntimeSnapshotRoute = createRoute({
   },
   responses: {
     200: runtimeSnapshotSuccessResponse("桩实例当前运行状态快照。"),
+    400: validationErrorResponse,
+    404: notFoundResponse,
+  },
+});
+
+const getActiveTransactionSamplesRoute = createRoute({
+  method: "get",
+  path: "/{id}/active-transaction-samples",
+  tags: ["RuntimeOperation"],
+  summary: "查询活动交易充电采样",
+  description:
+    "查询桩实例所有枪口当前活动交易最近 7 天的持久化充电采样；没有活动交易时返回空 items。",
+  request: {
+    params: chargingPointIdParamSchema,
+  },
+  responses: {
+    200: activeTransactionSamplesSuccessResponse,
     400: validationErrorResponse,
     404: notFoundResponse,
   },
@@ -357,6 +380,11 @@ export function createRuntimeOperationRoute(
   route.openapi(getChargingPointRuntimeSnapshotRoute, async (context) => {
     const { id } = context.req.valid("param");
     return context.json(await service.getRuntimeSnapshot(id), 200);
+  });
+
+  route.openapi(getActiveTransactionSamplesRoute, async (context) => {
+    const { id } = context.req.valid("param");
+    return context.json(await service.getActiveTransactionSamples(id), 200);
   });
 
   route.openapi(plugConnectorRoute, async (context) => {

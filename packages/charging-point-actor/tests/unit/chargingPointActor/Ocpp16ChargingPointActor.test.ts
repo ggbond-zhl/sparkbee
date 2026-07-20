@@ -209,6 +209,10 @@ class FakeProtocolRuntime {
     statusNotificationResults: [],
   };
 
+  async restorePersistedTransactions(): Promise<void> {}
+
+  resumeActiveTransactionSampling(): void {}
+
   async boot() {
     this.calls.push("boot");
     const queuedResult = this.bootResults.shift();

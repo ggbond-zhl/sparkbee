@@ -82,6 +82,10 @@ test("用户通过统一 Card 查看充电桩并从 Footer 执行单项操作", 
   expect(screen.getByText("SPARKBEE_001")).toBeTruthy();
   expect(screen.getByText("SparkBee / Simulator")).toBeTruthy();
   expect(screen.getByText("2 枪")).toBeTruthy();
+  const tooltipTriggers = document.querySelectorAll(
+    '[data-slot="tooltip-trigger"]',
+  );
+  expect(tooltipTriggers).toHaveLength(0);
   expect(
     screen.getByRole("link", { name: /主站测试桩/ }).getAttribute("href"),
   ).toBe("/charging-points/00000000-0000-4000-8000-000000000001");
@@ -92,7 +96,10 @@ test("用户通过统一 Card 查看充电桩并从 Footer 执行单项操作", 
   const createButton = screen.getByRole("button", { name: "新增充电桩" });
   expect(createButton).toBeTruthy();
   expect(searchButton).toBeTruthy();
-  expect(createButton.parentElement).toBe(searchButton.parentElement);
+  const toolbar = searchButton.parentElement;
+  expect(toolbar?.contains(createButton)).toBe(true);
+  expect(toolbar?.className).not.toContain("max-w");
+  expect(createButton.parentElement?.className).toContain("md:ml-auto");
   expect(screen.getByText("第 1 / 1 页，共 1 条")).toBeTruthy();
   expect(screen.queryByRole("table")).toBeNull();
   expect(screen.queryByRole("checkbox")).toBeNull();
