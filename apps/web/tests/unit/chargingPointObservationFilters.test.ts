@@ -8,6 +8,7 @@ import {
 } from "../../src/features/charging-points/model/chargingPointObservationFilters";
 
 interface TestLogEntry {
+  id?: string;
   occurredAt: string;
   type: string;
 }
@@ -49,6 +50,40 @@ describe("charging point observation filters", () => {
       { occurredAt: "2026-07-09T10:09:30.000Z", type: "Heartbeat" },
       { occurredAt: "2026-07-09T10:06:00.000Z", type: "Heartbeat" },
     ]);
+  });
+
+  test("caps matching entries after filtering so unmatched entries do not consume capacity", () => {
+    const unmatchedEntries: TestLogEntry[] = Array.from(
+      { length: 10 },
+      (_, index) => ({
+        id: `status-${index}`,
+        occurredAt: "2026-07-09T10:10:00.000Z",
+        type: "StatusNotification",
+      }),
+    );
+    const matchingEntries: TestLogEntry[] = Array.from(
+      { length: 205 },
+      (_, index) => ({
+        id: `heartbeat-${index}`,
+        occurredAt: "2026-07-09T10:10:00.000Z",
+        type: "Heartbeat",
+      }),
+    );
+
+    const result = filterObservationEntries(
+      [...unmatchedEntries, ...matchingEntries],
+      {
+        getType: (entry) => entry.type,
+        limit: 200,
+        nowMs: Date.parse("2026-07-09T10:10:00.000Z"),
+        timeFilter: "all",
+        typeFilter: "Heartbeat",
+      },
+    );
+
+    expect(result).toHaveLength(200);
+    expect(result.at(0)?.id).toBe("heartbeat-0");
+    expect(result.at(-1)?.id).toBe("heartbeat-199");
   });
 
   test("uses distinct empty text for empty feeds and empty filter results", () => {

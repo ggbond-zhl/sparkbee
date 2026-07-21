@@ -64,6 +64,7 @@ export interface ChargingPointObservationWorkbench {
 }
 
 interface ObservationHistoryPagination {
+  capacity: number;
   hasMore: boolean;
   loadingMore: boolean;
   loadMore(): void;
@@ -199,6 +200,7 @@ function createDefaultObservation(
   eventFeedState: ChargingPointRuntimeEventFeedState,
 ): ChargingPointObservationWorkbench {
   const pagination = {
+    capacity: 200,
     hasMore: false,
     loadingMore: false,
     loadMore: () => undefined,

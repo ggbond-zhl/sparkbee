@@ -238,11 +238,13 @@ export function useChargingPointWorkbench(
       setEventTypeFilter,
       setMessageDirectionFilter,
       messageHistory: {
+        capacity: 200 * (messageHistoryQuery.data?.pages.length ?? 1),
         hasMore: messageHistoryQuery.hasNextPage,
         loadingMore: messageHistoryQuery.isFetchingNextPage,
         loadMore: () => void messageHistoryQuery.fetchNextPage(),
       },
       eventHistory: {
+        capacity: 200 * (eventHistoryQuery.data?.pages.length ?? 1),
         hasMore: eventHistoryQuery.hasNextPage,
         loadingMore: eventHistoryQuery.isFetchingNextPage,
         loadMore: () => void eventHistoryQuery.fetchNextPage(),

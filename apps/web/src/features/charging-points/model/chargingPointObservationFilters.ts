@@ -38,11 +38,13 @@ export function filterObservationEntries<TEntry extends { occurredAt: string }>(
   entries: TEntry[],
   {
     getType,
+    limit,
     nowMs,
     timeFilter,
     typeFilter,
   }: {
     getType: (entry: TEntry) => string;
+    limit?: number;
     nowMs: number;
     timeFilter: ObservationTimeFilter;
     typeFilter: string;
@@ -50,7 +52,7 @@ export function filterObservationEntries<TEntry extends { occurredAt: string }>(
 ): TEntry[] {
   const cutoffMs = getObservationTimeFilterCutoffMs(timeFilter, nowMs);
 
-  return entries.filter((entry) => {
+  const filteredEntries = entries.filter((entry) => {
     if (
       typeFilter !== ALL_RUNTIME_LOG_TYPE_FILTER &&
       getType(entry) !== typeFilter
@@ -65,6 +67,8 @@ export function filterObservationEntries<TEntry extends { occurredAt: string }>(
     const occurredAtMs = Date.parse(entry.occurredAt);
     return Number.isFinite(occurredAtMs) && occurredAtMs >= cutoffMs;
   });
+
+  return limit === undefined ? filteredEntries : filteredEntries.slice(0, limit);
 }
 
 export function getObservationEmptyText({

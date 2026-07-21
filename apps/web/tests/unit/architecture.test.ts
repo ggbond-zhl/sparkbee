@@ -388,7 +388,7 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("LineChart");
     expect(detailPageSource).not.toContain("@/components/ui/tooltip");
     expect(detailPageSource).not.toContain("<Tooltip");
-    expect(detailPageSource).not.toContain("<ChartTooltip");
+    expect(detailPageSource.match(/<ChartTooltip(?:\s|>)/g)?.length).toBe(2);
     expect(chartSource).toContain("RechartsPrimitive.ResponsiveContainer");
     expect(chartSource).toContain("ChartTooltipContent");
     expect(workbenchSource).toContain("chargingPointDetailQueryOptions");
@@ -413,9 +413,25 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("filterObservationEntries");
     expect(detailPageSource).toContain("buildObservationTypeFilterOptions");
     expect(detailPageSource).toContain(
-      "报文 {filteredProtocolMessages.length}",
+      '<TabsTrigger value="messages">报文</TabsTrigger>',
     );
-    expect(detailPageSource).toContain("事件 {filteredEvents.length}");
+    expect(detailPageSource).toContain(
+      '<TabsTrigger value="events">事件</TabsTrigger>',
+    );
+    expect(detailPageSource).not.toContain("filteredProtocolMessages.length}");
+    expect(detailPageSource).not.toContain("filteredEvents.length}");
+    expect(workbenchModelSource).toContain("capacity: number");
+    expect(workbenchSource).toContain(
+      "200 * (messageHistoryQuery.data?.pages.length ?? 1)",
+    );
+    expect(workbenchSource).toContain(
+      "200 * (eventHistoryQuery.data?.pages.length ?? 1)",
+    );
+    expect(detailPageSource).toContain("limit: messageHistory.capacity");
+    expect(detailPageSource).toContain("limit: eventHistory.capacity");
+    expect(detailPageSource).toContain(
+      "targetIndex !== previousAnchorIndex",
+    );
     expect(detailPageSource).not.toContain("显示 {filteredCount}");
     expect(detailPageSource).toContain("时间筛选");
     expect(detailPageSource).toContain("类型筛选");
@@ -456,7 +472,7 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("toEnergyChartSamples");
     expect(detailPageSource).toContain('dataKey="meterKwh"');
     expect(detailPageSource).toContain("tickFormatter={formatEnergyAxisTick}");
-    expect(detailPageSource).not.toContain("formatEnergyTooltipValue");
+    expect(detailPageSource).toContain("formatEnergyTooltipValue");
     expect(detailPageSource).toContain("getEnergyChartDomain");
     expect(detailPageSource).toContain(
       "domain={getEnergyChartDomain(samples)}",

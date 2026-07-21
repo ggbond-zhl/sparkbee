@@ -53,6 +53,8 @@ import {
 } from "@/components/ui/card";
 import {
   ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
 import {
@@ -457,6 +459,21 @@ function ConnectorElectricalMetricChart({
             hide
           />
           <YAxis domain={getElectricalMetricDomain(samples, dataKey)} hide />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                formatter={(value) => (
+                  <>
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-mono font-medium tabular-nums text-foreground">
+                      {formatElectricalMetricValue(value, dataKey, unit)}
+                    </span>
+                  </>
+                )}
+                labelFormatter={(value) => formatChartTime(String(value))}
+              />
+            }
+          />
           <Line
             dataKey={dataKey}
             dot={samples.length <= 8}
@@ -500,6 +517,21 @@ function ConnectorEnergyChart({ samples }: { samples: ChargingSamplePoint[] }) {
             tickFormatter={formatEnergyAxisTick}
             tickLine={false}
             width={54}
+          />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                formatter={(value) => (
+                  <>
+                    <span className="text-muted-foreground">电量</span>
+                    <span className="font-mono font-medium tabular-nums text-foreground">
+                      {formatEnergyTooltipValue(value)}
+                    </span>
+                  </>
+                )}
+                labelFormatter={(value) => formatChartTime(String(value))}
+              />
+            }
           />
           <Line
             dataKey="meterKwh"
@@ -588,6 +620,18 @@ function formatEnergyAxisTick(value: number) {
   return `${Math.round(value).toLocaleString("zh-CN")} kWh`;
 }
 
+function formatEnergyTooltipValue(value: string | number) {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return `${value} kWh`;
+  }
+
+  return `${numericValue.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} kWh`;
+}
+
 function getElectricalMetricDomain(
   samples: ChargingSamplePoint[],
   dataKey: (typeof ELECTRICAL_CHART_SERIES)[number]["dataKey"],
@@ -665,18 +709,23 @@ function RuntimeObservationTabs({
     [events],
   );
   const filteredProtocolMessages = useMemo(
-    () => filterObservationEntries(protocolMessages, {
-      getType: (message) => message.action,
-      nowMs: filterNowMs,
-      timeFilter: messageTimeFilter,
-      typeFilter: messageTypeFilter,
-    }).filter((message) =>
-      messageDirectionFilter === "all" ||
-      message.direction === messageDirectionFilter
+    () => filterObservationEntries(
+      protocolMessages.filter((message) =>
+        messageDirectionFilter === "all" ||
+        message.direction === messageDirectionFilter
+      ),
+      {
+        getType: (message) => message.action,
+        limit: messageHistory.capacity,
+        nowMs: filterNowMs,
+        timeFilter: messageTimeFilter,
+        typeFilter: messageTypeFilter,
+      },
     ),
     [
       filterNowMs,
       messageDirectionFilter,
+      messageHistory.capacity,
       messageTimeFilter,
       messageTypeFilter,
       protocolMessages,
@@ -685,11 +734,12 @@ function RuntimeObservationTabs({
   const filteredEvents = useMemo(
     () => filterObservationEntries(events, {
       getType: (event) => event.eventType,
+      limit: eventHistory.capacity,
       nowMs: filterNowMs,
       timeFilter: eventTimeFilter,
       typeFilter: eventTypeFilter,
     }),
-    [eventTimeFilter, eventTypeFilter, events, filterNowMs],
+    [eventHistory.capacity, eventTimeFilter, eventTypeFilter, events, filterNowMs],
   );
   const activeListHandleRef =
     activeObservationTab === "messages" ? messagesListHandleRef : eventsListHandleRef;
@@ -730,10 +780,8 @@ function RuntimeObservationTabs({
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <TabsList>
-            <TabsTrigger value="messages">
-              报文 {filteredProtocolMessages.length}
-            </TabsTrigger>
-            <TabsTrigger value="events">事件 {filteredEvents.length}</TabsTrigger>
+            <TabsTrigger value="messages">报文</TabsTrigger>
+            <TabsTrigger value="events">事件</TabsTrigger>
           </TabsList>
           <RuntimeObservationToolbar
             disabled={activeListLength === 0}
@@ -1020,9 +1068,12 @@ function VirtualObservationList<TEntry extends ObservationListEntry>({
     const shouldKeepAnchor =
       (anchor?.scrollTop ?? 0) > RUNTIME_LOG_TOP_THRESHOLD;
 
-    if (entries.length > previousEntries.length && anchor && shouldKeepAnchor) {
+    if (anchor && shouldKeepAnchor) {
+      const previousAnchorIndex = previousEntries.findIndex(
+        (entry) => entry.id === anchor.id,
+      );
       const targetIndex = entries.findIndex((entry) => entry.id === anchor.id);
-      if (targetIndex >= 0) {
+      if (targetIndex >= 0 && targetIndex !== previousAnchorIndex) {
         const targetOffset = rowVirtualizer.getOffsetForIndex(targetIndex, "start");
         if (targetOffset !== undefined) {
           rowVirtualizer.scrollToOffset(
