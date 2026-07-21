@@ -1,3 +1,5 @@
+# GitHub 要求 workflow_run 监听器存在于默认分支 main。
+# 本工作流仍只部署通过质量检查的 develop 提交。
 name: 发布测试环境
 
 on:
@@ -101,6 +103,11 @@ jobs:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
+          if [[ ! "${RENDER_DEPLOY_HOOK_URL}" =~ ^https://api[.]render[.]com/deploy/[^?]+[?]key=.+$ ]]; then
+            echo 'Render Deploy Hook URL 格式无效，请重新从 Render Settings 复制完整 URL。' >&2
+            exit 1
+          fi
+
           separator='?'
           if [[ "${RENDER_DEPLOY_HOOK_URL}" == *'?'* ]]; then
             separator='&'
@@ -212,6 +219,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: pnpm
+          wranglerVersion: 4.110.0
           workingDirectory: apps/web
           command: >-
             pages deploy dist
@@ -223,9 +232,18 @@ jobs:
       - name: 验证 Pages 前端
         id: smoke_pages
         run: |
-          html=$(curl --fail --silent --show-error \
-            "${CLOUDFLARE_PAGES_URL}/charging-points")
-          grep --quiet '<div id="root"></div>' <<<"${html}"
+          for attempt in {1..12}; do
+            if html=$(curl --fail --silent --show-error \
+              "${CLOUDFLARE_PAGES_URL}/charging-points") \
+              && grep --quiet '<div id="root"></div>' <<<"${html}"; then
+              exit 0
+            fi
+            if [[ "${attempt}" == '12' ]]; then
+              echo 'Cloudflare Pages 未在期限内就绪。' >&2
+              exit 1
+            fi
+            sleep 5
+          done
 
       - name: 回滚 Cloudflare Pages
         if: >-
