@@ -38,7 +38,7 @@ jobs:
         run: pnpm typecheck
 
       - name: 运行测试
-        run: pnpm test
+        run: pnpm --workspace-concurrency=1 --recursive --if-present test
 
       - name: 构建
         run: pnpm build
