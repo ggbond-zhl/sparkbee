@@ -7,9 +7,11 @@ import { createServerLogger } from "./config/logger";
 import { createPostgresDatabase } from "./db/client";
 import { ActorLogWriter } from "./lib/actorLogWriter";
 import { ChargingPointActorHost } from "./lib/chargingPointActorHost";
+import { ProtocolObservationWriter } from "./modules/protocolObservation/protocolObservation.writer";
 import { ActorLogRetentionScheduler } from "./modules/actorLog/actorLogRetentionScheduler";
 import { ChargingTransactionRepository } from "./modules/chargingTransaction/chargingTransaction.repo";
 import { ChargingTransactionRetentionScheduler } from "./modules/chargingTransaction/chargingTransactionRetentionScheduler";
+import { ProtocolObservationRetentionScheduler } from "./modules/protocolObservation/protocolObservationRetentionScheduler";
 import { createRuntimeOperationService } from "./modules/runtimeOperation/runtimeOperation.service";
 
 const config = loadServerConfig();
@@ -28,16 +30,26 @@ const actorLogWriter = new ActorLogWriter(database, {
   errorReporter,
 });
 const chargingTransactionRepository = new ChargingTransactionRepository(database);
+const protocolObservationWriter = new ProtocolObservationWriter(database, {
+  logger,
+  errorReporter,
+});
 const chargingPointActorHost = new ChargingPointActorHost({
   actorLogWriter,
   actorEventSink: {
-    write: (event) => event.type === "transaction.meterValue" &&
+    write: async (event) => {
+      if (
+        event.type === "transaction.meterValue" &&
         event.resource.transactionId !== undefined
-      ? chargingTransactionRepository.recordSample(event.chargingPointId, {
+      ) {
+        await chargingTransactionRepository.recordSample(event.chargingPointId, {
           ...event,
           resource: { transactionId: event.resource.transactionId },
-        }, { requireActiveTransaction: false })
-      : undefined,
+        }, { requireActiveTransaction: false });
+      }
+      protocolObservationWriter.write(event);
+    },
+    delete: (chargingPointId) => protocolObservationWriter.delete(chargingPointId),
   },
 });
 const runtimeOperationService = createRuntimeOperationService(database, {
@@ -53,11 +65,17 @@ const chargingTransactionRetentionScheduler =
     logger,
     errorReporter,
   });
+const protocolObservationRetentionScheduler =
+  new ProtocolObservationRetentionScheduler(database, {
+    logger,
+    errorReporter,
+  });
 const app = createApp({
   database,
   environment: config.environment,
   corsAllowedOrigin: config.corsAllowedOrigin,
   actorLogWriter,
+  protocolObservationWriter,
   chargingPointActorHost,
   logger,
   errorReporter,
@@ -81,6 +99,7 @@ await startServer({
     }, "SparkBee server started");
     retentionScheduler.start();
     chargingTransactionRetentionScheduler.start();
+    protocolObservationRetentionScheduler.start();
     void runtimeOperationService.recoverActiveTransactions().then((result) => {
       logger.info({
         event: "runtime-recovery.completed",
@@ -106,7 +125,11 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     logger.info({ event: "server.stopping", signal }, "SparkBee server stopping");
     retentionScheduler.stop();
     chargingTransactionRetentionScheduler.stop();
-    void actorLogWriter.flush().finally(() => {
+    protocolObservationRetentionScheduler.stop();
+    void Promise.all([
+      actorLogWriter.flush(),
+      protocolObservationWriter.flush(),
+    ]).finally(() => {
       logger.info({ event: "server.stopped", signal }, "SparkBee server stopped");
       process.exit(0);
     });

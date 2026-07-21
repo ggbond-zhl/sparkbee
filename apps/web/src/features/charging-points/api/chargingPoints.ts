@@ -36,6 +36,12 @@ import {
   listActorLogsResponseSchema,
   type ListActorLogsQuery,
   type ListActorLogsResponse,
+  listProtocolEventsResponseSchema,
+  type ListProtocolEventsQuery,
+  type ListProtocolEventsResponse,
+  listProtocolMessagesResponseSchema,
+  type ListProtocolMessagesQuery,
+  type ListProtocolMessagesResponse,
 } from "@spark-bee/contracts";
 
 import { toApiUrl } from "@/lib/apiUrl";
@@ -160,6 +166,38 @@ export async function listActorLogs(
   ));
   if (!response.ok) throw new Error("Actor 日志加载失败");
   return listActorLogsResponseSchema.parse(await response.json());
+}
+
+export async function listProtocolMessages(
+  chargingPointId: string,
+  input: ListProtocolMessagesQuery = { limit: 200 },
+): Promise<ListProtocolMessagesResponse> {
+  const search = new URLSearchParams({ limit: String(input.limit ?? 200) });
+  for (const key of ["before", "direction", "action", "from", "to"] as const) {
+    const value = input[key];
+    if (value !== undefined) search.set(key, String(value));
+  }
+  const response = await fetch(toApiUrl(
+    `/api/charging-points/${chargingPointId}/protocol-messages?${search.toString()}`,
+  ));
+  if (!response.ok) throw new Error("协议报文加载失败");
+  return listProtocolMessagesResponseSchema.parse(await response.json());
+}
+
+export async function listProtocolEvents(
+  chargingPointId: string,
+  input: ListProtocolEventsQuery = { limit: 200 },
+): Promise<ListProtocolEventsResponse> {
+  const search = new URLSearchParams({ limit: String(input.limit ?? 200) });
+  for (const key of ["before", "eventType", "from", "to"] as const) {
+    const value = input[key];
+    if (value !== undefined) search.set(key, String(value));
+  }
+  const response = await fetch(toApiUrl(
+    `/api/charging-points/${chargingPointId}/protocol-events?${search.toString()}`,
+  ));
+  if (!response.ok) throw new Error("协议事件加载失败");
+  return listProtocolEventsResponseSchema.parse(await response.json());
 }
 
 export async function getActiveTransactionSamples(

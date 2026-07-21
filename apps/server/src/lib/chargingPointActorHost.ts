@@ -31,6 +31,7 @@ export interface ChargingPointActorHostDependencies {
   actorLogWriter?: ActorLogSinkFactory;
   actorEventSink?: {
     write(event: ChargingPointActorEvent): void | Promise<void>;
+    delete?(chargingPointId: string): void | Promise<void>;
   };
   runtimeProjection?: ChargingPointRuntimeProjection;
 }
@@ -116,6 +117,7 @@ export class ChargingPointActorHost {
       this.runtimeProjection.delete(chargingPointId);
     }
 
+    await this.actorEventSink?.delete?.(chargingPointId);
     this.eventStreamHub.delete(chargingPointId);
   }
 

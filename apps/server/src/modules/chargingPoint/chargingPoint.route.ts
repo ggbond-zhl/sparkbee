@@ -121,7 +121,7 @@ const deleteChargingPointRoute = createRoute({
   path: "/{id}",
   tags: ["ChargingPoint"],
   summary: "删除桩实例",
-  description: "软删除桩实例，并软删除其下当前未删除的枪口。",
+  description: "停止并软删除桩实例，软删除其枪口，同时删除关联诊断与历史观察记录。",
   request: {
     params: chargingPointIdParamSchema,
   },
@@ -176,8 +176,8 @@ export function createChargingPointRoute(
 
   route.openapi(deleteChargingPointRoute, async (context) => {
     const { id } = context.req.valid("param");
-    await repository.softDelete(id);
     await dependencies.chargingPointActorHost?.delete(id);
+    await repository.softDelete(id);
     return context.body(null, 204);
   });
 

@@ -9,6 +9,7 @@ import type {
   ConnectorRuntimeStatus,
   EVSERuntimeStatus,
   ProtocolMessageEvent,
+  ProtocolEvent,
   RuntimeAvailability,
   RuntimeSnapshotResponse,
   SessionStatusEvent,
@@ -136,8 +137,6 @@ export interface ChargingPointRuntimeEventFeedState {
   events: RuntimeEventLogEntry[];
   protocolMessages: ProtocolMessageLogEntry[];
 }
-
-const OBSERVATION_LIST_CAPACITY = 500;
 
 export function createChargingPointRuntimeEventState(): ChargingPointRuntimeEventState {
   return {
@@ -403,15 +402,37 @@ export function reduceChargingPointRuntimeEventFeedState(
       protocolMessages: prepend(
         state.protocolMessages,
         toProtocolMessageLogEntry(message.data),
-      ).slice(0, OBSERVATION_LIST_CAPACITY),
+      ),
     };
   }
 
   return {
     ...state,
-    events: prepend(state.events, toRuntimeEventLogEntry(message)).slice(
-      0,
-      OBSERVATION_LIST_CAPACITY,
+    events: prepend(state.events, toRuntimeEventLogEntry(message)),
+  };
+}
+
+export function mergeChargingPointRuntimeEventFeedHistory(
+  state: ChargingPointRuntimeEventFeedState,
+  history: {
+    events: ProtocolEvent[];
+    protocolMessages: ProtocolMessageEvent[];
+  },
+): ChargingPointRuntimeEventFeedState {
+  return {
+    events: mergeLogEntries(
+      state.events,
+      history.events.map((event) => toRuntimeEventLogEntry({
+        event: event.type,
+        data: event,
+      } as Exclude<
+        ChargingPointEventStreamMessage,
+        { event: "snapshot" } | { event: "protocol.message" } | { event: "deleted" }
+      >)),
+    ),
+    protocolMessages: mergeLogEntries(
+      state.protocolMessages,
+      history.protocolMessages.map(toProtocolMessageLogEntry),
     ),
   };
 }
@@ -707,10 +728,25 @@ function prepend<TItem>(items: TItem[], item: TItem) {
   return [item, ...items];
 }
 
+function mergeLogEntries<TEntry extends { id: string; occurredAt: string }>(
+  current: TEntry[],
+  history: TEntry[],
+): TEntry[] {
+  const entries = new Map<string, TEntry>();
+  for (const entry of [...current, ...history]) {
+    if (!entries.has(entry.id)) entries.set(entry.id, entry);
+  }
+  return [...entries.values()].sort((left, right) =>
+    right.occurredAt.localeCompare(left.occurredAt) ||
+    right.id.localeCompare(left.id)
+  );
+}
+
 function createLogEntryId(
   eventType: ChargingPointEventStreamMessage["event"],
-  event: { occurredAt?: string; messageId?: string },
+  event: { id?: string; occurredAt?: string; messageId?: string },
 ) {
+  if (event.id !== undefined) return event.id;
   return `${eventType}:${event.occurredAt ?? ""}:${event.messageId ?? ""}:${
     JSON.stringify(event).length
   }`;

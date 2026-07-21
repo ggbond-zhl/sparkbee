@@ -9,6 +9,8 @@ import {
   chargingPointRuntimeSnapshotQueryOptions,
   chargingPointRuntimeStatusQueryKey,
   chargingPointRuntimeStatusQueryOptions,
+  protocolEventsInfiniteQueryOptions,
+  protocolMessagesInfiniteQueryOptions,
 } from "../../src/features/charging-points/model/chargingPointQueries";
 
 describe("charging point list query options", () => {
@@ -46,5 +48,41 @@ describe("charging point list query options", () => {
       id,
       "runtime-snapshot",
     ]);
+  });
+
+  test("uses independent cursor queries for protocol messages and events", () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    const messages = protocolMessagesInfiniteQueryOptions(id, {
+      direction: "received",
+      action: "Heartbeat",
+    });
+    const events = protocolEventsInfiniteQueryOptions(id, {
+      eventType: "connector.status",
+    });
+
+    expect(messages.queryKey).toEqual([
+      "charging-points",
+      id,
+      "protocol-messages",
+      { direction: "received", action: "Heartbeat" },
+    ]);
+    expect(events.queryKey).toEqual([
+      "charging-points",
+      id,
+      "protocol-events",
+      { eventType: "connector.status" },
+    ]);
+    expect(messages.getNextPageParam?.(
+      { items: [], previousCursor: "older-messages" },
+      [],
+      undefined,
+      [],
+    )).toBe("older-messages");
+    expect(events.getNextPageParam?.(
+      { items: [], previousCursor: "older-events" },
+      [],
+      undefined,
+      [],
+    )).toBe("older-events");
   });
 });

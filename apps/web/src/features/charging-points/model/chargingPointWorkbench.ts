@@ -25,6 +25,7 @@ import type {
   ProtocolMessageLogEntry,
   RuntimeEventLogEntry,
 } from "./chargingPointRuntimeEvents";
+import type { ObservationTimeFilter } from "./chargingPointObservationFilters";
 
 interface ConnectorWorkbenchItem {
   model: ConnectorCardModel;
@@ -45,15 +46,35 @@ interface ConnectorEditorWorkbench {
   save(savedConnector: ConnectorResponse): Promise<void>;
 }
 
+export interface ChargingPointObservationWorkbench {
+  events: RuntimeEventLogEntry[];
+  protocolMessages: ProtocolMessageLogEntry[];
+  messageTimeFilter: ObservationTimeFilter;
+  eventTimeFilter: ObservationTimeFilter;
+  messageTypeFilter: string;
+  eventTypeFilter: string;
+  messageDirectionFilter: "all" | "sent" | "received";
+  setMessageTimeFilter(value: ObservationTimeFilter): void;
+  setEventTimeFilter(value: ObservationTimeFilter): void;
+  setMessageTypeFilter(value: string): void;
+  setEventTypeFilter(value: string): void;
+  setMessageDirectionFilter(value: "all" | "sent" | "received"): void;
+  messageHistory: ObservationHistoryPagination;
+  eventHistory: ObservationHistoryPagination;
+}
+
+interface ObservationHistoryPagination {
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMore(): void;
+}
+
 export interface ReadyChargingPointWorkbench {
   status: "ready";
   detail: ChargingPointDetailResponse;
   headerModel: ChargingPointDetailHeaderModel;
   connectorItems: ConnectorWorkbenchItem[];
-  observation: {
-    events: RuntimeEventLogEntry[];
-    protocolMessages: ProtocolMessageLogEntry[];
-  };
+  observation: ChargingPointObservationWorkbench;
   runtime: {
     pending: boolean;
     applyPrimaryAction(): void;
@@ -85,6 +106,7 @@ export interface CreateReadyChargingPointWorkbenchInput {
   runtimeStatusQueryState: RuntimeStatusQueryState;
   runtimeEventState: ChargingPointRuntimeEventState;
   eventFeedState: ChargingPointRuntimeEventFeedState;
+  observation?: ChargingPointObservationWorkbench;
   activeTransactionSamples: ActiveTransactionSamplesResponse;
   pending: {
     runtime: boolean;
@@ -149,10 +171,7 @@ export function createReadyChargingPointWorkbench(
     detail: input.detail,
     headerModel,
     connectorItems,
-    observation: {
-      events: input.eventFeedState.events,
-      protocolMessages: input.eventFeedState.protocolMessages,
-    },
+    observation: input.observation ?? createDefaultObservation(input.eventFeedState),
     runtime: {
       pending: input.pending.runtime,
       applyPrimaryAction: headerModel.primaryAction.kind === "start"
@@ -173,5 +192,32 @@ export function createReadyChargingPointWorkbench(
     },
     chargingPointEditor: input.chargingPointEditor,
     connectorEditor: input.connectorEditor,
+  };
+}
+
+function createDefaultObservation(
+  eventFeedState: ChargingPointRuntimeEventFeedState,
+): ChargingPointObservationWorkbench {
+  const pagination = {
+    hasMore: false,
+    loadingMore: false,
+    loadMore: () => undefined,
+  };
+
+  return {
+    events: eventFeedState.events,
+    protocolMessages: eventFeedState.protocolMessages,
+    messageTimeFilter: "all",
+    eventTimeFilter: "all",
+    messageTypeFilter: "all",
+    eventTypeFilter: "all",
+    messageDirectionFilter: "all",
+    setMessageTimeFilter: () => undefined,
+    setEventTimeFilter: () => undefined,
+    setMessageTypeFilter: () => undefined,
+    setEventTypeFilter: () => undefined,
+    setMessageDirectionFilter: () => undefined,
+    messageHistory: pagination,
+    eventHistory: pagination,
   };
 }

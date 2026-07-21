@@ -17,6 +17,7 @@ import type {
   connectorStatusEventSchema,
   evseStatusEventSchema,
   protocolMessageEventSchema,
+  protocolEventSchema,
   sessionOfflineReasonSchema,
   sessionStatusEventSchema,
   transactionMeterValueEventSchema,
@@ -74,6 +75,8 @@ export type TransactionMeterValueEvent = z.infer<
   typeof transactionMeterValueEventSchema
 >;
 export type ProtocolMessageEvent = z.infer<typeof protocolMessageEventSchema>;
+export type ProtocolEvent = z.infer<typeof protocolEventSchema>;
+export type HistoricalObservationEvent = z.infer<typeof protocolEventSchema>;
 export type ChargingPointActorEvent = z.infer<typeof chargingPointActorEventSchema>;
 export type ChargingPointEventStreamMessage = z.infer<
   typeof chargingPointEventStreamMessageSchema

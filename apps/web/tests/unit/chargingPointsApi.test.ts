@@ -10,6 +10,8 @@ import {
   listConnectors,
   listChargingPoints,
   listActorLogs,
+  listProtocolEvents,
+  listProtocolMessages,
   plugConnector,
   authorizeAndStartConnectorTransaction,
   startConnectorTransaction,
@@ -270,6 +272,43 @@ describe("chargingPoints API client", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/charging-points/00000000-0000-4000-8000-000000000001/actor-logs?limit=50&before=cursor-1&level=error&code=OCPP_ACTION_FAILED&operationId=operation-1",
+    );
+  });
+
+  test("queries persisted protocol messages and events with separate filters", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [],
+        previousCursor: null,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [],
+        previousCursor: null,
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const chargingPointId = "00000000-0000-4000-8000-000000000001";
+
+    await listProtocolMessages(chargingPointId, {
+      limit: 50,
+      before: "message-cursor",
+      direction: "received",
+      action: "Heartbeat",
+      from: "2026-07-20T00:00:00.000Z",
+    });
+    await listProtocolEvents(chargingPointId, {
+      limit: 100,
+      before: "event-cursor",
+      eventType: "connector.status",
+      to: "2026-07-21T00:00:00.000Z",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      `/api/charging-points/${chargingPointId}/protocol-messages?limit=50&before=message-cursor&direction=received&action=Heartbeat&from=2026-07-20T00%3A00%3A00.000Z`,
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      `/api/charging-points/${chargingPointId}/protocol-events?limit=100&before=event-cursor&eventType=connector.status&to=2026-07-21T00%3A00%3A00.000Z`,
     );
   });
 

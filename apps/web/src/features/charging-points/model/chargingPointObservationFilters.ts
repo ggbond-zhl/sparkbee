@@ -79,7 +79,7 @@ export function getObservationEmptyText({
   return entriesCount === 0 ? emptyText : filteredEmptyText;
 }
 
-function getObservationTimeFilterCutoffMs(
+export function getObservationTimeFilterCutoffMs(
   timeFilter: ObservationTimeFilter,
   nowMs: number,
 ) {

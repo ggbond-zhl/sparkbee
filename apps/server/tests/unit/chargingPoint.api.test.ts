@@ -97,6 +97,12 @@ describe("chargingPoint management API", () => {
       "ChargingPointEvent",
     ]);
     expect(
+      document.paths["/api/charging-points/{id}/protocol-messages"].get.summary,
+    ).toBe("查询桩实例协议报文");
+    expect(
+      document.paths["/api/charging-points/{id}/protocol-events"].get.summary,
+    ).toBe("查询桩实例协议事件");
+    expect(
       document.paths["/api/charging-points/{id}/events"].get.responses["200"].content,
     ).toHaveProperty("text/event-stream");
     expect(document.paths["/api/charging-points/{id}/connectors"].get.summary).toBe(

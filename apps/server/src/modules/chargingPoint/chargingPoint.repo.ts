@@ -12,6 +12,10 @@ import {
   connectors,
 } from "../../db/schema";
 import { ActorLogRepository } from "../actorLog/actorLog.repo";
+import {
+  HistoricalObservationEventRepository,
+  ProtocolMessageRepository,
+} from "../protocolObservation/protocolObservation.repo";
 import { AppError } from "../../utils/errors";
 import { toConnectorType } from "../connector/connectorType";
 import { normalizeCentralSystemUrl } from "./centralSystemUrl";
@@ -141,6 +145,12 @@ export class ChargingPointRepository {
 
     await this.db.transaction(async (transaction) => {
       await new ActorLogRepository(transaction as ServerDatabase).deleteForChargingPoint(id);
+      await new ProtocolMessageRepository(
+        transaction as ServerDatabase,
+      ).deleteForChargingPoint(id);
+      await new HistoricalObservationEventRepository(
+        transaction as ServerDatabase,
+      ).deleteForChargingPoint(id);
       await transaction
         .delete(chargingTransactions)
         .where(eq(chargingTransactions.chargingPointId, id));

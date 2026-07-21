@@ -59,7 +59,10 @@ export const chargingPointEventErrorCauseSchema: z.ZodType<
     message: z.string().optional(),
     cause: chargingPointEventErrorCauseSchema.optional(),
   }),
-);
+).meta({
+  id: "ChargingPointEventErrorCause",
+  description: "协议事件错误原因，可递归包含底层原因。",
+});
 
 export const chargingPointEventErrorSchema = z.object({
   code: z.string(),
@@ -204,6 +207,34 @@ export const protocolMessageEventSchema = eventBaseSchema.extend({
   messageId: z.string().optional(),
   body: z.unknown().optional(),
 });
+
+export const protocolEventTypeSchema = z.enum([
+  "chargingPoint.lifecycle",
+  "chargingPoint.boot",
+  "session.status",
+  "chargingPoint.status",
+  "chargingPoint.availability",
+  "evse.status",
+  "connector.status",
+  "connector.availability",
+  "authorization.status",
+  "transaction.status",
+  "transaction.meterValue",
+]);
+
+export const protocolEventSchema = z.discriminatedUnion("type", [
+  chargingPointLifecycleEventSchema,
+  chargingPointBootEventSchema,
+  sessionStatusEventSchema,
+  chargingPointStatusEventSchema,
+  chargingPointAvailabilityEventSchema,
+  evseStatusEventSchema,
+  connectorStatusEventSchema,
+  connectorAvailabilityEventSchema,
+  authorizationStatusEventSchema,
+  transactionStatusEventSchema,
+  transactionMeterValueEventSchema,
+]);
 
 export const chargingPointActorEventSchema = z.discriminatedUnion("type", [
   chargingPointLifecycleEventSchema,

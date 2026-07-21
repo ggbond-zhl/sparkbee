@@ -96,7 +96,6 @@ import type {
   RuntimeEventLogEntry,
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
 import {
-  ALL_RUNTIME_LOG_TYPE_FILTER,
   OBSERVATION_TIME_FILTER_OPTIONS,
   buildObservationTypeFilterOptions,
   filterObservationEntries,
@@ -104,6 +103,7 @@ import {
   type ObservationTimeFilter,
   type ObservationTypeFilterOption,
 } from "@/features/charging-points/model/chargingPointObservationFilters";
+import type { ChargingPointObservationWorkbench } from "@/features/charging-points/model/chargingPointWorkbench";
 import { useChargingPointWorkbench } from "@/features/charging-points/model/useChargingPointWorkbench";
 import { ChargingPointConnectorEditDialog } from "@/features/charging-points/ui/ChargingPointConnectorEditDialog";
 import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingPointEditDialog";
@@ -205,8 +205,7 @@ export function ChargingPointDetailPage() {
         ))}
       </section>
       <RuntimeObservationTabs
-        events={observation.events}
-        protocolMessages={observation.protocolMessages}
+        observation={observation}
       />
       <ChargingPointEditDialog
         configurationLocked={configuration.locked}
@@ -626,67 +625,77 @@ function getEnergyChartDomain(samples: ChargingSamplePoint[]) {
 }
 
 function RuntimeObservationTabs({
-  events,
-  protocolMessages,
+  observation,
 }: {
-  events: RuntimeEventLogEntry[];
-  protocolMessages: ProtocolMessageLogEntry[];
+  observation: ChargingPointObservationWorkbench;
 }) {
   const [activeObservationTab, setActiveObservationTab] =
     useState<RuntimeObservationTab>("messages");
-  const [messageTimeFilter, setMessageTimeFilter] =
-    useState<ObservationTimeFilter>("all");
-  const [eventTimeFilter, setEventTimeFilter] =
-    useState<ObservationTimeFilter>("all");
-  const [messageTypeFilter, setMessageTypeFilter] = useState(
-    ALL_RUNTIME_LOG_TYPE_FILTER,
-  );
-  const [eventTypeFilter, setEventTypeFilter] = useState(
-    ALL_RUNTIME_LOG_TYPE_FILTER,
-  );
+  const {
+    events,
+    eventHistory,
+    eventTimeFilter,
+    eventTypeFilter,
+    messageDirectionFilter,
+    messageHistory,
+    messageTimeFilter,
+    messageTypeFilter,
+    protocolMessages,
+    setEventTimeFilter,
+    setEventTypeFilter,
+    setMessageDirectionFilter,
+    setMessageTimeFilter,
+    setMessageTypeFilter,
+  } = observation;
   const messagesListHandleRef = useRef<ObservationListHandle | null>(null);
   const eventsListHandleRef = useRef<ObservationListHandle | null>(null);
   const filterNowMs = Date.now();
   const messageTypeOptions = useMemo(
-    () =>
-      buildObservationTypeFilterOptions(
-        protocolMessages,
-        (message) => message.action,
-      ),
+    () => buildObservationTypeFilterOptions(
+      protocolMessages,
+      (message) => message.action,
+    ),
     [protocolMessages],
   );
   const eventTypeOptions = useMemo(
-    () =>
-      buildObservationTypeFilterOptions(
-        events,
-        (event) => event.eventType,
-      ),
+    () => buildObservationTypeFilterOptions(
+      events,
+      (event) => event.eventType,
+    ),
     [events],
   );
   const filteredProtocolMessages = useMemo(
-    () =>
-      filterObservationEntries(protocolMessages, {
-        getType: (message) => message.action,
-        nowMs: filterNowMs,
-        timeFilter: messageTimeFilter,
-        typeFilter: messageTypeFilter,
-      }),
-    [filterNowMs, messageTimeFilter, messageTypeFilter, protocolMessages],
+    () => filterObservationEntries(protocolMessages, {
+      getType: (message) => message.action,
+      nowMs: filterNowMs,
+      timeFilter: messageTimeFilter,
+      typeFilter: messageTypeFilter,
+    }).filter((message) =>
+      messageDirectionFilter === "all" ||
+      message.direction === messageDirectionFilter
+    ),
+    [
+      filterNowMs,
+      messageDirectionFilter,
+      messageTimeFilter,
+      messageTypeFilter,
+      protocolMessages,
+    ],
   );
   const filteredEvents = useMemo(
-    () =>
-      filterObservationEntries(events, {
-        getType: (event) => event.eventType,
-        nowMs: filterNowMs,
-        timeFilter: eventTimeFilter,
-        typeFilter: eventTypeFilter,
-      }),
+    () => filterObservationEntries(events, {
+      getType: (event) => event.eventType,
+      nowMs: filterNowMs,
+      timeFilter: eventTimeFilter,
+      typeFilter: eventTypeFilter,
+    }),
     [eventTimeFilter, eventTypeFilter, events, filterNowMs],
   );
   const activeListHandleRef =
     activeObservationTab === "messages" ? messagesListHandleRef : eventsListHandleRef;
-  const activeListLength =
-    activeObservationTab === "messages" ? protocolMessages.length : events.length;
+  const activeListLength = activeObservationTab === "messages"
+    ? protocolMessages.length
+    : events.length;
   const activeTimeFilter =
     activeObservationTab === "messages" ? messageTimeFilter : eventTimeFilter;
   const activeTypeFilter =
@@ -700,7 +709,6 @@ function RuntimeObservationTabs({
       setMessageTimeFilter(timeFilter);
       return;
     }
-
     setEventTimeFilter(timeFilter);
   }
 
@@ -710,7 +718,6 @@ function RuntimeObservationTabs({
       setMessageTypeFilter(typeFilter);
       return;
     }
-
     setEventTypeFilter(typeFilter);
   }
 
@@ -730,9 +737,15 @@ function RuntimeObservationTabs({
           </TabsList>
           <RuntimeObservationToolbar
             disabled={activeListLength === 0}
+            directionFilter={activeObservationTab === "messages"
+              ? messageDirectionFilter
+              : undefined}
             timeFilter={activeTimeFilter}
             typeFilter={activeTypeFilter}
             typeOptions={activeTypeOptions}
+            onDirectionFilterChange={activeObservationTab === "messages"
+              ? setMessageDirectionFilter
+              : undefined}
             onTimeFilterChange={handleActiveTimeFilterChange}
             onTypeFilterChange={handleActiveTypeFilterChange}
           />
@@ -741,14 +754,20 @@ function RuntimeObservationTabs({
           <ProtocolMessageList
             entries={filteredProtocolMessages}
             entriesCount={protocolMessages.length}
+            hasMore={messageHistory.hasMore}
+            loadingMore={messageHistory.loadingMore}
             listHandleRef={messagesListHandleRef}
+            onLoadMore={messageHistory.loadMore}
           />
         </TabsContent>
         <TabsContent className="mt-3" value="events">
           <ProtocolEventList
             entries={filteredEvents}
             entriesCount={events.length}
+            hasMore={eventHistory.hasMore}
+            loadingMore={eventHistory.loadingMore}
             listHandleRef={eventsListHandleRef}
+            onLoadMore={eventHistory.loadMore}
           />
         </TabsContent>
       </Tabs>
@@ -760,21 +779,44 @@ type RuntimeObservationTab = "messages" | "events";
 
 function RuntimeObservationToolbar({
   disabled,
+  directionFilter,
   timeFilter,
   typeFilter,
   typeOptions,
+  onDirectionFilterChange,
   onTimeFilterChange,
   onTypeFilterChange,
 }: {
   disabled: boolean;
+  directionFilter?: "all" | "sent" | "received";
   timeFilter: ObservationTimeFilter;
   typeFilter: string;
   typeOptions: ObservationTypeFilterOption[];
+  onDirectionFilterChange?(direction: "all" | "sent" | "received"): void;
   onTimeFilterChange(timeFilter: ObservationTimeFilter): void;
   onTypeFilterChange(typeFilter: string): void;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
+      {directionFilter !== undefined && (
+        <Select
+          disabled={disabled}
+          value={directionFilter}
+          onValueChange={(value) =>
+            onDirectionFilterChange?.(value as "all" | "sent" | "received")}
+        >
+          <SelectTrigger aria-label="方向筛选" size="sm">
+            <SelectValue placeholder="方向筛选" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部方向</SelectItem>
+              <SelectItem value="sent">发送</SelectItem>
+              <SelectItem value="received">接收</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      )}
       <Select
         disabled={disabled}
         value={timeFilter}
@@ -842,11 +884,17 @@ function ConnectorEditButton({
 function ProtocolEventList({
   entries,
   entriesCount,
+  hasMore,
+  loadingMore,
   listHandleRef,
+  onLoadMore,
 }: {
   entries: RuntimeEventLogEntry[];
   entriesCount: number;
+  hasMore: boolean;
+  loadingMore: boolean;
   listHandleRef: Ref<ObservationListHandle>;
+  onLoadMore(): void;
 }) {
   return (
     <VirtualObservationList
@@ -856,7 +904,10 @@ function ProtocolEventList({
         entriesCount,
         filteredEmptyText: "没有匹配筛选条件的事件",
       })}
+      hasMore={hasMore}
+      loadingMore={loadingMore}
       listHandleRef={listHandleRef}
+      onLoadMore={onLoadMore}
       renderRow={(entry) => <ProtocolEventRow entry={entry} />}
     />
   );
@@ -865,11 +916,17 @@ function ProtocolEventList({
 function ProtocolMessageList({
   entries,
   entriesCount,
+  hasMore,
+  loadingMore,
   listHandleRef,
+  onLoadMore,
 }: {
   entries: ProtocolMessageLogEntry[];
   entriesCount: number;
+  hasMore: boolean;
+  loadingMore: boolean;
   listHandleRef: Ref<ObservationListHandle>;
+  onLoadMore(): void;
 }) {
   return (
     <VirtualObservationList
@@ -879,7 +936,10 @@ function ProtocolMessageList({
         entriesCount,
         filteredEmptyText: "没有匹配筛选条件的报文",
       })}
+      hasMore={hasMore}
+      loadingMore={loadingMore}
       listHandleRef={listHandleRef}
+      onLoadMore={onLoadMore}
       renderRow={(entry) => <ProtocolMessageRow entry={entry} />}
     />
   );
@@ -904,12 +964,18 @@ const RUNTIME_LOG_TOP_THRESHOLD = 8;
 function VirtualObservationList<TEntry extends ObservationListEntry>({
   entries,
   emptyText,
+  hasMore,
+  loadingMore,
   listHandleRef,
+  onLoadMore,
   renderRow,
 }: {
   entries: TEntry[];
   emptyText: string;
+  hasMore: boolean;
+  loadingMore: boolean;
   listHandleRef: Ref<ObservationListHandle>;
+  onLoadMore(): void;
   renderRow(entry: TEntry): ReactNode;
 }) {
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
@@ -1025,6 +1091,18 @@ function VirtualObservationList<TEntry extends ObservationListEntry>({
           </div>
         )}
       </div>
+      {hasMore && (
+        <div className="mt-2 flex justify-center">
+          <Button
+            disabled={loadingMore}
+            type="button"
+            variant="outline"
+            onClick={onLoadMore}
+          >
+            {loadingMore ? "加载中" : "加载更早记录"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

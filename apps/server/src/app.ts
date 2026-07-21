@@ -14,6 +14,7 @@ import type { ServerDatabase } from "./db";
 import { verifyDatabaseConnection } from "./db/connection";
 import type { ChargingPointActorHost } from "./lib/chargingPointActorHost";
 import type { ActorLogSinkFactory } from "./lib/actorLogWriter";
+import type { ProtocolObservationSink } from "./modules/protocolObservation/protocolObservation.writer";
 import { createErrorMiddleware } from "./middlewares/error.middleware";
 import { requestLogMiddleware } from "./middlewares/requestLog.middleware";
 import type { ChargingPointActorFactory } from "./modules/runtimeOperation/runtimeOperation.service";
@@ -27,6 +28,7 @@ export interface AppDependencies {
   chargingPointActorHost?: ChargingPointActorHost;
   createChargingPointActor?: ChargingPointActorFactory;
   actorLogWriter?: ActorLogSinkFactory;
+  protocolObservationWriter?: ProtocolObservationSink;
   logger?: Logger;
   errorReporter?: ErrorReporter;
 }

@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   createChargingPointRuntimeEventFeedState,
   createChargingPointRuntimeEventState,
+  mergeChargingPointRuntimeEventFeedHistory,
   reduceChargingPointRuntimeEventFeedState,
   reduceChargingPointRuntimeEventState,
 } from "../../src/features/charging-points/model/chargingPointRuntimeEvents";
@@ -72,7 +73,7 @@ describe("charging point runtime events", () => {
     });
   });
 
-  test("keeps only the newest 500 protocol messages", () => {
+  test("keeps protocol messages beyond the old page-session capacity", () => {
     let feedState = createChargingPointRuntimeEventFeedState();
 
     for (let index = 0; index < 501; index += 1) {
@@ -90,12 +91,12 @@ describe("charging point runtime events", () => {
       });
     }
 
-    expect(feedState.protocolMessages).toHaveLength(500);
+    expect(feedState.protocolMessages).toHaveLength(501);
     expect(feedState.protocolMessages[0]?.messageId).toBe("msg-500");
-    expect(feedState.protocolMessages.at(-1)?.messageId).toBe("msg-1");
+    expect(feedState.protocolMessages.at(-1)?.messageId).toBe("msg-0");
   });
 
-  test("keeps only the newest 500 protocol events", () => {
+  test("keeps protocol events beyond the old page-session capacity", () => {
     let feedState = createChargingPointRuntimeEventFeedState();
 
     for (let index = 0; index < 501; index += 1) {
@@ -120,9 +121,9 @@ describe("charging point runtime events", () => {
       });
     }
 
-    expect(feedState.events).toHaveLength(500);
+    expect(feedState.events).toHaveLength(501);
     expect(feedState.events[0]?.summary).toBe("交易 tx-500: 500.123 Wh");
-    expect(feedState.events.at(-1)?.summary).toBe("交易 tx-1: 1.123 Wh");
+    expect(feedState.events.at(-1)?.summary).toBe("交易 tx-0: 0.123 Wh");
   });
 
   test("keeps protocol message and event capacities independent", () => {
@@ -154,10 +155,79 @@ describe("charging point runtime events", () => {
       });
     }
 
-    expect(feedState.protocolMessages).toHaveLength(500);
-    expect(feedState.events).toHaveLength(500);
+    expect(feedState.protocolMessages).toHaveLength(501);
+    expect(feedState.events).toHaveLength(501);
     expect(feedState.protocolMessages[0]?.messageId).toBe("msg-500");
     expect(feedState.events[0]?.resource).toBe("枪口 501");
+  });
+
+  test("merges persisted history with SSE by persistent record id", () => {
+    let feedState = createChargingPointRuntimeEventFeedState();
+    const chargingPointId = "00000000-0000-4000-8000-000000000001";
+    const liveMessage = {
+      id: "message-live",
+      sequence: 2,
+      type: "protocol.message" as const,
+      chargingPointId,
+      protocol: "OCPP16J" as const,
+      occurredAt: "2026-07-20T00:00:02.000Z",
+      resource: { scope: "protocol" as const },
+      direction: "received" as const,
+      action: "Heartbeat",
+      messageId: "ocpp-live",
+    };
+    const liveEvent = {
+      id: "event-live",
+      sequence: 3,
+      type: "chargingPoint.lifecycle" as const,
+      chargingPointId,
+      protocol: "OCPP16J" as const,
+      occurredAt: "2026-07-20T00:00:03.000Z",
+      resource: { scope: "chargingPoint" as const },
+      previousStatus: "starting" as const,
+      currentStatus: "running" as const,
+    };
+    feedState = reduceChargingPointRuntimeEventFeedState(feedState, {
+      event: liveMessage.type,
+      data: liveMessage,
+    });
+    feedState = reduceChargingPointRuntimeEventFeedState(feedState, {
+      event: liveEvent.type,
+      data: liveEvent,
+    });
+
+    feedState = mergeChargingPointRuntimeEventFeedHistory(feedState, {
+      protocolMessages: [
+        liveMessage,
+        {
+          ...liveMessage,
+          id: "message-older",
+          sequence: 1,
+          occurredAt: "2026-07-20T00:00:01.000Z",
+          messageId: "ocpp-older",
+        },
+      ],
+      events: [
+        liveEvent,
+        {
+          ...liveEvent,
+          id: "event-older",
+          sequence: 1,
+          occurredAt: "2026-07-20T00:00:00.000Z",
+          previousStatus: null,
+          currentStatus: "starting",
+        },
+      ],
+    });
+
+    expect(feedState.protocolMessages.map((item) => item.id)).toEqual([
+      "message-live",
+      "message-older",
+    ]);
+    expect(feedState.events.map((item) => item.id)).toEqual([
+      "event-live",
+      "event-older",
+    ]);
   });
 
   test("initializes state from a runtime snapshot", () => {

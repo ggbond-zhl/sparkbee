@@ -77,6 +77,49 @@ export async function migrateDatabase(client: Pick<PGlite, "exec">): Promise<voi
       on actor_logs (charging_point_id, ((context ->> 'operationId')));
     alter table actor_logs enable row level security;
 
+    create table protocol_messages (
+      id text primary key,
+      sequence integer not null,
+      charging_point_id uuid not null references charging_points(id) on delete cascade,
+      protocol charging_point_protocol not null,
+      occurred_at timestamptz not null,
+      direction text not null,
+      action text,
+      message_id text,
+      body jsonb,
+      created_at timestamptz not null default now()
+    );
+
+    create index protocol_messages_point_occurred_at_idx
+      on protocol_messages (charging_point_id, occurred_at, id);
+    create index protocol_messages_point_direction_occurred_at_idx
+      on protocol_messages (charging_point_id, direction, occurred_at, id);
+    create index protocol_messages_point_action_occurred_at_idx
+      on protocol_messages (charging_point_id, action, occurred_at, id);
+    create index protocol_messages_occurred_at_idx
+      on protocol_messages (occurred_at);
+    alter table protocol_messages enable row level security;
+
+    create table protocol_events (
+      id text primary key,
+      sequence integer not null,
+      charging_point_id uuid not null references charging_points(id) on delete cascade,
+      protocol charging_point_protocol not null,
+      occurred_at timestamptz not null,
+      event_type text not null,
+      resource jsonb not null,
+      data jsonb not null,
+      created_at timestamptz not null default now()
+    );
+
+    create index protocol_events_point_occurred_at_idx
+      on protocol_events (charging_point_id, occurred_at, id);
+    create index protocol_events_point_type_occurred_at_idx
+      on protocol_events (charging_point_id, event_type, occurred_at, id);
+    create index protocol_events_occurred_at_idx
+      on protocol_events (occurred_at);
+    alter table protocol_events enable row level security;
+
     create table charging_transactions (
       id uuid primary key default gen_random_uuid(),
       charging_point_id uuid not null references charging_points(id) on delete cascade,

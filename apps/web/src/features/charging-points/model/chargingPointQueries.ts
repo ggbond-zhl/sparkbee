@@ -3,6 +3,10 @@ import {
   keepPreviousData,
   queryOptions,
 } from "@tanstack/react-query";
+import type {
+  ListProtocolEventsQuery,
+  ListProtocolMessagesQuery,
+} from "@spark-bee/contracts";
 
 import {
   getChargingPoint,
@@ -10,6 +14,8 @@ import {
   getChargingPointRuntimeSnapshot,
   getChargingPointRuntimeStatus,
   listChargingPoints,
+  listProtocolEvents,
+  listProtocolMessages,
   type ListChargingPointsInput,
 } from "@/features/charging-points/api/chargingPoints";
 
@@ -95,5 +101,46 @@ export function activeTransactionSamplesQueryOptions(id: string) {
   return queryOptions({
     queryKey: activeTransactionSamplesQueryKey(id),
     queryFn: () => getActiveTransactionSamples(id),
+  });
+}
+
+type ProtocolMessageHistoryFilters = Omit<
+  ListProtocolMessagesQuery,
+  "before" | "limit"
+>;
+type ProtocolEventHistoryFilters = Omit<
+  ListProtocolEventsQuery,
+  "before" | "limit"
+>;
+
+export function protocolMessagesInfiniteQueryOptions(
+  id: string,
+  filters: ProtocolMessageHistoryFilters = {},
+) {
+  return infiniteQueryOptions({
+    queryKey: ["charging-points", id, "protocol-messages", filters] as const,
+    queryFn: ({ pageParam }) => listProtocolMessages(id, {
+      ...filters,
+      limit: 200,
+      ...(pageParam === null ? {} : { before: pageParam }),
+    }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.previousCursor ?? undefined,
+  });
+}
+
+export function protocolEventsInfiniteQueryOptions(
+  id: string,
+  filters: ProtocolEventHistoryFilters = {},
+) {
+  return infiniteQueryOptions({
+    queryKey: ["charging-points", id, "protocol-events", filters] as const,
+    queryFn: ({ pageParam }) => listProtocolEvents(id, {
+      ...filters,
+      limit: 200,
+      ...(pageParam === null ? {} : { before: pageParam }),
+    }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.previousCursor ?? undefined,
   });
 }
