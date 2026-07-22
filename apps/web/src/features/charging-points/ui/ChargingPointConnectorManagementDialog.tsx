@@ -56,7 +56,6 @@ export function connectorToFormValues(
   return {
     connectorId: String(connector.connectorId),
     type: connector.type,
-    format: connector.format,
     powerType: connector.powerType,
     maxVoltage:
       connector.maxVoltage === null ? "" : String(connector.maxVoltage),
@@ -347,7 +346,6 @@ function ConnectorTabForm({
       <Card>
         <CardContent>
           <ChargingPointConnectorFormFields
-            connectorIdReadOnly={connector !== null}
             form={form}
             idPrefix={idPrefix}
           />

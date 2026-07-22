@@ -66,9 +66,9 @@ export function ChargingPointCreateDialog() {
           新增
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col overflow-hidden sm:max-w-xl">
         <form
-          className="flex flex-col gap-4"
+          className="flex min-h-0 flex-1 flex-col gap-4"
           onSubmit={form.handleSubmit((values) =>
             createMutation.mutate(values),
           )}
@@ -76,16 +76,18 @@ export function ChargingPointCreateDialog() {
           <DialogHeader>
             <DialogTitle>新增充电桩</DialogTitle>
           </DialogHeader>
-          <ChargingPointFormFields
-            form={form}
-            idPrefix="charging-point-create"
-          />
-          {createError && (
-            <div role="alert" className="text-sm text-destructive">
-              {createError}
-            </div>
-          )}
-          <DialogFooter>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <ChargingPointFormFields
+              form={form}
+              idPrefix="charging-point-create"
+            />
+            {createError && (
+              <div role="alert" className="mt-4 text-sm text-destructive">
+                {createError}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="shrink-0">
             <DialogClose asChild>
               <Button
                 disabled={createMutation.isPending}

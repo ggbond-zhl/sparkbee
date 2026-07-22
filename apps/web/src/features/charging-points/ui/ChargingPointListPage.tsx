@@ -234,7 +234,7 @@ function ChargingPointCardList({
               <CardContent>
                 <dl className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
                   <dt className="text-muted-foreground">桩身份</dt>
-                  <dd className="truncate font-mono text-xs">
+                  <dd className="truncate">
                     <span className="block truncate">{item.identity}</span>
                   </dd>
                   <dt className="text-muted-foreground">CSMS</dt>

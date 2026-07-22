@@ -17,9 +17,9 @@ describe("app navigation", () => {
   });
 
   test("uses page titles as document titles for non-menu pages", () => {
-    expect(getPageTitleForPath("/charging-points/cp-1")).toBe("充电桩详情");
+    expect(getPageTitleForPath("/charging-points/cp-1")).toBe("运行调试台");
     expect(getDocumentTitleForPath("/charging-points/cp-1")).toBe(
-      "充电桩详情 - SparkBee",
+      "运行调试台 - SparkBee",
     );
   });
 

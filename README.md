@@ -129,3 +129,6 @@ type: 中文简短说明
 ```
 
 `type` 可选：`feat`、`fix`、`refactor`、`perf`、`style`、`docs`、`test`、`chore`。
+
+## 自动索引
+提交或合并较大变更后，执行一次 index_repository

@@ -37,6 +37,13 @@ describe("web architecture", () => {
       "model",
       "useChargingPointWorkbench.ts",
     );
+    const observationPath = join(
+      srcRoot,
+      "features",
+      "charging-points",
+      "model",
+      "useChargingPointObservation.ts",
+    );
     const detailPageSource = readSource(
       "features",
       "charging-points",
@@ -45,6 +52,9 @@ describe("web architecture", () => {
     );
     const workbenchSource = existsSync(workbenchPath)
       ? readFileSync(workbenchPath, "utf8")
+      : "";
+    const observationSource = existsSync(observationPath)
+      ? readFileSync(observationPath, "utf8")
       : "";
 
     expect(existsSync(legacyWorkbenchPath)).toBe(false);
@@ -59,7 +69,9 @@ describe("web architecture", () => {
     expect(detailPageSource).not.toContain("usePersistedActorLogs");
     expect(workbenchSource).toContain("useQuery");
     expect(workbenchSource).toContain("useMutation");
-    expect(workbenchSource).toContain("useChargingPointRuntimeEvents");
+    expect(workbenchSource).toContain("useChargingPointObservation");
+    expect(observationSource).toContain("useChargingPointRuntimeEvents");
+    expect(observationSource).toContain("useInfiniteQuery");
   });
 
   test("app shell only wires providers and router", () => {
@@ -82,7 +94,14 @@ describe("web architecture", () => {
   test("root route delegates navigation chrome to the app shell", () => {
     const rootRouteSource = readSource("app", "routes", "RootRoute.tsx");
     const appShellSource = readSource("app", "ui", "AppShell.tsx");
+    expect(appShellSource).toContain("ArrowLeftIcon");
+    expect(appShellSource).toContain('to="/charging-points"');
+    expect(appShellSource).toContain("ml-auto");
+    expect(appShellSource).toContain("currentPageTitle ?? \"SparkBee\"");
+    expect(appShellSource).not.toContain("<span>返回</span>");
     const appSidebarSource = readSource("app", "ui", "AppSidebar.tsx");
+    expect(appSidebarSource).toContain('side={isMobile ? "right" : "left"}');
+    expect(appSidebarSource).toContain("useSidebar");
     const navigationSource = readSource("app", "navigation.ts");
 
     expect(rootRouteSource).toContain("AppShell");
@@ -93,11 +112,13 @@ describe("web architecture", () => {
     expect(rootRouteSource).not.toContain("<nav");
 
     expect(appShellSource).toContain("SidebarProvider");
+    expect(appShellSource).toContain("defaultOpen");
+    expect(appShellSource).not.toContain("<SidebarProvider open");
     expect(appShellSource).toContain("SidebarInset");
     expect(appShellSource).toContain("SidebarTrigger");
     expect(appShellSource).toContain("AppSidebar");
     expect(appShellSource).toContain("getPageTitleForPath");
-    expect(appShellSource).toContain("md:flex");
+    expect(appShellSource).toContain("sticky top-0");
 
     expect(navigationSource).toContain("appMenuItems");
     expect(navigationSource).toContain("充电桩列表");
@@ -156,6 +177,11 @@ describe("web architecture", () => {
       featureRoot,
       "model",
       "useChargingPointWorkbench.ts",
+    );
+    const observationPath = join(
+      featureRoot,
+      "model",
+      "useChargingPointObservation.ts",
     );
     const workbenchModelPath = join(
       featureRoot,
@@ -220,6 +246,9 @@ describe("web architecture", () => {
     const querySource = readFileSync(queryPath, "utf8");
     const workbenchSource = existsSync(workbenchPath)
       ? readFileSync(workbenchPath, "utf8")
+      : "";
+    const observationSource = existsSync(observationPath)
+      ? readFileSync(observationPath, "utf8")
       : "";
     const workbenchModelSource = existsSync(workbenchModelPath)
       ? readFileSync(workbenchModelPath, "utf8")
@@ -303,6 +332,7 @@ describe("web architecture", () => {
     expect(pageSource).toContain("AlertDialogContent");
     expect(pageSource).toContain("编辑");
     expect(pageSource).toContain("枪口管理");
+    expect(pageSource).not.toContain("truncate font-mono text-xs");
     expect(pageSource).toContain("删除");
     expect(pageSource).toContain("确认删除");
     expect(pageSource).toContain("useMutation");
@@ -317,16 +347,23 @@ describe("web architecture", () => {
     expect(createDialogSource).toContain("新增");
     expect(createDialogSource).toContain("ChargingPointFormFields");
     expect(createDialogSource).toContain("chargingPointCreateFormSchema");
+    expect(createDialogSource).toContain("max-h-[calc(100svh-2rem)]");
+    expect(createDialogSource).toContain("min-h-0 flex-1 overflow-y-auto");
     expect(createDialogSource).toContain("useMutation");
     expect(createDialogSource).toContain("invalidateQueries");
     expect(createDialogSource).toContain("toast");
     expect(editDialogSource).toContain("编辑充电桩");
     expect(editDialogSource).toContain("ChargingPointFormFields");
     expect(editDialogSource).toContain("chargingPointCreateFormSchema");
+    expect(editDialogSource).toContain("max-h-[calc(100svh-2rem)]");
+    expect(editDialogSource).toContain("min-h-0 flex-1 overflow-y-auto");
     expect(editDialogSource).toContain("updateChargingPoint");
     expect(editDialogSource).toContain("invalidateQueries");
     expect(editDialogSource).toContain("toast");
     expect(editDialogSource).toContain("保存");
+    expect(editDialogSource).toContain(
+      "configurationLocked || updateMutation.isPending",
+    );
     expect(connectorDialogSource).toContain("枪口管理");
     expect(connectorDialogSource).toContain("Tabs");
     expect(connectorDialogSource).toContain("TabsList");
@@ -358,7 +395,10 @@ describe("web architecture", () => {
     expect(connectorFormFieldsSource).toContain("FieldGroup");
     expect(connectorFormFieldsSource).toContain("data-dialog-select-content");
     expect(connectorFormFieldsSource).toContain("CONNECTOR_TYPE_OPTIONS");
-    expect(connectorFormFieldsSource).toContain("CONNECTOR_FORMAT_OPTIONS");
+    expect(connectorFormFieldsSource).not.toContain("CONNECTOR_FORMAT_OPTIONS");
+    expect(connectorFormFieldsSource).not.toContain(">形态</FieldLabel>");
+    expect(connectorFormFieldsSource).not.toContain("readOnly=");
+    expect(connectorFormFieldsSource).toContain("min={1}");
     expect(connectorFormFieldsSource).toContain("CONNECTOR_POWER_TYPE_OPTIONS");
     expect(connectorFormFieldsSource).not.toContain(
       'placeholder="Type2 / CCS2"',
@@ -394,6 +434,7 @@ describe("web architecture", () => {
     expect(workbenchSource).toContain("chargingPointDetailQueryOptions");
     expect(workbenchSource).toContain("chargingPointRuntimeStatusQueryOptions");
     expect(detailPageSource).toContain("ChargingPointEditDialog");
+    expect(detailPageSource).toContain("disabled={configuration.locked}");
     expect(detailPageSource).toContain("ChargingPointConnectorEditDialog");
     expect(detailPageSource).toContain("UnplugConnectorButton");
     expect(detailPageSource).toContain(
@@ -421,10 +462,10 @@ describe("web architecture", () => {
     expect(detailPageSource).not.toContain("filteredProtocolMessages.length}");
     expect(detailPageSource).not.toContain("filteredEvents.length}");
     expect(workbenchModelSource).toContain("capacity: number");
-    expect(workbenchSource).toContain(
+    expect(observationSource).toContain(
       "200 * (messageHistoryQuery.data?.pages.length ?? 1)",
     );
-    expect(workbenchSource).toContain(
+    expect(observationSource).toContain(
       "200 * (eventHistoryQuery.data?.pages.length ?? 1)",
     );
     expect(detailPageSource).toContain("limit: messageHistory.capacity");
@@ -579,7 +620,7 @@ describe("web architecture", () => {
       'type="hidden" {...form.register("protocol")}',
     );
     expect(formFieldsSource).toContain("configurationLocked");
-    expect(formFieldsSource).toContain("Textarea");
+    expect(formFieldsSource).not.toContain("Textarea");
     expect(formFieldsSource).toContain("CSMS 地址");
     expect(storeSource).not.toContain("selectedIds");
     expect(storeSource).not.toContain("setSelectedIds");
@@ -665,6 +706,8 @@ describe("web architecture", () => {
     expect(dialogSource).toContain("[data-dialog-select-content]");
 
     expect(formFieldsSource).toContain("data-dialog-select-content");
+    expect(formFieldsSource).not.toContain("说明");
+    expect(formFieldsSource).not.toContain("Textarea");
     expect(formFieldsSource).toContain('position="popper"');
     expect(formFieldsSource).toContain('className="z-[100]"');
     expect(connectorFormFieldsSource).toContain("data-dialog-select-content");

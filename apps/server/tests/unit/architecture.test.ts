@@ -79,6 +79,7 @@ describe("server architecture", () => {
 
     expect(libFiles).toEqual([
       "actorLogWriter.ts",
+      "bestEffortBatchWriter.ts",
       "chargingPointActor.ts",
       "chargingPointActorHost.ts",
       "chargingPointEventStreamHub.ts",
@@ -236,6 +237,7 @@ describe("server architecture", () => {
 
     expect(operationFiles).toEqual([
       "chargingPointActorOptions.ts",
+      "runtimeOperation.lifecycle.ts",
       "runtimeOperation.repo.ts",
       "runtimeOperation.route.ts",
       "runtimeOperation.service.ts",
@@ -251,11 +253,20 @@ describe("server architecture", () => {
       join(operationModule, "runtimeOperation.service.ts"),
       "utf8",
     );
+    const lifecycleSource = readFileSync(
+      join(operationModule, "runtimeOperation.lifecycle.ts"),
+      "utf8",
+    );
     expect(existsSync(join(operationModule, "runtimeOperation.command.ts"))).toBe(
       false,
     );
     expect(serviceSource).not.toContain("RuntimeOperationCommandExecutor");
     expect(serviceSource).toContain("ChargingPointActorHost");
+    expect(serviceSource).toContain("RuntimeOperationLifecycle");
+    expect(serviceSource).not.toContain("toActorOptions");
+    expect(lifecycleSource).toContain("async start(");
+    expect(lifecycleSource).toContain("async stop(");
+    expect(lifecycleSource).toContain("recoverActiveTransactions");
     expect(serviceSource).not.toContain("ChargingPointActorRegistry");
     expect(serviceSource).not.toContain("ChargingPointEventStreamHub");
     expect(serviceSource).not.toContain("ChargingPointRuntimeProjection");

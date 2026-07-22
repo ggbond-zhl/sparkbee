@@ -29,6 +29,7 @@ import type {
   ChargingPointActorStopResult,
   ChargingPointActorStopTransactionInput,
   ChargingPointActorStopTransactionResult,
+  ChargingPointActorTransactionStore,
   ChargingPointActorTransactionStartResult,
 } from "@spark-bee/charging-point-actor";
 
@@ -861,14 +862,34 @@ describe("chargingPoint management API", () => {
 
   test("restores persisted active transaction samples after app recreation", async () => {
     const database = await createTestDatabase();
+    let transactionStore: ChargingPointActorTransactionStore | undefined;
     const actor = createActorDouble({
       startTransactionResults: [
         { status: "accepted", transactionId: "tx-1" },
       ],
     });
+    const actorStartTransaction = actor.startTransaction.bind(actor);
+    actor.startTransaction = async (input) => {
+      const result = await actorStartTransaction(input);
+      if (result.status === "accepted") {
+        await transactionStore?.saveStarted({
+          transactionId: result.transactionId,
+          evseId: input.evseId,
+          connectorId: input.connectorId,
+          idTag: input.idTag,
+          state: "active",
+          chargingState: "charging",
+          meterStartWh: input.meterStartWh ?? 0,
+          latestMeterWh: input.meterStartWh ?? 0,
+          startedAt: new Date("2026-07-04T09:00:00.000Z"),
+        });
+      }
+      return result;
+    };
     const firstApp = createApp({
       database,
       createChargingPointActor: (options) => {
+        transactionStore = options.transactionStore;
         actor.id = options.id;
         actor.startResult = {
           chargingPointId: options.id,

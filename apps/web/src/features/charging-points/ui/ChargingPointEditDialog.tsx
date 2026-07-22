@@ -30,7 +30,6 @@ type EditableChargingPoint = Pick<
   ChargingPointSummaryResponse,
   | "id"
   | "name"
-  | "description"
   | "identity"
   | "protocol"
   | "centralSystemUrl"
@@ -54,7 +53,6 @@ function createEditFormValues(
 ): ChargingPointCreateFormInput {
   return {
     name: item.name,
-    description: item.description ?? "",
     identity: item.identity,
     protocol: item.protocol,
     centralSystemUrl: item.centralSystemUrl,
@@ -109,9 +107,9 @@ export function ChargingPointEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="flex max-h-[calc(100svh-2rem)] flex-col overflow-hidden sm:max-w-xl">
         <form
-          className="flex flex-col gap-4"
+          className="flex min-h-0 flex-1 flex-col gap-4"
           onSubmit={form.handleSubmit((values) =>
             updateMutation.mutate(values),
           )}
@@ -124,17 +122,19 @@ export function ChargingPointEditDialog({
               </DialogDescription>
             )}
           </DialogHeader>
-          <ChargingPointFormFields
-            configurationLocked={configurationLocked}
-            form={form}
-            idPrefix="charging-point-edit"
-          />
-          {updateError && (
-            <div role="alert" className="text-sm text-destructive">
-              {updateError}
-            </div>
-          )}
-          <DialogFooter>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <ChargingPointFormFields
+              configurationLocked={configurationLocked}
+              form={form}
+              idPrefix="charging-point-edit"
+            />
+            {updateError && (
+              <div role="alert" className="mt-4 text-sm text-destructive">
+                {updateError}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="shrink-0">
             <DialogClose asChild>
               <Button
                 disabled={updateMutation.isPending}
@@ -144,7 +144,10 @@ export function ChargingPointEditDialog({
                 取消
               </Button>
             </DialogClose>
-            <Button disabled={updateMutation.isPending} type="submit">
+            <Button
+              disabled={configurationLocked || updateMutation.isPending}
+              type="submit"
+            >
               {updateMutation.isPending ? "保存中" : "保存"}
             </Button>
           </DialogFooter>

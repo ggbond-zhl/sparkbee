@@ -125,7 +125,7 @@ describe("charging point workbench", () => {
 
     expect(workbench.configuration).toMatchObject({
       locked: true,
-      lockedReason: "桩实例未停止时仅可修改名称和说明；连接配置需停止后修改。",
+      lockedReason: "请先停止桩实例再编辑桩实例配置。",
       connectorEditLockedReason: "请先停止桩实例再编辑枪口配置。",
     });
     expect(workbench.runtime.pending).toBe(true);

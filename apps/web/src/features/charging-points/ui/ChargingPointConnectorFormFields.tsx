@@ -21,13 +21,11 @@ import type {
   ConnectorManagementFormValues,
 } from "@/features/charging-points/model/connectorManagementForm";
 import {
-  CONNECTOR_FORMAT_OPTIONS,
   CONNECTOR_POWER_TYPE_OPTIONS,
   CONNECTOR_TYPE_OPTIONS,
 } from "@/features/charging-points/model/connectorDisplay";
 
 interface ChargingPointConnectorFormFieldsProps {
-  connectorIdReadOnly: boolean;
   form: UseFormReturn<
     ConnectorManagementFormInput,
     undefined,
@@ -37,12 +35,10 @@ interface ChargingPointConnectorFormFieldsProps {
 }
 
 export function ChargingPointConnectorFormFields({
-  connectorIdReadOnly,
   form,
   idPrefix,
 }: ChargingPointConnectorFormFieldsProps) {
   const [typeSelectOpen, setTypeSelectOpen] = useState(false);
-  const [formatSelectOpen, setFormatSelectOpen] = useState(false);
   const [powerTypeSelectOpen, setPowerTypeSelectOpen] = useState(false);
   const formErrors = form.formState.errors;
 
@@ -53,9 +49,8 @@ export function ChargingPointConnectorFormFields({
         <Input
           id={`${idPrefix}-id`}
           aria-invalid={Boolean(formErrors.connectorId)}
-          aria-readonly={connectorIdReadOnly}
           inputMode="numeric"
-          readOnly={connectorIdReadOnly}
+          min={1}
           type="number"
           {...form.register("connectorId")}
         />
@@ -99,45 +94,6 @@ export function ChargingPointConnectorFormFields({
           )}
         />
         <FieldError errors={[formErrors.type]} />
-      </Field>
-      <Field data-invalid={Boolean(formErrors.format)}>
-        <FieldLabel htmlFor={`${idPrefix}-format`}>形态</FieldLabel>
-        <Controller
-          control={form.control}
-          name="format"
-          render={({ field }) => (
-            <Select
-              open={formatSelectOpen}
-              value={field.value}
-              onOpenChange={setFormatSelectOpen}
-              onValueChange={field.onChange}
-            >
-              <SelectTrigger
-                id={`${idPrefix}-format`}
-                ref={field.ref}
-                aria-invalid={Boolean(formErrors.format)}
-                className="w-full"
-                onBlur={field.onBlur}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent
-                data-dialog-select-content
-                position="popper"
-                className="z-[100]"
-              >
-                <SelectGroup>
-                  {CONNECTOR_FORMAT_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          )}
-        />
-        <FieldError errors={[formErrors.format]} />
       </Field>
       <Field data-invalid={Boolean(formErrors.powerType)}>
         <FieldLabel htmlFor={`${idPrefix}-power-type`}>供电</FieldLabel>

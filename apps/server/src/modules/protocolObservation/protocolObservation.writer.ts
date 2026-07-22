@@ -9,6 +9,7 @@ import { noopErrorReporter } from "../../config/errorReporter";
 import type { ErrorReporter } from "../../config/errorReporter";
 import type { ServerDatabase } from "../../db";
 import type { ChargingPointActorEvent } from "../../lib/chargingPointActor";
+import { BestEffortBatchWriter } from "../../lib/bestEffortBatchWriter";
 import {
   HistoricalObservationEventRepository,
   ProtocolMessageRepository,
@@ -22,10 +23,8 @@ export interface ProtocolObservationSink {
 export class ProtocolObservationWriter implements ProtocolObservationSink {
   private readonly messageRepository: ProtocolMessageRepository;
   private readonly eventRepository: HistoricalObservationEventRepository;
-  private readonly pending: ChargingPointActorEvent[] = [];
+  private readonly batchWriter: BestEffortBatchWriter<ChargingPointActorEvent>;
   private readonly deletedChargingPointIds = new Set<string>();
-  private timer?: NodeJS.Timeout;
-  private flushing?: Promise<void>;
   private readonly logger: Logger;
   private readonly errorReporter: ErrorReporter;
 
@@ -42,67 +41,44 @@ export class ProtocolObservationWriter implements ProtocolObservationSink {
     this.eventRepository = new HistoricalObservationEventRepository(database);
     this.logger = options.logger ?? pino({ level: "silent" });
     this.errorReporter = options.errorReporter ?? noopErrorReporter;
+    this.batchWriter = new BestEffortBatchWriter({
+      batchSize: options.batchSize,
+      flushIntervalMs: options.flushIntervalMs,
+      persistBatch: (batch) => this.persistBatch(batch),
+      onFailed: (error, batch) => this.reportFailure(error, batch.length),
+    });
   }
 
   write(event: ChargingPointActorEvent): void {
     if (this.deletedChargingPointIds.has(event.chargingPointId)) return;
-    this.pending.push(event);
-    if (this.pending.length >= (this.options.batchSize ?? 100)) {
-      void this.flush();
-      return;
-    }
-    if (this.timer === undefined) {
-      this.timer = setTimeout(
-        () => void this.flush(),
-        this.options.flushIntervalMs ?? 1_000,
-      );
-      this.timer.unref();
-    }
+    this.batchWriter.enqueue(event);
   }
 
   async delete(chargingPointId: string): Promise<void> {
     this.deletedChargingPointIds.add(chargingPointId);
-    removePendingForChargingPoint(this.pending, chargingPointId);
-    if (this.flushing !== undefined) await this.flushing;
-    removePendingForChargingPoint(this.pending, chargingPointId);
+    await this.batchWriter.flush();
   }
 
   async flush(): Promise<void> {
-    if (this.timer !== undefined) clearTimeout(this.timer);
-    this.timer = undefined;
-    if (this.flushing !== undefined) await this.flushing;
-    const batch = this.pending.splice(0, this.pending.length);
-    if (batch.length === 0) return;
-    this.flushing = this.persist(batch).finally(() => {
-      this.flushing = undefined;
-    });
-    await this.flushing;
+    await this.batchWriter.flush();
   }
 
-  private async persist(batch: ChargingPointActorEvent[]): Promise<void> {
-    try {
-      await this.persistBatch(batch);
-    } catch {
-      try {
-        await this.persistBatch(batch);
-      } catch (error) {
-        const context = {
-          module: "protocolObservationWriter",
-          batchSize: batch.length,
-        };
-        this.logger.error({
-          event: "protocol-observation.persist.failed",
-          batchSize: batch.length,
-          error,
-        }, "Failed to persist protocol observations");
-        this.errorReporter.captureException(error, context);
-      }
-    }
+  private reportFailure(error: unknown, batchSize: number): void {
+    const context = { module: "protocolObservationWriter", batchSize };
+    this.logger.error({
+      event: "protocol-observation.persist.failed",
+      batchSize,
+      error,
+    }, "Failed to persist protocol observations");
+    this.errorReporter.captureException(error, context);
   }
 
   private async persistBatch(batch: ChargingPointActorEvent[]): Promise<void> {
-    const messages = batch.filter(isProtocolMessage);
-    const events = batch.filter(isHistoricalObservationEvent);
+    const activeBatch = batch.filter(
+      (event) => !this.deletedChargingPointIds.has(event.chargingPointId),
+    );
+    const messages = activeBatch.filter(isProtocolMessage);
+    const events = activeBatch.filter(isHistoricalObservationEvent);
     await this.messageRepository.insertMany(messages);
     await this.eventRepository.insertMany(events);
   }
@@ -118,15 +94,4 @@ function isHistoricalObservationEvent(
   event: ChargingPointActorEvent,
 ): event is HistoricalObservationEvent {
   return event.type !== "protocol.message";
-}
-
-function removePendingForChargingPoint(
-  pending: ChargingPointActorEvent[],
-  chargingPointId: string,
-): void {
-  for (let index = pending.length - 1; index >= 0; index -= 1) {
-    if (pending[index]?.chargingPointId === chargingPointId) {
-      pending.splice(index, 1);
-    }
-  }
 }
