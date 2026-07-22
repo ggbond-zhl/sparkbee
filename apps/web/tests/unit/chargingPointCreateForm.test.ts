@@ -6,7 +6,6 @@ describe("charging point create form", () => {
   test("trims required fields and converts empty optional fields to null", () => {
     const values = chargingPointCreateFormSchema.parse({
       name: "  测试桩  ",
-      description: " ",
       identity: " CP_001 ",
       protocol: "OCPP16J",
       centralSystemUrl: " ws://localhost:9000/ocpp ",
@@ -18,7 +17,6 @@ describe("charging point create form", () => {
 
     expect(values).toEqual({
       name: "测试桩",
-      description: null,
       identity: "CP_001",
       protocol: "OCPP16J",
       centralSystemUrl: "ws://localhost:9000/ocpp",

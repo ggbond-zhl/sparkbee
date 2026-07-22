@@ -17,7 +17,7 @@ export function getPageTitleForPath(pathname: string) {
   }
 
   if (chargingPointDetailPathPattern.test(pathname)) {
-    return "充电桩详情";
+    return "运行调试台";
   }
 
   return null;

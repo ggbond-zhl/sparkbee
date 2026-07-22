@@ -158,8 +158,8 @@ export function createReadyChargingPointWorkbench(
     input.runtimeStatus?.status !== "stopped";
   const lockedReason = configurationLocked
     ? input.runtimeStatusQueryState === "success"
-      ? "桩实例未停止时仅可修改名称和说明；连接配置需停止后修改。"
-      : "运行状态未确认，仅可修改名称和说明；连接配置需停止后修改。"
+      ? "请先停止桩实例再编辑桩实例配置。"
+      : "运行状态未确认，暂不可编辑桩实例配置。"
     : undefined;
   const connectorEditLockedReason = configurationLocked
     ? input.runtimeStatusQueryState === "success"

@@ -4,7 +4,8 @@ import {
 } from "@spark-bee/contracts";
 import type { z } from "zod";
 
-export const chargingPointCreateFormSchema = createChargingPointRequestSchema;
+export const chargingPointCreateFormSchema =
+  createChargingPointRequestSchema.omit({ description: true });
 
 export type ChargingPointCreateFormInput = z.input<
   typeof chargingPointCreateFormSchema
@@ -13,7 +14,6 @@ export type ChargingPointCreateFormValues = CreateChargingPointRequest;
 
 export const chargingPointCreateFormDefaultValues = {
   name: "",
-  description: "",
   identity: "",
   protocol: "OCPP16J",
   centralSystemUrl: "",

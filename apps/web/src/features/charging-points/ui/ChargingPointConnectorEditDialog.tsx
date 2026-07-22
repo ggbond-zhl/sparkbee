@@ -95,7 +95,6 @@ export function ChargingPointConnectorEditDialog({
             )}
           </DialogHeader>
           <ChargingPointConnectorFormFields
-            connectorIdReadOnly
             form={form}
             idPrefix={`connector-edit-${connector.id}`}
           />

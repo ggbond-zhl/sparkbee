@@ -152,6 +152,8 @@ export function ChargingPointDetailPage() {
           </div>
           <CardAction className="flex flex-wrap justify-end gap-2">
             <Button
+              disabled={configuration.locked}
+              title={configuration.lockedReason}
               type="button"
               variant="outline"
               onClick={chargingPointEditor.openEditor}

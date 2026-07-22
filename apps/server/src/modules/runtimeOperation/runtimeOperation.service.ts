@@ -16,29 +16,24 @@ import type {
 import type { ServerDatabase } from "../../db";
 import {
   ChargingPointActorError,
-  createChargingPointActor,
   type ChargingPointActor,
   type ChargingPointActorAuthorizeResult,
   type ChargingPointActorConnectorActionResult,
-  type ChargingPointActorOptions,
-  type ChargingPointActorLogSink,
-  type ChargingPointActorStartResult,
   type ChargingPointActorStopTransactionResult,
   type ChargingPointActorTransactionStartResult,
 } from "../../lib/chargingPointActor";
-import {
-  ChargingPointActorHost,
-  type ChargingPointActorHostStartResult,
-} from "../../lib/chargingPointActorHost";
+import { ChargingPointActorHost } from "../../lib/chargingPointActorHost";
 import type { ChargingPointStreamEvent } from "../../lib/chargingPointEventStreamHub";
 import { AppError } from "../../utils/errors";
-import { toChargingPointActorOptions } from "./chargingPointActorOptions";
 import { RuntimeOperationRepository } from "./runtimeOperation.repo";
 import { ChargingTransactionRepository } from "../chargingTransaction/chargingTransaction.repo";
+import {
+  RuntimeOperationLifecycle,
+  toRuntimeOperationResponse,
+  type ChargingPointActorFactory,
+} from "./runtimeOperation.lifecycle";
 
-export type ChargingPointActorFactory = (
-  options: ChargingPointActorOptions,
-) => ChargingPointActor;
+export type { ChargingPointActorFactory } from "./runtimeOperation.lifecycle";
 
 export interface RuntimeOperationServiceDependencies {
   chargingPointActorHost?: ChargingPointActorHost;
@@ -60,7 +55,7 @@ export function createRuntimeOperationService(
 
 export class RuntimeOperationService {
   private readonly actorHost: ChargingPointActorHost;
-  private readonly actorFactory: ChargingPointActorFactory;
+  private readonly lifecycle: RuntimeOperationLifecycle;
 
   constructor(
     private readonly repository: RuntimeOperationRepository,
@@ -68,53 +63,32 @@ export class RuntimeOperationService {
     dependencies: RuntimeOperationServiceDependencies = {},
   ) {
     this.actorHost = dependencies.chargingPointActorHost ?? new ChargingPointActorHost();
-    this.actorFactory = dependencies.createChargingPointActor ?? createChargingPointActor;
+    this.lifecycle = new RuntimeOperationLifecycle(
+      repository,
+      chargingTransactionRepository,
+      {
+        actorHost: this.actorHost,
+        actorFactory: dependencies.createChargingPointActor,
+      },
+    );
   }
 
   async start(id: string): Promise<RuntimeOperationResponse> {
-    const chargingPoint = await this.repository.getOperationDetail(id);
-    if (chargingPoint.connectors.length === 0) {
-      throw new AppError(
-        409,
-        "CHARGING_POINT_NOT_RUNNABLE",
-        "Charging point requires at least one connector",
-      );
-    }
-
-    let entry: ChargingPointActorHostStartResult;
-    try {
-      entry = await this.actorHost.start(id, (actorLogSink) =>
-        this.actorFactory(this.toActorOptions(chargingPoint, actorLogSink)),
-      );
-    } catch (error) {
-      throw this.mapStartError(error);
-    }
-
-    if (!entry.created) {
-      return this.toStatusResponse(id, entry.actor);
-    }
-
-    return this.toStartResponse(entry.result);
+    return this.lifecycle.start(id);
   }
 
   async stop(id: string): Promise<RuntimeOperationResponse> {
-    await this.repository.getOperationDetail(id);
-    try {
-      await this.actorHost.stop(id);
-      return this.toStoppedResponse(id);
-    } catch (error) {
-      throw this.mapStopError();
-    }
+    return this.lifecycle.stop(id);
   }
 
   async getStatus(id: string): Promise<RuntimeOperationResponse> {
     await this.repository.getOperationDetail(id);
-    return this.toStatusResponse(id, this.actorHost.get(id));
+    return toRuntimeOperationResponse(id, this.actorHost.get(id));
   }
 
   async getRuntimeSnapshot(id: string): Promise<RuntimeSnapshotResponse> {
     await this.repository.getOperationDetail(id);
-    const runtimeStatus = this.toStatusResponse(id, this.actorHost.get(id));
+    const runtimeStatus = toRuntimeOperationResponse(id, this.actorHost.get(id));
 
     return this.actorHost.getRuntimeSnapshot(id, runtimeStatus);
   }
@@ -130,21 +104,7 @@ export class RuntimeOperationService {
     recovered: string[];
     failed: Array<{ chargingPointId: string; error: unknown }>;
   }> {
-    const chargingPointIds =
-      await this.chargingTransactionRepository.listRecoverableChargingPointIds();
-    const recovered: string[] = [];
-    const failed: Array<{ chargingPointId: string; error: unknown }> = [];
-
-    for (const chargingPointId of chargingPointIds) {
-      try {
-        await this.start(chargingPointId);
-        recovered.push(chargingPointId);
-      } catch (error) {
-        failed.push({ chargingPointId, error });
-      }
-    }
-
-    return { recovered, failed };
+    return this.lifecycle.recoverActiveTransactions();
   }
 
   async subscribeToEvents(
@@ -152,7 +112,7 @@ export class RuntimeOperationService {
     listener: (event: ChargingPointStreamEvent) => void,
   ): Promise<{ snapshot: RuntimeSnapshotResponse; unsubscribe: () => void }> {
     await this.repository.getOperationDetail(id);
-    const runtimeStatus = this.toStatusResponse(id, this.actorHost.get(id));
+    const runtimeStatus = toRuntimeOperationResponse(id, this.actorHost.get(id));
     return this.actorHost.subscribeWithSnapshot(id, runtimeStatus, listener);
   }
 
@@ -211,26 +171,6 @@ export class RuntimeOperationService {
         meterStartWh: input.meterStartWh,
         reservationId: input.reservationId,
       });
-      if (result.status === "accepted") {
-        const parsedOcppTransactionId = Number(result.transactionId);
-        await this.chargingTransactionRepository
-          .forChargingPoint(chargingPoint.id)
-          .saveStarted({
-          transactionId: result.transactionId,
-          ...(Number.isSafeInteger(parsedOcppTransactionId)
-            ? { ocppTransactionId: parsedOcppTransactionId }
-            : {}),
-          evseId: connector.evseId,
-          connectorId: connector.connectorId,
-          idTag: input.idTag,
-          state: "active",
-          chargingState: "charging",
-          meterStartWh: input.meterStartWh ?? 0,
-          latestMeterWh: input.meterStartWh ?? 0,
-          startedAt: new Date(),
-          });
-      }
-
       return this.toStartTransactionResponse(
         chargingPoint.id,
         connector,
@@ -270,16 +210,6 @@ export class RuntimeOperationService {
         meterStopWh: input.meterStopWh,
         idTag: input.idTag,
       });
-      if (result.status === "accepted") {
-        await this.chargingTransactionRepository
-          .forChargingPoint(chargingPoint.id)
-          .saveEnded({
-          transactionId: result.transactionId,
-          meterStopWh: result.meterStopWh,
-          stoppedAt: result.stoppedAt,
-          });
-      }
-
       return this.toStopTransactionResponse(
         chargingPoint.id,
         connector,
@@ -522,87 +452,6 @@ export class RuntimeOperationService {
       "TRANSACTION_OPERATION_FAILED",
       "Transaction operation failed",
     );
-  }
-
-  private toStatusResponse(
-    chargingPointId: string,
-    actor: ChargingPointActor | undefined,
-  ): RuntimeOperationResponse {
-    if (actor?.status === "running") {
-      return {
-        chargingPointId,
-        status: actor.status,
-        bootStatus: "Accepted",
-      };
-    }
-
-    if (actor?.status === "starting") {
-      return {
-        chargingPointId,
-        status: actor.status,
-        bootStatus: "Pending",
-      };
-    }
-
-    return {
-      chargingPointId,
-      status: actor?.status ?? "stopped",
-    };
-  }
-
-  private toStoppedResponse(chargingPointId: string): RuntimeOperationResponse {
-    return {
-      chargingPointId,
-      status: "stopped",
-    };
-  }
-
-  private toStartResponse(
-    result: ChargingPointActorStartResult,
-  ): RuntimeOperationResponse {
-    return {
-      chargingPointId: result.chargingPointId,
-      status: result.chargingPointActorStatus,
-      bootStatus: result.bootStatus,
-      retryAfterSec: "retryAfterSec" in result ? result.retryAfterSec : undefined,
-    };
-  }
-
-  private toActorOptions(
-    chargingPoint: ChargingPointDetailResponse,
-    actorLogSink?: ChargingPointActorLogSink,
-  ): ChargingPointActorOptions {
-    const options = toChargingPointActorOptions(chargingPoint);
-    return {
-      ...options,
-      transactionStore: this.chargingTransactionRepository.forChargingPoint(
-        chargingPoint.id,
-      ),
-      ...(actorLogSink === undefined ? {} : { actorLogSink }),
-    };
-  }
-
-  private mapStartError(error: unknown): AppError {
-    if (
-      error instanceof ChargingPointActorError &&
-      error.code === "CHARGING_POINT_ACTOR_PROTOCOL_UNSUPPORTED"
-    ) {
-      return new AppError(
-        400,
-        "CHARGING_POINT_PROTOCOL_UNSUPPORTED",
-        "Charging point protocol is not supported",
-      );
-    }
-
-    return new AppError(
-      502,
-      "CHARGING_POINT_START_FAILED",
-      "Charging point start failed",
-    );
-  }
-
-  private mapStopError(): AppError {
-    return new AppError(502, "CHARGING_POINT_STOP_FAILED", "Charging point stop failed");
   }
 
 }

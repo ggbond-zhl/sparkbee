@@ -21,7 +21,6 @@ export const connectorManagementFormSchema = z
   .object({
     connectorId: positiveIntegerInput,
     type: createConnectorRequestSchema.shape.type,
-    format: createConnectorRequestSchema.shape.format,
     powerType: createConnectorRequestSchema.shape.powerType,
     maxVoltage: requiredNonNegativeIntegerInput,
     maxCurrent: requiredNonNegativeIntegerInput,
@@ -30,6 +29,7 @@ export const connectorManagementFormSchema = z
     (values): CreateConnectorRequest => ({
       ...values,
       evseId: values.connectorId,
+      format: "cable",
     }),
   );
 
@@ -41,7 +41,6 @@ export type ConnectorManagementFormValues = CreateConnectorRequest;
 export const connectorManagementFormDefaultValues = {
   connectorId: "1",
   type: "IEC_62196_T2",
-  format: "socket",
   powerType: "ac",
   maxVoltage: "230",
   maxCurrent: "32",

@@ -11,15 +11,21 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 export function AppSidebar() {
+  const { isMobile } = useSidebar();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
 
   return (
-    <Sidebar collapsible="offcanvas" className="border-sidebar-border/40">
+    <Sidebar
+      collapsible="offcanvas"
+      side={isMobile ? "right" : "left"}
+      className="border-sidebar-border/40"
+    >
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>

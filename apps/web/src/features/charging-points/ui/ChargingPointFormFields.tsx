@@ -16,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import type {
   ChargingPointCreateFormInput,
   ChargingPointCreateFormValues,
@@ -170,14 +169,6 @@ export function ChargingPointFormFields({
           placeholder="可选"
           readOnly={configurationLocked}
           {...form.register("serialNumber")}
-        />
-      </Field>
-      <Field className="md:col-span-2">
-        <FieldLabel htmlFor={`${idPrefix}-description`}>说明</FieldLabel>
-        <Textarea
-          id={`${idPrefix}-description`}
-          placeholder="可选"
-          {...form.register("description")}
         />
       </Field>
     </FieldGroup>

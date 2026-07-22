@@ -10,6 +10,7 @@ import { noopErrorReporter } from "../config/errorReporter";
 import type { ErrorReporter } from "../config/errorReporter";
 import type { ServerDatabase } from "../db";
 import { ActorLogRepository } from "../modules/actorLog/actorLog.repo";
+import { BestEffortBatchWriter } from "./bestEffortBatchWriter";
 
 export interface ActorLogSinkFactory {
   createSink(chargingPointId: string): ChargingPointActorLogSink;
@@ -17,9 +18,7 @@ export interface ActorLogSinkFactory {
 
 export class ActorLogWriter implements ActorLogSinkFactory {
   private readonly repository: ActorLogRepository;
-  private readonly pending: ActorLog[] = [];
-  private timer?: NodeJS.Timeout;
-  private flushing?: Promise<void>;
+  private readonly batchWriter: BestEffortBatchWriter<ActorLog>;
   private readonly logger: Logger;
   private readonly errorReporter: ErrorReporter;
 
@@ -35,6 +34,12 @@ export class ActorLogWriter implements ActorLogSinkFactory {
     this.repository = new ActorLogRepository(database);
     this.logger = options.logger ?? pino({ level: "silent" });
     this.errorReporter = options.errorReporter ?? noopErrorReporter;
+    this.batchWriter = new BestEffortBatchWriter({
+      batchSize: options.batchSize,
+      flushIntervalMs: options.flushIntervalMs,
+      persistBatch: (batch) => this.repository.insertMany(batch),
+      onFailed: (error, batch) => this.reportFailure(error, batch.length),
+    });
   }
 
   createSink(chargingPointId: string): ChargingPointActorLogSink {
@@ -47,43 +52,21 @@ export class ActorLogWriter implements ActorLogSinkFactory {
   }
 
   async flush(): Promise<void> {
-    if (this.timer !== undefined) clearTimeout(this.timer);
-    this.timer = undefined;
-    if (this.flushing !== undefined) await this.flushing;
-    const batch = this.pending.splice(0, this.pending.length);
-    if (batch.length === 0) return;
-    this.flushing = this.persist(batch).finally(() => { this.flushing = undefined; });
-    await this.flushing;
+    await this.batchWriter.flush();
   }
 
   private enqueue(record: ChargingPointActorLogRecord): void {
-    this.pending.push(toActorLog(record));
-    if (this.pending.length >= (this.options.batchSize ?? 100)) {
-      void this.flush();
-      return;
-    }
-    if (this.timer === undefined) {
-      this.timer = setTimeout(() => void this.flush(), this.options.flushIntervalMs ?? 1_000);
-      this.timer.unref();
-    }
+    this.batchWriter.enqueue(toActorLog(record));
   }
 
-  private async persist(batch: ActorLog[]): Promise<void> {
-    try {
-      await this.repository.insertMany(batch);
-    } catch {
-      try {
-        await this.repository.insertMany(batch);
-      } catch (error) {
-        const context = { module: "actorLogWriter", batchSize: batch.length };
-        this.logger.error({
-          event: "actor-log.persist.failed",
-          batchSize: batch.length,
-          error,
-        }, "Failed to persist Actor logs");
-        this.errorReporter.captureException(error, context);
-      }
-    }
+  private reportFailure(error: unknown, batchSize: number): void {
+    const context = { module: "actorLogWriter", batchSize };
+    this.logger.error({
+      event: "actor-log.persist.failed",
+      batchSize,
+      error,
+    }, "Failed to persist Actor logs");
+    this.errorReporter.captureException(error, context);
   }
 }
 
