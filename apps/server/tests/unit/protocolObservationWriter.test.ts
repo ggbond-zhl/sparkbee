@@ -62,6 +62,19 @@ describe("历史观察记录持久化", () => {
       previousStatus: "starting",
       currentStatus: "running",
     });
+    await emit?.({
+      id: "configuration-event-without-subscriber",
+      sequence: 3,
+      chargingPointId: chargingPoint.id,
+      protocol: "OCPP16J",
+      occurredAt: "2026-07-20T00:00:02.000Z",
+      type: "configuration.changed",
+      resource: { scope: "configuration", key: "HeartbeatInterval" },
+      value: "30",
+      version: 2,
+      lastModifiedBy: "csms",
+      pendingRestart: false,
+    });
     await writer.flush();
 
     const messages = listProtocolMessagesResponseSchema.parse(await (
@@ -74,6 +87,7 @@ describe("历史观察记录持久化", () => {
       "message-without-subscriber",
     ]);
     expect(events.items.map((item) => item.id)).toEqual([
+      "configuration-event-without-subscriber",
       "event-without-subscriber",
     ]);
   });
@@ -287,6 +301,10 @@ function createActor(
     getTransactionResource: () => undefined,
     reportMeterValue: async () => { throw new Error("not used"); },
     stopTransaction: async () => { throw new Error("not used"); },
+    changeConfiguration: async () => ({
+      status: "rejected",
+      reason: "not-supported",
+    }),
   };
 }
 

@@ -2,6 +2,9 @@ import { describe, expect, test } from "vitest";
 
 import {
   chargingPointEventStreamMessageSchema,
+  protocolConfigurationListResponseSchema,
+  updateProtocolConfigurationRequestSchema,
+  updateProtocolConfigurationResponseSchema,
   chargingPointConnectorActionResponseSchema,
   activeTransactionSamplesResponseSchema,
   createChargingPointRequestSchema,
@@ -18,6 +21,57 @@ import {
 } from "../../src";
 
 describe("chargingPoint contract schemas", () => {
+  test("validates protocol configuration list, update, and stream event contracts", () => {
+    const chargingPointId = "00000000-0000-4000-8000-000000000001";
+    const entry = {
+      key: "HeartbeatInterval",
+      value: "30",
+      defaultValue: "60",
+      readonly: false,
+      valueType: "integer",
+      rebootRequired: false,
+      minValue: 0,
+      maxValue: null,
+      description: "Heartbeat.req 的发送间隔，单位为秒。",
+      version: 2,
+      pendingRestart: false,
+      lastModifiedBy: "csms",
+      updatedAt: "2026-07-22T08:00:00.000Z",
+    } as const;
+
+    expect(protocolConfigurationListResponseSchema.parse({
+      chargingPointId,
+      protocol: "OCPP16J",
+      items: [entry],
+    }).items).toEqual([entry]);
+    expect(updateProtocolConfigurationRequestSchema.parse({
+      value: " 30 ",
+      expectedVersion: 2,
+    })).toEqual({ value: " 30 ", expectedVersion: 2 });
+    expect(updateProtocolConfigurationResponseSchema.parse({
+      status: "accepted",
+      item: entry,
+    })).toEqual({ status: "accepted", item: entry });
+
+    const event = {
+      event: "configuration.changed",
+      data: {
+        id: "event-configuration-1",
+        sequence: 3,
+        type: "configuration.changed",
+        chargingPointId,
+        protocol: "OCPP16J",
+        resource: { scope: "configuration", key: "HeartbeatInterval" },
+        occurredAt: "2026-07-22T08:00:00.000Z",
+        value: "30",
+        version: 2,
+        lastModifiedBy: "csms",
+        pendingRestart: false,
+      },
+    } as const;
+    expect(chargingPointEventStreamMessageSchema.parse(event)).toEqual(event);
+  });
+
   test("validates persisted active transaction charging samples", () => {
     expect(activeTransactionSamplesResponseSchema.parse({
       items: [

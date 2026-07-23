@@ -16,6 +16,7 @@ import { createConnectorRoute } from "../modules/connector/connector.route";
 import { createRuntimeOperationRoute } from "../modules/runtimeOperation/runtimeOperation.route";
 import { createActorLogRoute } from "../modules/actorLog/actorLog.route";
 import { createProtocolObservationRoute } from "../modules/protocolObservation/protocolObservation.route";
+import { createProtocolConfigurationRoute } from "../modules/protocolConfiguration/protocolConfiguration.route";
 import { ChargingTransactionRepository } from "../modules/chargingTransaction/chargingTransaction.repo";
 import { createHealthRoute } from "./health.route";
 
@@ -88,6 +89,12 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
     routes.route(
       "/charging-points",
       createProtocolObservationRoute(dependencies.database),
+    );
+    routes.route(
+      "/charging-points",
+      createProtocolConfigurationRoute(dependencies.database, {
+        chargingPointActorHost,
+      }),
     );
   }
 

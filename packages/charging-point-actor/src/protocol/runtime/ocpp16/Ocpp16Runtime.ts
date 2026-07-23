@@ -13,6 +13,8 @@ import {
   stopHeartbeatLoop as stopHeartbeatLoopAction,
 } from "./actions/heartbeat";
 import { handleInboundRequest as handleInboundRequestAction } from "./commands";
+import { changeConfiguration as changeConfigurationAction } from "./commands/changeConfiguration";
+import type { Ocpp16ConfigurationChangeResult } from "./ConfigurationStore";
 import { Ocpp16ConnectorTopology } from "./Ocpp16ConnectorTopology";
 import {
   plugConnector as plugConnectorAction,
@@ -213,6 +215,34 @@ export class Ocpp16Runtime {
 
   handleInboundRequest(request: InboundRequest): Promise<void> {
     return handleInboundRequestAction(this.context, request);
+  }
+
+  changeConfiguration(input: {
+    key: string;
+    value: string;
+    expectedVersion: number;
+  }): Promise<Ocpp16ConfigurationChangeResult> {
+    return changeConfigurationAction(this.context, {
+      ...input,
+      source: "ui",
+    });
+  }
+
+  async markConfigurationApplied(): Promise<void> {
+    const entries = await this.context.configurationStore.markApplied(
+      this.context.clock(),
+    );
+    for (const entry of entries) {
+      this.context.emitRuntimeEvent({
+        type: "configuration.changed",
+        resource: { scope: "configuration", key: entry.key },
+        value: entry.value,
+        version: entry.version,
+        lastModifiedBy: entry.lastModifiedBy,
+        pendingRestart: entry.pendingRestart,
+        occurredAt: entry.updatedAt,
+      });
+    }
   }
 
   getChargingPointStatus(): ChargingPointStatus {

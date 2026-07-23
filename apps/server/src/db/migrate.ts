@@ -28,6 +28,22 @@ export async function migrateDatabase(client: Pick<PGlite, "exec">): Promise<voi
     create index charging_points_deleted_at_created_at_idx
       on charging_points (deleted_at, created_at);
 
+    create table protocol_configurations (
+      charging_point_id uuid not null references charging_points(id) on delete cascade,
+      protocol charging_point_protocol not null,
+      key text not null,
+      value text not null,
+      version integer not null default 1,
+      pending_restart boolean not null default false,
+      last_modified_by text not null default 'initialization',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      primary key (charging_point_id, protocol, key)
+    );
+
+    create index protocol_configurations_point_protocol_idx
+      on protocol_configurations (charging_point_id, protocol);
+
     create table connectors (
       id uuid primary key default gen_random_uuid(),
       charging_point_id uuid not null references charging_points(id),

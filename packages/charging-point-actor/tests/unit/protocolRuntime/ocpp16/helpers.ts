@@ -220,6 +220,7 @@ export function createChargingPoint(
 export function createProtocolRuntime(replies: QueuedReply[], options: {
   chargingPoint?: ChargingPoint;
   configurationCatalog?: Ocpp16RuntimeOptions["configurationCatalog"];
+  configurationPersistence?: Ocpp16RuntimeOptions["configurationPersistence"];
   actorLogs?: Ocpp16ActorLog[];
   transactionStore?: Ocpp16RuntimeOptions["transactionStore"];
 } = {}): { protocolRuntime: Ocpp16Runtime; session: FakeSession } {
@@ -228,6 +229,7 @@ export function createProtocolRuntime(replies: QueuedReply[], options: {
     session,
     chargingPoint: options.chargingPoint ?? createChargingPoint(),
     configurationCatalog: options.configurationCatalog,
+    configurationPersistence: options.configurationPersistence,
     clock: () => new Date("2026-01-01T00:00:00.000Z"),
     idGenerator: () => "transaction-1",
     emitActorLog: (actorLog) => {

@@ -316,6 +316,8 @@ export function reduceChargingPointRuntimeEventState(
     }
     case "authorization.status":
       return state;
+    case "configuration.changed":
+      return state;
     case "transaction.status": {
       const { connectorId, evseId } = message.data.resource;
       const transactionId = message.data.resource.transactionId ??
@@ -586,6 +588,8 @@ function formatRuntimeEventSummary(
       return `交易 ${message.data.resource.transactionId}: ${
         message.data.meterWh.toFixed(3)
       } Wh`;
+    case "configuration.changed":
+      return `协议配置 ${message.data.resource.key} 已更新`;
   }
 }
 
@@ -616,6 +620,10 @@ function formatResource(resource: ChargingPointActorEvent["resource"]) {
     return resource.transactionId === undefined
       ? formatConnectorLabel(resource.connectorId)
       : `交易 ${resource.transactionId}`;
+  }
+
+  if (resource.scope === "configuration") {
+    return `配置 ${resource.key}`;
   }
 
   return "协议";

@@ -137,6 +137,7 @@ export class Ocpp16StartupLifecycle {
   }
 
   private async completeAcceptedBoot(): Promise<void> {
+    await this.options.runtime.markConfigurationApplied();
     this.options.runtime.startHeartbeatLoop({
       onReconnectRequired: (result) => {
         if (

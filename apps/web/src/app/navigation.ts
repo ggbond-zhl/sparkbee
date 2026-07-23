@@ -1,5 +1,7 @@
 const appName = "SparkBee";
 const chargingPointDetailPathPattern = /^\/charging-points\/[^/]+$/;
+const protocolConfigurationPathPattern =
+  /^\/charging-points\/[^/]+\/configuration$/;
 
 export const appMenuItems = [
   { label: "充电桩列表", to: "/charging-points" },
@@ -18,6 +20,10 @@ export function getPageTitleForPath(pathname: string) {
 
   if (chargingPointDetailPathPattern.test(pathname)) {
     return "运行调试台";
+  }
+
+  if (protocolConfigurationPathPattern.test(pathname)) {
+    return "协议配置";
   }
 
   return null;

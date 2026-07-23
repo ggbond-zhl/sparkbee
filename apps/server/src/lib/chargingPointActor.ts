@@ -1,11 +1,16 @@
 export {
   ChargingPointActorError,
+  configurationDefinitions,
   createChargingPointActor,
 } from "@spark-bee/charging-point-actor";
 export type {
   ChargingPointActor,
   ChargingPointActorAuthorizeResult,
   ChargingPointActorConnectorActionResult,
+  ChargingPointActorChangeConfigurationInput,
+  ChargingPointActorChangeConfigurationResult,
+  ChargingPointActorConfigurationEntry,
+  ChargingPointActorConfigurationPersistence,
   ChargingPointActorLogRecord,
   ChargingPointActorLogSink,
   ChargingPointActorEvent,
@@ -18,4 +23,5 @@ export type {
   ChargingPointActorTransactionStartResult,
   ChargingPointActorPersistedTransaction,
   ChargingPointActorTransactionStore,
+  ConfigurationDefinition,
 } from "@spark-bee/charging-point-actor";

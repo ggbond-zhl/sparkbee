@@ -16,6 +16,7 @@ import {
   ChevronDownIcon,
   PencilIcon,
   SearchIcon,
+  Settings2Icon,
   Trash2Icon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -252,7 +253,7 @@ function ChargingPointCardList({
                 </dl>
               </CardContent>
             </Link>
-            <CardFooter className="mt-auto justify-end gap-1">
+            <CardFooter className="mt-auto flex-wrap justify-end gap-1">
               <ChargingPointCardActions item={item} />
             </CardFooter>
           </Card>
@@ -483,6 +484,15 @@ function ChargingPointCardActions({ item }: { item: ChargingPointListItem }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <Button asChild size="sm" variant="ghost">
+        <Link
+          to="/charging-points/$chargingPointId/configuration"
+          params={{ chargingPointId: item.id }}
+        >
+          <Settings2Icon data-icon="inline-start" />
+          协议配置
+        </Link>
+      </Button>
       <Button
         size="sm"
         type="button"

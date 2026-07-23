@@ -14,6 +14,9 @@ describe("startServer", () => {
     } as unknown as ServerDatabase;
     const listen = vi.fn(() => calls.push("listen"));
     const onStarted = vi.fn(() => calls.push("started"));
+    const prepare = vi.fn(async () => {
+      calls.push("prepare");
+    });
 
     await startServer({
       database,
@@ -21,9 +24,35 @@ describe("startServer", () => {
       listen,
       logger: { error: vi.fn() } as unknown as Logger,
       onStarted,
+      prepare,
     });
 
-    expect(calls).toEqual(["database", "listen", "started"]);
+    expect(calls).toEqual(["database", "prepare", "listen", "started"]);
+  });
+
+  test("does not listen when protocol configuration backfill fails", async () => {
+    const prepareError = new Error("backfill failed");
+    const captureException = vi.fn();
+    const listen = vi.fn();
+    const onStarted = vi.fn();
+    const loggerError = vi.fn();
+
+    await expect(startServer({
+      database: {
+        execute: vi.fn().mockResolvedValue(undefined),
+      } as unknown as ServerDatabase,
+      errorReporter: { captureException },
+      listen,
+      logger: { error: loggerError } as unknown as Logger,
+      onStarted,
+      prepare: vi.fn().mockRejectedValue(prepareError),
+    })).rejects.toBe(prepareError);
+
+    expect(listen).not.toHaveBeenCalled();
+    expect(onStarted).not.toHaveBeenCalled();
+    expect(captureException).toHaveBeenCalledWith(prepareError, {
+      module: "server.prepare",
+    });
   });
 
   test("reports the error and does not listen when the database is unavailable", async () => {

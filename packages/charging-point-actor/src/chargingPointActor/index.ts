@@ -1,4 +1,8 @@
 export { createChargingPointActor } from "./createChargingPointActor";
+export {
+  configurationDefinitions,
+  type ConfigurationDefinition,
+} from "../protocol/runtime/ocpp16/ConfigurationStore";
 export { ChargingPointActorError, type ChargingPointActorErrorCode } from "./errors";
 export type {
   AuthorizationStatusEvent,
@@ -7,6 +11,7 @@ export type {
   ChargingPointActorLogSink,
   ChargingPointStatusEvent,
   ConnectorStatusEvent,
+  ConfigurationChangedEvent,
   EVSEStatusEvent,
   ProtocolMessageEvent,
   ChargingPointActor,
@@ -16,6 +21,10 @@ export type {
   ChargingPointActorAuthorizationStatus,
   ChargingPointActorConnectorActionInput,
   ChargingPointActorConnectorActionResult,
+  ChargingPointActorChangeConfigurationInput,
+  ChargingPointActorChangeConfigurationResult,
+  ChargingPointActorConfigurationEntry,
+  ChargingPointActorConfigurationPersistence,
   ChargingPointActorEvent,
   ChargingPointActorEventBase,
   ChargingPointActorEventBus,

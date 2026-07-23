@@ -75,9 +75,7 @@ export class ChargingPointActorHost {
     this.actorUnsubscribers.set(
       chargingPointId,
       actor.events.subscribe(async (event) => {
-        this.runtimeProjection.projectActorEvent(event);
-        await this.actorEventSink?.write(event);
-        this.eventStreamHub.publishActorEvent(event);
+        await this.publishActorEvent(event);
       }),
     );
 
@@ -133,6 +131,12 @@ export class ChargingPointActorHost {
     listener: (event: ChargingPointStreamEvent) => void,
   ): () => void {
     return this.eventStreamHub.subscribe(chargingPointId, listener);
+  }
+
+  async publishActorEvent(event: ChargingPointActorEvent): Promise<void> {
+    this.runtimeProjection.projectActorEvent(event);
+    await this.actorEventSink?.write(event);
+    this.eventStreamHub.publishActorEvent(event);
   }
 
   subscribeWithSnapshot(

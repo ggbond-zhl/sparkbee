@@ -43,6 +43,13 @@
       "when": 1784605661772,
       "tag": "0005_smart_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784708164214,
+      "tag": "0006_strong_mystique",
+      "breakpoints": true
     }
   ]
 }

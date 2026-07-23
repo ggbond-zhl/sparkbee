@@ -23,6 +23,10 @@ import type {
   listChargingPointsResponseSchema,
   updateChargingPointRequestSchema,
   updateConnectorRequestSchema,
+  protocolConfigurationItemSchema,
+  protocolConfigurationListResponseSchema,
+  updateProtocolConfigurationRequestSchema,
+  updateProtocolConfigurationResponseSchema,
 } from "./schemas";
 
 export type CreateChargingPointRequest = z.infer<typeof createChargingPointRequestSchema>;
@@ -63,3 +67,15 @@ export type ListChargingPointsResponse = z.infer<typeof listChargingPointsRespon
 export type CreateConnectorRequest = z.infer<typeof createConnectorRequestSchema>;
 export type UpdateConnectorRequest = z.infer<typeof updateConnectorRequestSchema>;
 export type ConnectorResponse = z.infer<typeof connectorResponseSchema>;
+export type ProtocolConfigurationItem = z.infer<
+  typeof protocolConfigurationItemSchema
+>;
+export type ProtocolConfigurationListResponse = z.infer<
+  typeof protocolConfigurationListResponseSchema
+>;
+export type UpdateProtocolConfigurationRequest = z.infer<
+  typeof updateProtocolConfigurationRequestSchema
+>;
+export type UpdateProtocolConfigurationResponse = z.infer<
+  typeof updateProtocolConfigurationResponseSchema
+>;

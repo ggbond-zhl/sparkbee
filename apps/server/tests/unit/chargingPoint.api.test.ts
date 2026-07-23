@@ -12,6 +12,8 @@ import {
   runtimeSnapshotResponseSchema,
   runtimeStartTransactionResponseSchema,
   runtimeStopTransactionResponseSchema,
+  protocolConfigurationListResponseSchema,
+  updateProtocolConfigurationResponseSchema,
 } from "@spark-bee/contracts";
 import { ChargingPointActorError } from "@spark-bee/charging-point-actor";
 import type {
@@ -20,6 +22,8 @@ import type {
   ChargingPointActorAuthorizeResult,
   ChargingPointActorConnectorActionInput,
   ChargingPointActorConnectorActionResult,
+  ChargingPointActorChangeConfigurationInput,
+  ChargingPointActorChangeConfigurationResult,
   ChargingPointActorOptions,
   ChargingPointActorResourceRef,
   ChargingPointActorEvent,
@@ -112,6 +116,12 @@ describe("chargingPoint management API", () => {
     expect(document.paths["/api/charging-points/{id}/connectors"].post.summary).toBe(
       "创建枪口",
     );
+    expect(
+      document.paths["/api/charging-points/{id}/configuration"].get.summary,
+    ).toBe("查询协议配置目录");
+    expect(
+      document.paths["/api/charging-points/{id}/configuration/{key}"].patch.summary,
+    ).toBe("修改协议配置项");
     expect(
       document.paths["/api/charging-points/{id}/connectors/{connectorId}"].patch.summary,
     ).toBe("更新枪口");
@@ -235,6 +245,221 @@ describe("chargingPoint management API", () => {
 
     expect(detailResponse.status).toBe(200);
     expect(chargingPointDetailResponseSchema.parse(await detailResponse.json())).toEqual(created);
+  });
+
+  test("creates a complete protocol configuration directory with the charging point", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const created = await createChargingPoint(app, {
+      identity: "CP-CONFIG",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+
+    const response = await app.request(
+      `/api/charging-points/${created.id}/configuration`,
+    );
+
+    expect(response.status).toBe(200);
+    const directory = protocolConfigurationListResponseSchema.parse(
+      await response.json(),
+    );
+    expect(directory).toMatchObject({
+      chargingPointId: created.id,
+      protocol: "OCPP16J",
+    });
+    expect(directory.items).toHaveLength(45);
+    expect(directory.items.find((item) => item.key === "HeartbeatInterval"))
+      .toMatchObject({
+        value: "60",
+        defaultValue: "60",
+        readonly: false,
+        valueType: "integer",
+        minValue: 0,
+        maxValue: null,
+        version: 1,
+        pendingRestart: false,
+        lastModifiedBy: "initialization",
+      });
+  });
+
+  test("updates a protocol configuration while stopped with CAS", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const created = await createChargingPoint(app, {
+      identity: "CP-CONFIG-UPDATE",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+
+    const response = await app.request(
+      `/api/charging-points/${created.id}/configuration/MeterValueSampleInterval`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "15", expectedVersion: 1 }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(updateProtocolConfigurationResponseSchema.parse(await response.json()))
+      .toMatchObject({
+        status: "accepted",
+        item: {
+          key: "MeterValueSampleInterval",
+          value: "15",
+          version: 2,
+          lastModifiedBy: "ui",
+          pendingRestart: false,
+        },
+      });
+
+    const conflictResponse = await app.request(
+      `/api/charging-points/${created.id}/configuration/MeterValueSampleInterval`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "30", expectedVersion: 1 }),
+      },
+    );
+    expect(conflictResponse.status).toBe(409);
+    expect(apiErrorResponseSchema.parse(await conflictResponse.json()).error.code)
+      .toBe("PROTOCOL_CONFIGURATION_VERSION_CONFLICT");
+  });
+
+  test("streams protocol configuration changes made while stopped", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const created = await createChargingPoint(app, {
+      identity: "CP-CONFIG-STREAM",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const streamResponse = await app.request(
+      `/api/charging-points/${created.id}/events`,
+    );
+    const reader = streamResponse.body?.getReader();
+    expect(reader).toBeDefined();
+    expect((await readSseEvent(reader!)).event).toBe("snapshot");
+
+    const updateResponse = await app.request(
+      `/api/charging-points/${created.id}/configuration/MeterValueSampleInterval`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "15", expectedVersion: 1 }),
+      },
+    );
+
+    expect(updateResponse.status).toBe(200);
+    expect(await readSseEvent(reader!)).toEqual({
+      event: "configuration.changed",
+      data: expect.objectContaining({
+        type: "configuration.changed",
+        chargingPointId: created.id,
+        resource: {
+          scope: "configuration",
+          key: "MeterValueSampleInterval",
+        },
+        value: "15",
+        version: 2,
+        lastModifiedBy: "ui",
+        pendingRestart: false,
+      }),
+    });
+    await reader!.cancel();
+  });
+
+  test("rejects readonly and invalid protocol configuration values", async () => {
+    const database = await createTestDatabase();
+    const app = createApp({ database });
+    const created = await createChargingPoint(app, {
+      identity: "CP-CONFIG-VALIDATION",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+
+    const readonlyResponse = await app.request(
+      `/api/charging-points/${created.id}/configuration/NumberOfConnectors`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "2", expectedVersion: 1 }),
+      },
+    );
+    expect(readonlyResponse.status).toBe(422);
+    expect(apiErrorResponseSchema.parse(await readonlyResponse.json()).error.code)
+      .toBe("PROTOCOL_CONFIGURATION_READONLY");
+
+    const invalidResponse = await app.request(
+      `/api/charging-points/${created.id}/configuration/MeterValueSampleInterval`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "-1", expectedVersion: 1 }),
+      },
+    );
+    expect(invalidResponse.status).toBe(422);
+    expect(apiErrorResponseSchema.parse(await invalidResponse.json()).error.code)
+      .toBe("PROTOCOL_CONFIGURATION_INVALID_VALUE");
+  });
+
+  test("delegates protocol configuration updates to a running actor", async () => {
+    const database = await createTestDatabase();
+    const actorHost = new ChargingPointActorHost();
+    const app = createApp({ database, chargingPointActorHost: actorHost });
+    const created = await createChargingPoint(app, {
+      identity: "CP-CONFIG-RUNNING",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    const updatedAt = new Date("2026-07-22T08:00:00.000Z");
+    const actor = createActorDouble({
+      id: created.id,
+      configurationResults: [{
+        status: "accepted",
+        entry: {
+          key: "MeterValueSampleInterval",
+          value: "20",
+          version: 2,
+          updatedAt,
+          lastModifiedBy: "ui",
+          pendingRestart: false,
+        },
+      }],
+    });
+    await actorHost.start(created.id, () => actor);
+
+    const response = await app.request(
+      `/api/charging-points/${created.id}/configuration/MeterValueSampleInterval`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "20", expectedVersion: 1 }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(actor.configurationInputs).toEqual([{
+      key: "MeterValueSampleInterval",
+      value: "20",
+      expectedVersion: 1,
+    }]);
+    expect(updateProtocolConfigurationResponseSchema.parse(await response.json()))
+      .toMatchObject({
+        status: "accepted",
+        item: { key: "MeterValueSampleInterval", value: "20", version: 2 },
+      });
   });
 
   test("lists chargingPoints with simple pagination and connector counts", async () => {
@@ -2002,6 +2227,75 @@ describe("chargingPoint management API", () => {
     expect(typeof actorOptions?.actorLogSink?.write).toBe("function");
   });
 
+  test("loads persisted protocol configuration and injects its persistence port", async () => {
+    const database = await createTestDatabase();
+    let actorOptions: ChargingPointActorOptions | undefined;
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actorOptions = options;
+        return createActorDouble({
+          id: options.id,
+          startResult: {
+            chargingPointId: options.id,
+            chargingPointActorStatus: "running",
+            bootStatus: "Accepted",
+          },
+        });
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP-CONFIG-LOAD",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "IEC_62196_T2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(
+      `/api/charging-points/${chargingPoint.id}/configuration/MeterValueSampleInterval`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "17", expectedVersion: 1 }),
+      },
+    );
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    const catalog = actorOptions?.configurationCatalog;
+    expect(catalog).toMatchObject({
+      chargingPointId: chargingPoint.identity,
+      protocolVersion: "OCPP16J",
+    });
+    expect(catalog?.chargingPointId).toBe(actorOptions?.chargingPoint.id);
+    expect(
+      catalog === undefined || !("entries" in catalog)
+        ? undefined
+        : [...(catalog.entries ?? [])].find(
+          (entry) => !("key" in entry) ? false : entry.key === "MeterValueSampleInterval",
+        ),
+    ).toMatchObject({ value: "17" });
+    expect(actorOptions?.configurationPersistence).toBeDefined();
+
+    await expect(actorOptions?.configurationPersistence?.save({
+      key: "MeterValueSampleInterval",
+      value: "18",
+      source: "csms",
+      pendingRestart: false,
+      updatedAt: new Date("2026-07-22T09:00:00.000Z"),
+    })).resolves.toMatchObject({ value: "18", version: 3, lastModifiedBy: "csms" });
+  });
+
   test("maps Boot Pending to starting status", async () => {
     const database = await createTestDatabase();
     const app = createApp({
@@ -2243,6 +2537,7 @@ function createActorDouble(
     authorizeResults: ChargingPointActorAuthorizeResult[];
     startTransactionResults: ChargingPointActorTransactionStartResult[];
     stopTransactionResults: ChargingPointActorStopTransactionResult[];
+    configurationResults: ChargingPointActorChangeConfigurationResult[];
     transactionResources: Map<
       string,
       Extract<ChargingPointActorResourceRef, { scope: "transaction" }>
@@ -2255,9 +2550,11 @@ function createActorDouble(
   const authorizeInputs: ChargingPointActorAuthorizeInput[] = [];
   const startTransactionInputs: ChargingPointActorStartTransactionInput[] = [];
   const stopTransactionInputs: ChargingPointActorStopTransactionInput[] = [];
+  const configurationInputs: ChargingPointActorChangeConfigurationInput[] = [];
   const authorizeResults = [...(overrides.authorizeResults ?? [])];
   const startTransactionResults = [...(overrides.startTransactionResults ?? [])];
   const stopTransactionResults = [...(overrides.stopTransactionResults ?? [])];
+  const configurationResults = [...(overrides.configurationResults ?? [])];
   const transactionResources = overrides.transactionResources ?? new Map();
 
   return {
@@ -2285,6 +2582,7 @@ function createActorDouble(
     authorizeInputs,
     startTransactionInputs,
     stopTransactionInputs,
+    configurationInputs,
     events: {
       subscribe: (listener) => {
         listeners.add(listener);
@@ -2367,6 +2665,13 @@ function createActorDouble(
         stoppedAt: new Date("2026-07-01T00:00:00.000Z"),
       };
     },
+    async changeConfiguration(input: ChargingPointActorChangeConfigurationInput) {
+      this.configurationInputs.push(input);
+      return configurationResults.shift() ?? {
+        status: "rejected",
+        reason: "not-supported",
+      };
+    },
   } satisfies ChargingPointActor & {
     id: string;
     status: ChargingPointActorStatus;
@@ -2380,6 +2685,7 @@ function createActorDouble(
     authorizeInputs: ChargingPointActorAuthorizeInput[];
     startTransactionInputs: ChargingPointActorStartTransactionInput[];
     stopTransactionInputs: ChargingPointActorStopTransactionInput[];
+    configurationInputs: ChargingPointActorChangeConfigurationInput[];
     publish(event: ChargingPointActorEvent): void;
   };
 }

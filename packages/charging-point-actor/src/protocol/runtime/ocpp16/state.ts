@@ -86,13 +86,9 @@ export function createOcpp16RuntimeContext(
   const configurationStore = new ConfigurationStore(
     chargingPoint.id,
     options.configurationCatalog,
+    options.configurationPersistence,
   );
   const configurationFacts = new Ocpp16ConfigurationFacts(configurationStore);
-  configurationStore.sync(
-    "NumberOfConnectors",
-    String(chargingPoint.listEvses().length),
-    clock(),
-  );
   const localAuthorizationList = new LocalAuthorizationList({
     chargingPointId: chargingPoint.id,
     version: 0,

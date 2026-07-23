@@ -91,6 +91,8 @@ test("用户通过统一 Card 查看充电桩并从 Footer 执行单项操作", 
   ).toBe("/charging-points/00000000-0000-4000-8000-000000000001");
   expect(screen.getByRole("button", { name: "编辑" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "枪口管理" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "协议配置" }).getAttribute("href"))
+    .toBe("/charging-points/00000000-0000-4000-8000-000000000001/configuration");
   expect(screen.getByRole("button", { name: "删除" })).toBeTruthy();
   const searchButton = screen.getByRole("button", { name: "搜索" });
   const createButton = screen.getByRole("button", { name: "新增充电桩" });

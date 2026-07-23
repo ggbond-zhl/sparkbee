@@ -43,6 +43,7 @@ export function createDefaultOcpp16Runtime(
     emitActorLog: runtimeOptions.emitActorLog,
     onTriggeredBootResult: runtimeOptions.onTriggeredBootResult,
     transactionStore: options.transactionStore,
+    configurationPersistence: options.configurationPersistence,
   });
 }
 

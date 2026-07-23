@@ -20,6 +20,8 @@ import type {
   ChargingPointActorAuthorizeResult,
   ChargingPointActorConnectorActionInput,
   ChargingPointActorConnectorActionResult,
+  ChargingPointActorChangeConfigurationInput,
+  ChargingPointActorChangeConfigurationResult,
   ChargingPointActorEventBus,
   ChargingPointActorMeterValueInput,
   ChargingPointActorMeterValueResult,
@@ -302,6 +304,31 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
     return toChargingPointActorStopTransactionResult(
       await this.ocpp16Runtime.stopTransaction(input),
     );
+  }
+
+  async changeConfiguration(
+    input: ChargingPointActorChangeConfigurationInput,
+  ): Promise<ChargingPointActorChangeConfigurationResult> {
+    this.requireStarted();
+    const result = await this.ocpp16Runtime.changeConfiguration(input);
+    if (result.status === "Accepted" || result.status === "RebootRequired") {
+      if (result.entry === undefined) {
+        throw new ChargingPointActorError(
+          "CHARGING_POINT_ACTOR_OPERATION_FAILED",
+          "协议配置项持久化结果缺少配置状态",
+        );
+      }
+      return {
+        status: result.status === "Accepted" ? "accepted" : "reboot-required",
+        entry: result.entry,
+      };
+    }
+    return {
+      status: "rejected",
+      reason: result.status === "NotSupported"
+        ? "not-supported"
+        : "invalid-value",
+    };
   }
 
   private requireNotDisposed(): void {

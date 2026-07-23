@@ -98,6 +98,53 @@ export const connectorResponseSchema = z.object({
   updatedAt: z.string().datetime().describe("最后更新时间。"),
 });
 
+export const protocolConfigurationValueTypeSchema = z.enum([
+  "string",
+  "boolean",
+  "integer",
+]);
+
+export const protocolConfigurationLastModifiedBySchema = z.enum([
+  "ui",
+  "csms",
+  "internal",
+  "initialization",
+]);
+
+export const protocolConfigurationItemSchema = z.object({
+  key: z.string().min(1).describe("协议配置项键名。"),
+  value: z.string().describe("协议配置项当前值。"),
+  defaultValue: z.string().describe("协议核心定义的默认值。"),
+  readonly: z.boolean().describe("是否为只读配置项。"),
+  valueType: protocolConfigurationValueTypeSchema.describe("配置值类型。"),
+  rebootRequired: z.boolean().describe("修改后是否需要重启桩实例才生效。"),
+  minValue: z.number().nullable().describe("整数配置允许的最小值。"),
+  maxValue: z.number().nullable().describe("整数配置允许的最大值。"),
+  description: z.string().describe("协议配置项中文说明。"),
+  version: z.number().int().positive().describe("用于并发修改校验的递增版本号。"),
+  pendingRestart: z.boolean().describe("是否等待桩实例成功重启后生效。"),
+  lastModifiedBy: protocolConfigurationLastModifiedBySchema.describe(
+    "最后修改来源。",
+  ),
+  updatedAt: z.string().datetime().describe("最后更新时间。"),
+});
+
+export const protocolConfigurationListResponseSchema = z.object({
+  chargingPointId: z.string().uuid().describe("桩实例 UUID 主键。"),
+  protocol: chargingPointProtocolSchema.describe("协议配置目录所属协议版本。"),
+  items: z.array(protocolConfigurationItemSchema).describe("完整协议配置目录。"),
+});
+
+export const updateProtocolConfigurationRequestSchema = z.object({
+  value: z.string().describe("要保存的协议配置值。"),
+  expectedVersion: z.number().int().positive().describe("页面读取时的配置版本号。"),
+});
+
+export const updateProtocolConfigurationResponseSchema = z.object({
+  status: z.enum(["accepted", "reboot-required"]).describe("配置修改结果。"),
+  item: protocolConfigurationItemSchema.describe("修改后的协议配置项。"),
+});
+
 export const chargingPointSummaryResponseSchema = z.object({
   id: z.string().uuid().describe("桩实例的 UUID 主键。"),
   name: z.string().describe("桩实例在 SparkBee 内部使用的展示名称。"),

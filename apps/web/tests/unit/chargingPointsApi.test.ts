@@ -12,6 +12,7 @@ import {
   listActorLogs,
   listProtocolEvents,
   listProtocolMessages,
+  listProtocolConfiguration,
   plugConnector,
   authorizeAndStartConnectorTransaction,
   startConnectorTransaction,
@@ -22,6 +23,7 @@ import {
   unplugConnector,
   updateChargingPoint,
   updateConnector,
+  updateProtocolConfiguration,
 } from "../../src/features/charging-points/api/chargingPoints";
 
 describe("chargingPoints API client", () => {
@@ -203,6 +205,56 @@ describe("chargingPoints API client", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/charging-points/00000000-0000-4000-8000-000000000001/status",
+    );
+  });
+
+  test("lists and updates protocol configuration by charging point id", async () => {
+    const item = {
+      key: "HeartbeatInterval",
+      value: "60",
+      defaultValue: "60",
+      readonly: false,
+      valueType: "integer",
+      rebootRequired: false,
+      minValue: 1,
+      maxValue: null,
+      description: "心跳间隔。",
+      version: 1,
+      pendingRestart: false,
+      lastModifiedBy: "initialization",
+      updatedAt: "2026-07-22T08:00:00.000Z",
+    } as const;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        protocol: "OCPP16J",
+        items: [item],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        status: "accepted",
+        item: { ...item, value: "30", version: 2, lastModifiedBy: "ui" },
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listProtocolConfiguration("00000000-0000-4000-8000-000000000001");
+    await updateProtocolConfiguration(
+      "00000000-0000-4000-8000-000000000001",
+      "HeartbeatInterval",
+      { value: "30", expectedVersion: 1 },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/configuration",
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/charging-points/00000000-0000-4000-8000-000000000001/configuration/HeartbeatInterval",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: "30", expectedVersion: 1 }),
+      },
     );
   });
 

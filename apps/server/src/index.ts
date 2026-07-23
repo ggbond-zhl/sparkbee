@@ -8,6 +8,7 @@ import { createPostgresDatabase } from "./db/client";
 import { ActorLogWriter } from "./lib/actorLogWriter";
 import { ChargingPointActorHost } from "./lib/chargingPointActorHost";
 import { ProtocolObservationWriter } from "./modules/protocolObservation/protocolObservation.writer";
+import { ProtocolConfigurationRepository } from "./modules/protocolConfiguration/protocolConfiguration.repo";
 import { ActorLogRetentionScheduler } from "./modules/actorLog/actorLogRetentionScheduler";
 import { ChargingTransactionRepository } from "./modules/chargingTransaction/chargingTransaction.repo";
 import { ChargingTransactionRetentionScheduler } from "./modules/chargingTransaction/chargingTransactionRetentionScheduler";
@@ -34,6 +35,7 @@ const protocolObservationWriter = new ProtocolObservationWriter(database, {
   logger,
   errorReporter,
 });
+const protocolConfigurationRepository = new ProtocolConfigurationRepository(database);
 const chargingPointActorHost = new ChargingPointActorHost({
   actorLogWriter,
   actorEventSink: {
@@ -115,6 +117,7 @@ await startServer({
       }
     });
   },
+  prepare: () => protocolConfigurationRepository.initializeMissingDirectories(),
 }).catch(() => process.exit(1));
 
 let shuttingDown = false;

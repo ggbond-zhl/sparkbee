@@ -46,6 +46,7 @@ const ALL_CHARGING_POINT_ACTOR_EVENT_TYPES = [
   "authorization.status",
   "transaction.status",
   "transaction.meterValue",
+  "configuration.changed",
   "protocol.message",
 ] satisfies ChargingPointActorEventType[];
 
@@ -618,6 +619,11 @@ class FakeProtocolRuntime {
     this.runtimeStopped = true;
   }
 
+  markConfigurationApplied(): Promise<void> {
+    this.calls.push("markConfigurationApplied");
+    return Promise.resolve();
+  }
+
   private emitRuntimeEvent(event: Ocpp16RuntimeEvent): void {
     for (const listener of [...this.runtimeEventListeners]) {
       listener(event);
@@ -689,6 +695,7 @@ function createRuntimeHarness(
   replies: ConstructorParameters<typeof RuntimeFakeSession>[0],
   dependencies: {
     configurationCatalog?: Ocpp16RuntimeOptions["configurationCatalog"];
+    configurationPersistence?: Ocpp16RuntimeOptions["configurationPersistence"];
     actorLogSink?: ChargingPointActorLogSink;
   } = {},
 ) {
@@ -700,6 +707,7 @@ function createRuntimeHarness(
       centralSystemUrl: "ws://localhost/cp-1",
       chargingPoint: createChargingPoint(),
       actorLogSink: dependencies.actorLogSink,
+      configurationPersistence: dependencies.configurationPersistence,
     },
     {
       session,
@@ -759,6 +767,100 @@ describe("Ocpp16ChargingPointActor", () => {
       chargingPointActorStatus: "running",
     });
     expect(actor.status).toBe("running");
+  });
+
+  test("changes a configuration through the running actor", async () => {
+    const { actor } = createRuntimeHarness([runtimeBootAccepted()], {
+      configurationPersistence: {
+        save: (input) => Promise.resolve({
+          key: input.key,
+          value: input.value,
+          version: input.key === "HeartbeatInterval" ? 2 : 5,
+          updatedAt: input.updatedAt,
+          lastModifiedBy: input.source,
+          pendingRestart: input.pendingRestart,
+        }),
+      },
+    });
+    await actor.start();
+
+    const events = collectChargingPointActorEvents(actor, [
+      "configuration.changed",
+    ]);
+
+    await expect(actor.changeConfiguration({
+      key: "MeterValueSampleInterval",
+      value: "15",
+      expectedVersion: 4,
+    })).resolves.toEqual({
+      status: "accepted",
+      entry: {
+        key: "MeterValueSampleInterval",
+        value: "15",
+        version: 5,
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        lastModifiedBy: "ui",
+        pendingRestart: false,
+      },
+    });
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "configuration.changed",
+        resource: {
+          scope: "configuration",
+          key: "MeterValueSampleInterval",
+        },
+        value: "15",
+        version: 5,
+        lastModifiedBy: "ui",
+        pendingRestart: false,
+      }),
+    ]);
+  });
+
+  test("clears and publishes pending restart configuration after an accepted boot", async () => {
+    const appliedAt = new Date("2026-01-01T00:00:00.000Z");
+    const markApplied = vi.fn(async () => [{
+      key: "WebSocketPingInterval",
+      value: "30",
+      version: 3,
+      updatedAt: appliedAt,
+      lastModifiedBy: "ui" as const,
+      pendingRestart: false,
+    }]);
+    const { actor } = createRuntimeHarness([runtimeBootAccepted()], {
+      configurationPersistence: {
+        save: (input) => Promise.resolve({
+          key: input.key,
+          value: input.value,
+          version: (input.expectedVersion ?? 1) + 1,
+          updatedAt: input.updatedAt,
+          lastModifiedBy: input.source,
+          pendingRestart: input.pendingRestart,
+        }),
+        markApplied,
+      },
+    });
+    const events = collectChargingPointActorEvents(actor, [
+      "configuration.changed",
+    ]);
+
+    await actor.start();
+
+    expect(markApplied).toHaveBeenCalledWith(appliedAt);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "configuration.changed",
+        resource: {
+          scope: "configuration",
+          key: "WebSocketPingInterval",
+        },
+        value: "30",
+        version: 3,
+        lastModifiedBy: "ui",
+        pendingRestart: false,
+      }),
+    );
   });
 
   test("writes actor log records for actor lifecycle transitions", async () => {
@@ -1110,6 +1212,7 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(session.connectCalls).toBe(1);
     expect(protocolRuntime.calls).toEqual([
       "boot",
+      "markConfigurationApplied",
       "startHeartbeatLoop",
       "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
@@ -1187,6 +1290,7 @@ describe("Ocpp16ChargingPointActor", () => {
 
     expect(protocolRuntime.calls).toEqual([
       "boot",
+      "markConfigurationApplied",
       "startHeartbeatLoop",
       "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
@@ -1284,6 +1388,7 @@ describe("Ocpp16ChargingPointActor", () => {
     expect(protocolRuntime.calls).toEqual([
       "boot",
       "boot",
+      "markConfigurationApplied",
       "startHeartbeatLoop",
       "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
@@ -1362,6 +1467,7 @@ describe("Ocpp16ChargingPointActor", () => {
 
     expect(protocolRuntime.calls).toEqual([
       "boot",
+      "markConfigurationApplied",
       "startHeartbeatLoop",
       "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
@@ -1651,6 +1757,7 @@ describe("Ocpp16ChargingPointActor", () => {
 
     expect(protocolRuntime.calls).toEqual([
       "boot",
+      "markConfigurationApplied",
       "startHeartbeatLoop",
       "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",
@@ -1658,6 +1765,7 @@ describe("Ocpp16ChargingPointActor", () => {
       "reportConnectorStatus:1",
       "stopRuntime",
       "boot",
+      "markConfigurationApplied",
       "startHeartbeatLoop",
       "publishChargingPointAvailabilitySnapshot",
       "reportChargingPointStatus",

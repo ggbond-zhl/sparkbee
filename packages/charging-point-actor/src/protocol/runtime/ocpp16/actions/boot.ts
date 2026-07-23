@@ -45,11 +45,44 @@ async function bootCore(
 
   if (response.status === "Accepted") {
     const acceptedAt = context.clock();
-    context.configurationStore.sync(
+    const heartbeatConfiguration = await context.configurationStore.syncAndPersist(
       "HeartbeatInterval",
       String(response.interval),
       acceptedAt,
     );
+    if (heartbeatConfiguration !== null) {
+      context.emitRuntimeEvent({
+        type: "configuration.changed",
+        resource: {
+          scope: "configuration",
+          key: heartbeatConfiguration.key,
+        },
+        value: heartbeatConfiguration.value,
+        version: heartbeatConfiguration.version,
+        lastModifiedBy: heartbeatConfiguration.lastModifiedBy,
+        pendingRestart: heartbeatConfiguration.pendingRestart,
+        occurredAt: heartbeatConfiguration.updatedAt,
+      });
+    }
+    const connectorConfiguration = await context.configurationStore.syncAndPersist(
+      "NumberOfConnectors",
+      String(context.chargingPoint.listEvses().length),
+      acceptedAt,
+    );
+    if (connectorConfiguration !== null) {
+      context.emitRuntimeEvent({
+        type: "configuration.changed",
+        resource: {
+          scope: "configuration",
+          key: connectorConfiguration.key,
+        },
+        value: connectorConfiguration.value,
+        version: connectorConfiguration.version,
+        lastModifiedBy: connectorConfiguration.lastModifiedBy,
+        pendingRestart: connectorConfiguration.pendingRestart,
+        occurredAt: connectorConfiguration.updatedAt,
+      });
+    }
     if (previousRegistrationStatus !== "Accepted") {
       context.chargingPoint = context.chargingPoint.markOperative(acceptedAt);
     }

@@ -19,6 +19,9 @@ export function AppShell({ children }: PropsWithChildren) {
     }),
   });
   const isChargingPointDetail = /^\/charging-points\/[^/]+$/.test(pathname);
+  const configurationMatch = pathname.match(
+    /^\/charging-points\/([^/]+)\/configuration$/,
+  );
 
   return (
     <TooltipProvider>
@@ -26,7 +29,16 @@ export function AppShell({ children }: PropsWithChildren) {
         <AppSidebar />
         <SidebarInset>
           <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-border/40 bg-background px-2">
-            {isChargingPointDetail && (
+            {configurationMatch ? (
+              <Link
+                to="/charging-points/$chargingPointId"
+                params={{ chargingPointId: configurationMatch[1]! }}
+                aria-label="返回运行调试台"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                <ArrowLeftIcon className="size-5" />
+              </Link>
+            ) : isChargingPointDetail ? (
               <Link
                 to="/charging-points"
                 aria-label="返回桩实例列表"
@@ -34,7 +46,7 @@ export function AppShell({ children }: PropsWithChildren) {
               >
                 <ArrowLeftIcon className="size-5" />
               </Link>
-            )}
+            ) : null}
             <span className="font-medium">{currentPageTitle ?? "SparkBee"}</span>
             <div className="ml-auto flex items-center gap-2 md:hidden">
               <img

@@ -29,6 +29,7 @@ import { RuntimeOperationRepository } from "./runtimeOperation.repo";
 import { ChargingTransactionRepository } from "../chargingTransaction/chargingTransaction.repo";
 import {
   RuntimeOperationLifecycle,
+  createProtocolConfigurationRuntime,
   toRuntimeOperationResponse,
   type ChargingPointActorFactory,
 } from "./runtimeOperation.lifecycle";
@@ -49,6 +50,7 @@ export function createRuntimeOperationService(
     new RuntimeOperationRepository(database),
     dependencies.chargingTransactionRepository ??
       new ChargingTransactionRepository(database),
+    createProtocolConfigurationRuntime(database),
     dependencies,
   );
 }
@@ -60,12 +62,16 @@ export class RuntimeOperationService {
   constructor(
     private readonly repository: RuntimeOperationRepository,
     private readonly chargingTransactionRepository: ChargingTransactionRepository,
+    protocolConfigurationRuntime: ReturnType<
+      typeof createProtocolConfigurationRuntime
+    >,
     dependencies: RuntimeOperationServiceDependencies = {},
   ) {
     this.actorHost = dependencies.chargingPointActorHost ?? new ChargingPointActorHost();
     this.lifecycle = new RuntimeOperationLifecycle(
       repository,
       chargingTransactionRepository,
+      protocolConfigurationRuntime,
       {
         actorHost: this.actorHost,
         actorFactory: dependencies.createChargingPointActor,

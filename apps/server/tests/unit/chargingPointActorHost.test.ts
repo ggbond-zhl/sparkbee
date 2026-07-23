@@ -46,6 +46,10 @@ function createActor(input: {
     stopTransaction: async () => {
       throw new Error("not used");
     },
+    changeConfiguration: async () => ({
+      status: "rejected",
+      reason: "not-supported",
+    }),
   };
 }
 

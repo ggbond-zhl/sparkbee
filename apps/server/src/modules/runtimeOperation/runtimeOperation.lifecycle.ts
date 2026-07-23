@@ -1,5 +1,6 @@
 import type { RuntimeOperationResponse } from "@spark-bee/contracts";
 
+import type { ServerDatabase } from "../../db";
 import {
   ChargingPointActorError,
   createChargingPointActor,
@@ -7,6 +8,8 @@ import {
   type ChargingPointActorOptions,
   type ChargingPointActorLogSink,
   type ChargingPointActorStartResult,
+  type ChargingPointActorConfigurationPersistence,
+  type ChargingPointActorProtocol,
 } from "../../lib/chargingPointActor";
 import {
   ChargingPointActorHost,
@@ -14,12 +17,29 @@ import {
 } from "../../lib/chargingPointActorHost";
 import { AppError } from "../../utils/errors";
 import { ChargingTransactionRepository } from "../chargingTransaction/chargingTransaction.repo";
+import { ProtocolConfigurationRepository } from "../protocolConfiguration/protocolConfiguration.repo";
 import { toChargingPointActorOptions } from "./chargingPointActorOptions";
 import { RuntimeOperationRepository } from "./runtimeOperation.repo";
 
 export type ChargingPointActorFactory = (
   options: ChargingPointActorOptions,
 ) => ChargingPointActor;
+
+export interface ProtocolConfigurationRuntime {
+  loadCatalog(
+    chargingPointId: string,
+  ): Promise<NonNullable<ChargingPointActorOptions["configurationCatalog"]>>;
+  forChargingPoint(
+    chargingPointId: string,
+    protocol: ChargingPointActorProtocol,
+  ): ChargingPointActorConfigurationPersistence;
+}
+
+export function createProtocolConfigurationRuntime(
+  database: ServerDatabase,
+): ProtocolConfigurationRuntime {
+  return new ProtocolConfigurationRepository(database);
+}
 
 interface RuntimeOperationLifecycleDependencies {
   actorHost: ChargingPointActorHost;
@@ -32,6 +52,7 @@ export class RuntimeOperationLifecycle {
   constructor(
     private readonly repository: RuntimeOperationRepository,
     private readonly chargingTransactionRepository: ChargingTransactionRepository,
+    private readonly protocolConfigurationRuntime: ProtocolConfigurationRuntime,
     private readonly dependencies: RuntimeOperationLifecycleDependencies,
   ) {
     this.actorFactory = dependencies.actorFactory ?? createChargingPointActor;
@@ -49,8 +70,20 @@ export class RuntimeOperationLifecycle {
 
     let entry: ChargingPointActorHostStartResult;
     try {
+      const configurationCatalog =
+        await this.protocolConfigurationRuntime.loadCatalog(chargingPoint.id);
+      const configurationPersistence =
+        this.protocolConfigurationRuntime.forChargingPoint(
+          chargingPoint.id,
+          chargingPoint.protocol,
+        );
       entry = await this.dependencies.actorHost.start(id, (actorLogSink) =>
-        this.actorFactory(this.toActorOptions(chargingPoint, actorLogSink)),
+        this.actorFactory(this.toActorOptions(
+          chargingPoint,
+          configurationCatalog,
+          configurationPersistence,
+          actorLogSink,
+        )),
       );
     } catch (error) {
       throw this.mapStartError(error);
@@ -98,10 +131,19 @@ export class RuntimeOperationLifecycle {
 
   private toActorOptions(
     chargingPoint: Parameters<typeof toChargingPointActorOptions>[0],
+    configurationCatalog: NonNullable<ChargingPointActorOptions["configurationCatalog"]>,
+    configurationPersistence: NonNullable<
+      ChargingPointActorOptions["configurationPersistence"]
+    >,
     actorLogSink?: ChargingPointActorLogSink,
   ): ChargingPointActorOptions {
     return {
       ...toChargingPointActorOptions(chargingPoint),
+      configurationCatalog: {
+        ...configurationCatalog,
+        chargingPointId: chargingPoint.identity,
+      },
+      configurationPersistence,
       transactionStore: this.chargingTransactionRepository.forChargingPoint(
         chargingPoint.id,
       ),

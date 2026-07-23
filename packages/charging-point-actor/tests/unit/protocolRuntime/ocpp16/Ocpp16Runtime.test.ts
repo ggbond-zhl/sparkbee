@@ -5387,6 +5387,210 @@ describe("Ocpp16Runtime", () => {
     ]);
   });
 
+  test("publishes the persisted HeartbeatInterval synchronized by BootNotification", async () => {
+    const { protocolRuntime } = createProtocolRuntime([bootAccepted()], {
+      configurationPersistence: {
+        save: (input) => Promise.resolve({
+          key: input.key,
+          value: input.value,
+          version: 3,
+          updatedAt: input.updatedAt,
+          lastModifiedBy: input.source,
+          pendingRestart: input.pendingRestart,
+        }),
+      },
+    });
+    const events: Ocpp16RuntimeEvent[] = [];
+    protocolRuntime.on("runtimeEvent", (event) => events.push(event));
+
+    await protocolRuntime.boot();
+
+    expect(events).toContainEqual({
+      type: "configuration.changed",
+      resource: { scope: "configuration", key: "HeartbeatInterval" },
+      value: "30",
+      version: 3,
+      lastModifiedBy: "internal",
+      pendingRestart: false,
+      occurredAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+  });
+
+  test("persists the connector topology synchronized during accepted boot", async () => {
+    const writes: string[] = [];
+    const { protocolRuntime } = createProtocolRuntime([bootAccepted()], {
+      chargingPoint: createMultiEvseChargingPoint([
+        { evseId: 1, connectorId: 1 },
+        { evseId: 2, connectorId: 2 },
+      ]),
+      configurationCatalog: {
+        chargingPointId: "cp-1",
+        protocolVersion: "OCPP16J",
+        entries: [
+          {
+            key: "HeartbeatInterval",
+            value: "30",
+            valueType: "integer",
+            minValue: 0,
+          },
+          {
+            key: "NumberOfConnectors",
+            value: "1",
+            readonly: true,
+            valueType: "integer",
+            minValue: 1,
+          },
+        ],
+      },
+      configurationPersistence: {
+        save: (input) => {
+          writes.push(input.key);
+          return Promise.resolve({
+            key: input.key,
+            value: input.value,
+            version: 2,
+            updatedAt: input.updatedAt,
+            lastModifiedBy: input.source,
+            pendingRestart: input.pendingRestart,
+          });
+        },
+      },
+    });
+
+    await protocolRuntime.boot();
+
+    expect(writes).toEqual(["NumberOfConnectors"]);
+    expect(getConfigurationValue(protocolRuntime, "NumberOfConnectors")).toBe("2");
+  });
+
+  test("fails BootNotification handling when the accepted interval cannot be persisted", async () => {
+    const { protocolRuntime } = createProtocolRuntime([bootAccepted()], {
+      configurationPersistence: {
+        save: () => Promise.reject(new Error("database unavailable")),
+      },
+    });
+
+    await expect(protocolRuntime.boot()).rejects.toThrow(
+      "协议配置项 HeartbeatInterval 同步失败",
+    );
+    expect(getConfigurationValue(protocolRuntime, "HeartbeatInterval"))
+      .toBe("60");
+  });
+
+  test("rejects ChangeConfiguration when persistence fails and preserves the current value", async () => {
+    const { protocolRuntime } = createProtocolRuntime([], {
+      configurationPersistence: {
+        save: () => Promise.reject(new Error("database unavailable")),
+      },
+    });
+    const change = new FakeInboundRequest("ChangeConfiguration", {
+      key: "MeterValueSampleInterval",
+      value: "15",
+    });
+
+    await protocolRuntime.handleInboundRequest(change);
+
+    expect(change.responses).toEqual([{ status: "Rejected" }]);
+    expect(change.rejections).toEqual([]);
+    expect(getConfigurationValue(protocolRuntime, "MeterValueSampleInterval"))
+      .toBe("60");
+  });
+
+  test("changes one configuration through the public runtime command with version protection", async () => {
+    const writes: unknown[] = [];
+    const { protocolRuntime } = createProtocolRuntime([], {
+      configurationPersistence: {
+        save: (input) => {
+          writes.push(input);
+          return Promise.resolve({
+            key: input.key,
+            value: input.value,
+            version: 8,
+            updatedAt: input.updatedAt,
+            lastModifiedBy: input.source,
+            pendingRestart: input.pendingRestart,
+          });
+        },
+      },
+    });
+
+    const result = await protocolRuntime.changeConfiguration({
+      key: "MeterValueSampleInterval",
+      value: "15",
+      expectedVersion: 7,
+    });
+
+    expect(writes).toEqual([
+      {
+        key: "MeterValueSampleInterval",
+        value: "15",
+        source: "ui",
+        expectedVersion: 7,
+        pendingRestart: false,
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    ]);
+    expect(result).toEqual({
+      status: "Accepted",
+      entry: {
+        key: "MeterValueSampleInterval",
+        value: "15",
+        version: 8,
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        lastModifiedBy: "ui",
+        pendingRestart: false,
+      },
+    });
+    expect(getConfigurationValue(protocolRuntime, "MeterValueSampleInterval"))
+      .toBe("15");
+  });
+
+  test("serializes concurrent configuration changes", async () => {
+    let releaseFirstWrite: (() => void) | undefined;
+    const writes: string[] = [];
+    const { protocolRuntime } = createProtocolRuntime([], {
+      configurationPersistence: {
+        save: async (input) => {
+          writes.push(input.key);
+          if (input.key === "HeartbeatInterval") {
+            await new Promise<void>((resolve) => {
+              releaseFirstWrite = resolve;
+            });
+          }
+          return {
+            key: input.key,
+            value: input.value,
+            version: (input.expectedVersion ?? 0) + 1,
+            updatedAt: input.updatedAt,
+            lastModifiedBy: input.source,
+            pendingRestart: input.pendingRestart,
+          };
+        },
+      },
+    });
+
+    const first = protocolRuntime.changeConfiguration({
+      key: "HeartbeatInterval",
+      value: "30",
+      expectedVersion: 1,
+    });
+    const second = protocolRuntime.changeConfiguration({
+      key: "MeterValueSampleInterval",
+      value: "15",
+      expectedVersion: 1,
+    });
+    await Promise.resolve();
+
+    expect(writes).toEqual(["HeartbeatInterval"]);
+    releaseFirstWrite?.();
+    await Promise.all([first, second]);
+
+    expect(writes).toEqual([
+      "HeartbeatInterval",
+      "MeterValueSampleInterval",
+    ]);
+  });
+
   test("maps ChangeConfiguration statuses and preserves rejected values", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([], {
       configurationCatalog: {

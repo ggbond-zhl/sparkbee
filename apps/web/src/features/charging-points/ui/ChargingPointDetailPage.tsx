@@ -1,4 +1,4 @@
-import { useParams } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowLeftIcon,
@@ -7,6 +7,7 @@ import {
   PlayIcon,
   PlugZapIcon,
   SquareIcon,
+  Settings2Icon,
   UnplugIcon,
 } from "lucide-react";
 import {
@@ -151,6 +152,15 @@ export function ChargingPointDetailPage() {
             </div>
           </div>
           <CardAction className="flex flex-wrap justify-end gap-2">
+            <Button asChild variant="outline">
+              <Link
+                to="/charging-points/$chargingPointId/configuration"
+                params={{ chargingPointId }}
+              >
+                <Settings2Icon data-icon="inline-start" />
+                协议配置
+              </Link>
+            </Button>
             <Button
               disabled={configuration.locked}
               title={configuration.lockedReason}

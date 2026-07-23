@@ -201,6 +201,15 @@ export class Ocpp16EventEnvelope {
           sampledAt: event.sampledAt.toISOString(),
         }, event.occurredAt);
         return;
+      case "configuration.changed":
+        this.publisher.publish("configuration.changed", {
+          resource: event.resource,
+          value: event.value,
+          version: event.version,
+          lastModifiedBy: event.lastModifiedBy,
+          pendingRestart: event.pendingRestart,
+        }, event.occurredAt);
+        return;
     }
   };
 

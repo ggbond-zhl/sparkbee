@@ -24,13 +24,52 @@ export type Ocpp16ConfigurationCatalogInput =
   | ConfigurationCatalogOptions;
 export type Ocpp16ChangeConfigurationStatus =
   ChangeConfigurationResponse["status"];
+export type Ocpp16ConfigurationChangeSource = "csms" | "internal" | "ui";
+
+export interface Ocpp16PersistedConfigurationEntry {
+  key: string;
+  value: string;
+  version: number;
+  updatedAt: Date;
+  lastModifiedBy: Ocpp16ConfigurationChangeSource | "initialization";
+  pendingRestart: boolean;
+}
+
+export interface Ocpp16ConfigurationChangeResult {
+  status: Ocpp16ChangeConfigurationStatus;
+  entry?: Ocpp16PersistedConfigurationEntry;
+}
+
+export interface Ocpp16ConfigurationPersistence {
+  save(input: {
+    key: string;
+    value: string;
+    source: Ocpp16ConfigurationChangeSource;
+    pendingRestart: boolean;
+    updatedAt: Date;
+    expectedVersion?: number;
+  }): Promise<Ocpp16PersistedConfigurationEntry>;
+  markApplied?(updatedAt: Date): Promise<Ocpp16PersistedConfigurationEntry[]>;
+}
 
 export class ConfigurationStore {
   private catalog: ConfigurationCatalog;
+  private operationTail: Promise<void> = Promise.resolve();
 
   constructor(
     chargingPointId: string,
     input?: Ocpp16ConfigurationCatalogInput,
+    private readonly persistence: Ocpp16ConfigurationPersistence = {
+      save: (saveInput) => Promise.resolve({
+        key: saveInput.key,
+        value: saveInput.value,
+        version: (saveInput.expectedVersion ?? 0) + 1,
+        updatedAt: saveInput.updatedAt,
+        lastModifiedBy: saveInput.source,
+        pendingRestart: saveInput.pendingRestart,
+      }),
+      markApplied: () => Promise.resolve([]),
+    },
   ) {
     this.catalog = normalizeOcpp16ConfigurationCatalog(chargingPointId, input);
   }
@@ -73,6 +112,48 @@ export class ConfigurationStore {
     return mapConfigurationChangeStatus(result.status);
   }
 
+  async changeAndPersist(
+    key: Ocpp16ConfigurationKeyInput,
+    nextValue: string,
+    at: Date,
+    source: Extract<Ocpp16ConfigurationChangeSource, "csms" | "ui"> = "csms",
+    expectedVersion?: number,
+  ): Promise<Ocpp16ConfigurationChangeResult> {
+    return this.runExclusive(() =>
+      this.changeAndPersistNow(key, nextValue, at, source, expectedVersion)
+    );
+  }
+
+  private async changeAndPersistNow(
+    key: Ocpp16ConfigurationKeyInput,
+    nextValue: string,
+    at: Date,
+    source: Extract<Ocpp16ConfigurationChangeSource, "csms" | "ui">,
+    expectedVersion?: number,
+  ): Promise<Ocpp16ConfigurationChangeResult> {
+    const result = this.catalog.changeValue(key, nextValue, at);
+    const status = mapConfigurationChangeStatus(result.status);
+    if (status !== "Accepted" && status !== "RebootRequired") {
+      return { status };
+    }
+
+    const entry = result.catalog.getEntry(key);
+    if (entry === undefined) {
+      return { status: "NotSupported" };
+    }
+
+    const persistedEntry = await this.persistence.save({
+      key: entry.key,
+      value: entry.value,
+      source,
+      expectedVersion,
+      pendingRestart: status === "RebootRequired",
+      updatedAt: at,
+    });
+    this.catalog = result.catalog;
+    return { status, entry: persistedEntry };
+  }
+
   /**
    * 同步本地运行时确认过的协议事实。
    * 用于 BootNotification Accepted 等内部同步，不受 readonly 限制。
@@ -88,6 +169,61 @@ export class ConfigurationStore {
         cause,
       );
     }
+  }
+
+  async syncAndPersist(
+    key: Ocpp16ConfigurationKeyInput,
+    nextValue: string,
+    at: Date,
+  ): Promise<Ocpp16PersistedConfigurationEntry | null> {
+    return this.runExclusive(() => this.syncAndPersistNow(key, nextValue, at));
+  }
+
+  markApplied(at: Date): Promise<Ocpp16PersistedConfigurationEntry[]> {
+    return this.runExclusive(() => this.persistence.markApplied?.(at) ?? Promise.resolve([]));
+  }
+
+  private async syncAndPersistNow(
+    key: Ocpp16ConfigurationKeyInput,
+    nextValue: string,
+    at: Date,
+  ): Promise<Ocpp16PersistedConfigurationEntry | null> {
+    try {
+      const result = this.catalog.syncValue(key, nextValue, at);
+      if (!result.changed) {
+        return null;
+      }
+
+      const entry = result.catalog.getEntry(key);
+      if (entry === undefined) {
+        throw new Error(`协议配置项 ${key} 不存在`);
+      }
+
+      const persistedEntry = await this.persistence.save({
+        key: entry.key,
+        value: entry.value,
+        source: "internal",
+        pendingRestart: false,
+        updatedAt: at,
+      });
+      this.catalog = result.catalog;
+      return persistedEntry;
+    } catch (cause) {
+      throw new ProtocolRuntimeError(
+        "PROTOCOL_RUNTIME_INVALID_OPERATION",
+        `协议配置项 ${key} 同步失败`,
+        cause,
+      );
+    }
+  }
+
+  private runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.operationTail.then(operation, operation);
+    this.operationTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 }
 

@@ -16,6 +16,7 @@ import {
   listChargingPoints,
   listProtocolEvents,
   listProtocolMessages,
+  listProtocolConfiguration,
   type ListChargingPointsInput,
 } from "@/features/charging-points/api/chargingPoints";
 
@@ -68,6 +69,17 @@ export function chargingPointDetailQueryOptions(id: string) {
   return queryOptions({
     queryKey: chargingPointDetailQueryKey(id),
     queryFn: () => getChargingPoint(id),
+  });
+}
+
+export function protocolConfigurationQueryKey(id: string) {
+  return ["charging-points", id, "configuration"] as const;
+}
+
+export function protocolConfigurationQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: protocolConfigurationQueryKey(id),
+    queryFn: () => listProtocolConfiguration(id),
   });
 }
 

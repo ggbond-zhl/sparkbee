@@ -16,6 +16,10 @@ import type {
 import type { ISession } from "../../session/types";
 import type { ChargingPointActorTransactionStore } from "../../../chargingPointActor/types";
 import type { Ocpp16ConfigurationCatalogInput } from "./ConfigurationStore/index";
+import type {
+  Ocpp16ConfigurationChangeSource,
+  Ocpp16ConfigurationPersistence,
+} from "./ConfigurationStore/index";
 import type { ConfigurationStore } from "./ConfigurationStore";
 import type { OfflineTransactionOutbox } from "./OfflineTransactionOutbox";
 
@@ -74,6 +78,7 @@ export interface Ocpp16RuntimeOptions {
     result: Ocpp16BootResult,
   ): void | Promise<void>;
   configurationCatalog?: Ocpp16ConfigurationCatalogInput;
+  configurationPersistence?: Ocpp16ConfigurationPersistence;
   clock?: () => Date;
   protocolClock?: {
     now(): Date;
@@ -112,6 +117,7 @@ export type Ocpp16RuntimeResourceRef =
   | { scope: "evse"; evseId: number }
   | { scope: "connector"; evseId: number; connectorId: number }
   | { scope: "authorization"; idTag: string; evseId?: number; connectorId?: number }
+  | { scope: "configuration"; key: string }
   | {
       scope: "transaction";
       evseId: number;
@@ -216,6 +222,17 @@ export interface Ocpp16RuntimeTransactionMeterValueEvent
   sampledAt: Date;
 }
 
+export interface Ocpp16RuntimeConfigurationChangedEvent
+  extends Ocpp16RuntimeEventBase<
+    "configuration.changed",
+    Extract<Ocpp16RuntimeResourceRef, { scope: "configuration" }>
+  > {
+  value: string;
+  version: number;
+  lastModifiedBy: Ocpp16ConfigurationChangeSource | "initialization";
+  pendingRestart: boolean;
+}
+
 export type Ocpp16RuntimeEventMap = {
   "chargingPoint.availability": Ocpp16RuntimeChargingPointAvailabilityEvent;
   "chargingPoint.status": Ocpp16RuntimeChargingPointStatusEvent;
@@ -225,6 +242,7 @@ export type Ocpp16RuntimeEventMap = {
   "authorization.status": Ocpp16RuntimeAuthorizationStatusEvent;
   "transaction.status": Ocpp16RuntimeTransactionStatusEvent;
   "transaction.meterValue": Ocpp16RuntimeTransactionMeterValueEvent;
+  "configuration.changed": Ocpp16RuntimeConfigurationChangedEvent;
 };
 
 export type Ocpp16RuntimeEventType = keyof Ocpp16RuntimeEventMap;

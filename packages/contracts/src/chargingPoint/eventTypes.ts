@@ -22,6 +22,7 @@ import type {
   sessionStatusEventSchema,
   transactionMeterValueEventSchema,
   transactionStatusEventSchema,
+  configurationChangedEventSchema,
 } from "./eventSchemas";
 import type {
   connectorRuntimeStatusSchema,
@@ -75,6 +76,9 @@ export type TransactionMeterValueEvent = z.infer<
   typeof transactionMeterValueEventSchema
 >;
 export type ProtocolMessageEvent = z.infer<typeof protocolMessageEventSchema>;
+export type ConfigurationChangedEvent = z.infer<
+  typeof configurationChangedEventSchema
+>;
 export type ProtocolEvent = z.infer<typeof protocolEventSchema>;
 export type HistoricalObservationEvent = z.infer<typeof protocolEventSchema>;
 export type ChargingPointActorEvent = z.infer<typeof chargingPointActorEventSchema>;

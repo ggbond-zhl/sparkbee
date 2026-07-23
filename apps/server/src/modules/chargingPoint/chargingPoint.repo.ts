@@ -16,6 +16,7 @@ import {
   HistoricalObservationEventRepository,
   ProtocolMessageRepository,
 } from "../protocolObservation/protocolObservation.repo";
+import { ProtocolConfigurationRepository } from "../protocolConfiguration/protocolConfiguration.repo";
 import { AppError } from "../../utils/errors";
 import { toConnectorType } from "../connector/connectorType";
 import { normalizeCentralSystemUrl } from "./centralSystemUrl";
@@ -27,22 +28,27 @@ export class ChargingPointRepository {
   constructor(private readonly db: ServerDatabase) {}
 
   async create(input: CreateChargingPointRequest) {
-    const [row] = await this.db
-      .insert(chargingPoints)
-      .values({
-        ...input,
-        centralSystemUrl: normalizeCentralSystemUrl(input.centralSystemUrl),
-        description: input.description ?? null,
-        firmwareVersion: input.firmwareVersion ?? null,
-        serialNumber: input.serialNumber ?? null,
-      })
-      .returning();
+    return this.db.transaction(async (transaction) => {
+      const [row] = await transaction
+        .insert(chargingPoints)
+        .values({
+          ...input,
+          centralSystemUrl: normalizeCentralSystemUrl(input.centralSystemUrl),
+          description: input.description ?? null,
+          firmwareVersion: input.firmwareVersion ?? null,
+          serialNumber: input.serialNumber ?? null,
+        })
+        .returning();
 
-    if (row === undefined) {
-      throw new AppError(500, "INTERNAL_SERVER_ERROR", "Internal server error");
-    }
+      if (row === undefined) {
+        throw new AppError(500, "INTERNAL_SERVER_ERROR", "Internal server error");
+      }
 
-    return this.toDetail(row, []);
+      await new ProtocolConfigurationRepository(
+        transaction as ServerDatabase,
+      ).initializeDirectory(row.id, row.protocol);
+      return this.toDetail(row, []);
+    });
   }
 
   async list(query: ListChargingPointsQuery) {

@@ -8,6 +8,7 @@ import {
 import { RootRoute } from "@/app/routes/RootRoute";
 import { ChargingPointDetailRoute } from "@/features/charging-points/routes/ChargingPointDetailRoute";
 import { ChargingPointsRoute } from "@/features/charging-points/routes/ChargingPointsRoute";
+import { ChargingPointConfigurationRoute } from "@/features/charging-points/routes/ChargingPointConfigurationRoute";
 
 const rootRoute = createRootRoute({
   component: RootRoute,
@@ -33,10 +34,17 @@ const chargingPointDetailRoute = createRoute({
   component: ChargingPointDetailRoute,
 });
 
+const chargingPointConfigurationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/charging-points/$chargingPointId/configuration",
+  component: ChargingPointConfigurationRoute,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   chargingPointsRoute,
   chargingPointDetailRoute,
+  chargingPointConfigurationRoute,
 ]);
 
 export const router = createRouter({ routeTree, scrollRestoration: true });

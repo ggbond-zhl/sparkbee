@@ -97,6 +97,10 @@ const transactionMeterValueResourceSchema = transactionResourceSchema.extend({
   transactionId: z.string(),
 });
 const protocolResourceSchema = z.object({ scope: z.literal("protocol") });
+const configurationResourceSchema = z.object({
+  scope: z.literal("configuration"),
+  key: z.string().min(1),
+});
 
 const eventBaseSchema = z.object({
   id: z.string().min(1),
@@ -208,6 +212,15 @@ export const protocolMessageEventSchema = eventBaseSchema.extend({
   body: z.unknown().optional(),
 });
 
+export const configurationChangedEventSchema = eventBaseSchema.extend({
+  type: z.literal("configuration.changed"),
+  resource: configurationResourceSchema,
+  value: z.string(),
+  version: z.number().int().positive(),
+  lastModifiedBy: z.enum(["ui", "csms", "internal", "initialization"]),
+  pendingRestart: z.boolean(),
+});
+
 export const protocolEventTypeSchema = z.enum([
   "chargingPoint.lifecycle",
   "chargingPoint.boot",
@@ -220,6 +233,7 @@ export const protocolEventTypeSchema = z.enum([
   "authorization.status",
   "transaction.status",
   "transaction.meterValue",
+  "configuration.changed",
 ]);
 
 export const protocolEventSchema = z.discriminatedUnion("type", [
@@ -234,6 +248,7 @@ export const protocolEventSchema = z.discriminatedUnion("type", [
   authorizationStatusEventSchema,
   transactionStatusEventSchema,
   transactionMeterValueEventSchema,
+  configurationChangedEventSchema,
 ]);
 
 export const chargingPointActorEventSchema = z.discriminatedUnion("type", [
@@ -248,6 +263,7 @@ export const chargingPointActorEventSchema = z.discriminatedUnion("type", [
   authorizationStatusEventSchema,
   transactionStatusEventSchema,
   transactionMeterValueEventSchema,
+  configurationChangedEventSchema,
   protocolMessageEventSchema,
 ]);
 
@@ -264,6 +280,7 @@ export const chargingPointEventStreamTypes = [
   "authorization.status",
   "transaction.status",
   "transaction.meterValue",
+  "configuration.changed",
   "protocol.message",
   "deleted",
 ] as const;
@@ -307,6 +324,10 @@ export const chargingPointEventStreamMessageSchema = z.discriminatedUnion("event
   z.object({
     event: z.literal("transaction.meterValue"),
     data: transactionMeterValueEventSchema,
+  }),
+  z.object({
+    event: z.literal("configuration.changed"),
+    data: configurationChangedEventSchema,
   }),
   z.object({
     event: z.literal("protocol.message"),

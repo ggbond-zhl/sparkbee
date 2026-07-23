@@ -42,6 +42,12 @@ import {
   listProtocolMessagesResponseSchema,
   type ListProtocolMessagesQuery,
   type ListProtocolMessagesResponse,
+  protocolConfigurationListResponseSchema,
+  type ProtocolConfigurationListResponse,
+  updateProtocolConfigurationRequestSchema,
+  updateProtocolConfigurationResponseSchema,
+  type UpdateProtocolConfigurationRequest,
+  type UpdateProtocolConfigurationResponse,
 } from "@spark-bee/contracts";
 
 import { toApiUrl } from "@/lib/apiUrl";
@@ -99,6 +105,49 @@ export async function getChargingPoint(
   }
 
   return chargingPointDetailResponseSchema.parse(await response.json());
+}
+
+export class ProtocolConfigurationApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ProtocolConfigurationApiError";
+  }
+}
+
+export async function listProtocolConfiguration(
+  chargingPointId: string,
+): Promise<ProtocolConfigurationListResponse> {
+  const response = await fetch(toApiUrl(
+    `/api/charging-points/${chargingPointId}/configuration`,
+  ));
+  if (!response.ok) {
+    throw new ProtocolConfigurationApiError("协议配置加载失败", response.status);
+  }
+  return protocolConfigurationListResponseSchema.parse(await response.json());
+}
+
+export async function updateProtocolConfiguration(
+  chargingPointId: string,
+  key: string,
+  input: UpdateProtocolConfigurationRequest,
+): Promise<UpdateProtocolConfigurationResponse> {
+  const response = await fetch(toApiUrl(
+    `/api/charging-points/${chargingPointId}/configuration/${encodeURIComponent(key)}`,
+  ), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updateProtocolConfigurationRequestSchema.parse(input)),
+  });
+  if (!response.ok) {
+    const message = response.status === 409
+      ? "配置已被其他操作更新"
+      : "协议配置保存失败";
+    throw new ProtocolConfigurationApiError(message, response.status);
+  }
+  return updateProtocolConfigurationResponseSchema.parse(await response.json());
 }
 
 export async function updateChargingPoint(

@@ -11,7 +11,11 @@ import type {
   TransactionState,
   TransactionStopReason,
 } from "../model";
-import type { Ocpp16ConfigurationCatalogInput } from "../protocol/runtime/ocpp16/ConfigurationStore";
+import type {
+  Ocpp16ConfigurationCatalogInput,
+  Ocpp16ConfigurationPersistence,
+  Ocpp16PersistedConfigurationEntry,
+} from "../protocol/runtime/ocpp16/ConfigurationStore";
 import type { SessionOfflineReason } from "../protocol/session/types";
 import type { ProtocolVersion } from "../shared/types";
 
@@ -47,6 +51,7 @@ export type ChargingPointActorResourceRef =
   | { scope: "evse"; evseId: number }
   | { scope: "connector"; evseId: number; connectorId: number }
   | { scope: "authorization"; idTag: string; evseId?: number; connectorId?: number }
+  | { scope: "configuration"; key: string }
   | {
       scope: "transaction";
       evseId: number;
@@ -181,6 +186,17 @@ export interface ProtocolMessageEvent
   body?: unknown;
 }
 
+export interface ConfigurationChangedEvent
+  extends ChargingPointActorEventBase<
+    "configuration.changed",
+    Extract<ChargingPointActorResourceRef, { scope: "configuration" }>
+  > {
+  value: string;
+  version: number;
+  lastModifiedBy: "ui" | "csms" | "internal" | "initialization";
+  pendingRestart: boolean;
+}
+
 export interface SessionStatusEvent
   extends ChargingPointActorEventBase<
     "session.status",
@@ -206,6 +222,7 @@ export type ChargingPointActorEventMap = {
   "authorization.status": AuthorizationStatusEvent;
   "transaction.status": TransactionStatusEvent;
   "transaction.meterValue": TransactionMeterValueEvent;
+  "configuration.changed": ConfigurationChangedEvent;
   "protocol.message": ProtocolMessageEvent;
 };
 
@@ -376,6 +393,27 @@ export interface ChargingPointActorStopTransactionInput {
   idTag?: string;
 }
 
+export type ChargingPointActorConfigurationEntry =
+  Ocpp16PersistedConfigurationEntry;
+export type ChargingPointActorConfigurationPersistence =
+  Ocpp16ConfigurationPersistence;
+
+export interface ChargingPointActorChangeConfigurationInput {
+  key: string;
+  value: string;
+  expectedVersion: number;
+}
+
+export type ChargingPointActorChangeConfigurationResult =
+  | {
+      status: "accepted" | "reboot-required";
+      entry: ChargingPointActorConfigurationEntry;
+    }
+  | {
+      status: "rejected";
+      reason: "not-supported" | "invalid-value";
+    };
+
 export interface ChargingPointActor {
   readonly id: string;
   readonly protocol: ProtocolVersion;
@@ -393,6 +431,9 @@ export interface ChargingPointActor {
   ): Extract<ChargingPointActorResourceRef, { scope: "transaction" }> | undefined;
   reportMeterValue(input: ChargingPointActorMeterValueInput): Promise<ChargingPointActorMeterValueResult>;
   stopTransaction(input: ChargingPointActorStopTransactionInput): Promise<ChargingPointActorStopTransactionResult>;
+  changeConfiguration(
+    input: ChargingPointActorChangeConfigurationInput,
+  ): Promise<ChargingPointActorChangeConfigurationResult>;
 }
 
 export type Ocpp16ChargingPointActorOptions = {
@@ -401,6 +442,7 @@ export type Ocpp16ChargingPointActorOptions = {
   centralSystemUrl: string;
   chargingPoint: ChargingPoint | ChargingPointOptions;
   configurationCatalog?: Ocpp16ConfigurationCatalogInput;
+  configurationPersistence?: ChargingPointActorConfigurationPersistence;
   actorLogSink?: ChargingPointActorLogSink;
   transactionStore?: ChargingPointActorTransactionStore;
 };

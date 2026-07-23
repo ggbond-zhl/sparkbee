@@ -83,6 +83,7 @@ export interface StartServerOptions {
   listen(): void;
   logger: Logger;
   onStarted(): void;
+  prepare?(): Promise<void>;
 }
 
 export async function startServer({
@@ -91,6 +92,7 @@ export async function startServer({
   listen,
   logger,
   onStarted,
+  prepare,
 }: StartServerOptions): Promise<void> {
   try {
     await verifyDatabaseConnection(database);
@@ -100,6 +102,17 @@ export async function startServer({
       error,
     }, "Database connection check failed; server startup aborted");
     errorReporter.captureException(error, { module: "database.startup" });
+    throw error;
+  }
+
+  try {
+    await prepare?.();
+  } catch (error) {
+    logger.error({
+      event: "server.prepare.failed",
+      error,
+    }, "Server preparation failed; server startup aborted");
+    errorReporter.captureException(error, { module: "server.prepare" });
     throw error;
   }
 

@@ -102,6 +102,8 @@ function reduceRuntimeProjection(
       return reduceConnectorStatus(projection, event);
     case "authorization.status":
       return projection;
+    case "configuration.changed":
+      return projection;
     case "transaction.status":
       return reduceTransactionStatus(projection, event);
     case "transaction.meterValue":
