@@ -23,6 +23,7 @@ import type {
   transactionMeterValueEventSchema,
   transactionStatusEventSchema,
   configurationChangedEventSchema,
+  transactionDeliveryChangedEventSchema,
 } from "./eventSchemas";
 import type {
   connectorRuntimeStatusSchema,
@@ -78,6 +79,9 @@ export type TransactionMeterValueEvent = z.infer<
 export type ProtocolMessageEvent = z.infer<typeof protocolMessageEventSchema>;
 export type ConfigurationChangedEvent = z.infer<
   typeof configurationChangedEventSchema
+>;
+export type TransactionDeliveryChangedEvent = z.infer<
+  typeof transactionDeliveryChangedEventSchema
 >;
 export type ProtocolEvent = z.infer<typeof protocolEventSchema>;
 export type HistoricalObservationEvent = z.infer<typeof protocolEventSchema>;

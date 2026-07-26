@@ -134,11 +134,14 @@ async function unplugConnectorCore(
   );
 
   if (activeTransaction !== undefined) {
-    await stopTransaction(context, {
+    const stopResult = await stopTransaction(context, {
       transactionId: activeTransaction.id,
       reason: "ev-disconnected",
       stoppedAt: at,
     });
+    if (stopResult.outcome === "Accepted") {
+      context.wakeTransactionDelivery();
+    }
 
     const connector = requireDomainConnector(context, input);
     return {

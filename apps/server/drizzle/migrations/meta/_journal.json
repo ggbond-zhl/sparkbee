@@ -50,6 +50,20 @@
       "when": 1784708164214,
       "tag": "0006_strong_mystique",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784862973059,
+      "tag": "0007_fixed_odin",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784863509802,
+      "tag": "0008_fixed_galactus",
+      "breakpoints": true
     }
   ]
 }

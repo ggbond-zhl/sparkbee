@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { ChargingPoint, Connector, EVSE } from "../../../../src/model/index.ts";
 import { Ocpp16Codec } from "../../../../src/protocol/codec/index.ts";
@@ -50,9 +50,13 @@ describe("Ocpp16Runtime RemoteStopTransaction with real session validation", () 
       idTag: "TAG001",
       meterStartWh: 100,
     });
+    await waitForOutboundRequests(outboundRequests, "StatusNotification", 2);
     expect(start.status).toBe("Accepted");
     const transactionId = start.status === "Accepted" ? start.transactionId : "";
     const context = runtimeContext(runtime);
+    await vi.waitFor(() => {
+      expect(context.ocppTransactionIds.get(transactionId)).toBe(1001);
+    });
     const chargingTransaction = context.transactions.get(transactionId);
     expect(chargingTransaction).toBeDefined();
     context.transactions.set(
@@ -66,7 +70,7 @@ describe("Ocpp16Runtime RemoteStopTransaction with real session validation", () 
       "RemoteStopTransaction",
       { transactionId: 1001 },
     ]));
-    await waitForAsyncRequestHandling();
+    await waitForOutboundRequests(outboundRequests, "StopTransaction");
 
     const stopTransactionRequest = outboundRequests.find(
       (request) => request.action === "StopTransaction",
@@ -124,6 +128,16 @@ function runtimeContext(runtime: Ocpp16Runtime): Ocpp16RuntimeContext {
   return (runtime as unknown as { context: Ocpp16RuntimeContext }).context;
 }
 
-function waitForAsyncRequestHandling(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 20));
+async function waitForOutboundRequests(
+  requests: ProtocolMessageEvent[],
+  action: string,
+  count = 1,
+): Promise<void> {
+  await vi.waitFor(() => {
+    expect(
+      requests.filter((request) => request.action === action),
+      `已发送: ${requests.map((request) => request.action).join(", ")}`,
+    )
+      .toHaveLength(count);
+  });
 }

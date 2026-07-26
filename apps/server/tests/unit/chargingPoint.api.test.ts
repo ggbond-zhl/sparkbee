@@ -108,6 +108,10 @@ describe("chargingPoint management API", () => {
       document.paths["/api/charging-points/{id}/protocol-events"].get.summary,
     ).toBe("查询桩实例协议事件");
     expect(
+      document.paths["/api/charging-points/{id}/transaction-deliveries"].get
+        .summary,
+    ).toBe("查询交易交付记录");
+    expect(
       document.paths["/api/charging-points/{id}/events"].get.responses["200"].content,
     ).toHaveProperty("text/event-stream");
     expect(document.paths["/api/charging-points/{id}/connectors"].get.summary).toBe(
@@ -1090,23 +1094,31 @@ describe("chargingPoint management API", () => {
     let transactionStore: ChargingPointActorTransactionStore | undefined;
     const actor = createActorDouble({
       startTransactionResults: [
-        { status: "accepted", transactionId: "tx-1" },
+        { status: "accepted", transactionId: "tx-1", deliveryStatus: "pending" },
       ],
     });
     const actorStartTransaction = actor.startTransaction.bind(actor);
     actor.startTransaction = async (input) => {
       const result = await actorStartTransaction(input);
       if (result.status === "accepted") {
-        await transactionStore?.saveStarted({
-          transactionId: result.transactionId,
-          evseId: input.evseId,
-          connectorId: input.connectorId,
-          idTag: input.idTag,
-          state: "active",
-          chargingState: "charging",
-          meterStartWh: input.meterStartWh ?? 0,
-          latestMeterWh: input.meterStartWh ?? 0,
-          startedAt: new Date("2026-07-04T09:00:00.000Z"),
+        await transactionStore?.start({
+          transaction: {
+            transactionId: result.transactionId,
+            evseId: input.evseId,
+            connectorId: input.connectorId,
+            idTag: input.idTag,
+            state: "active",
+            chargingState: "charging",
+            meterStartWh: input.meterStartWh ?? 0,
+            latestMeterWh: input.meterStartWh ?? 0,
+            startedAt: new Date("2026-07-04T09:00:00.000Z"),
+          },
+          messageId: "00000000-0000-4000-8000-000000000099",
+          payload: {
+            connectorId: input.connectorId,
+            idTag: input.idTag,
+            meterStartWh: input.meterStartWh ?? 0,
+          },
         });
       }
       return result;
@@ -1774,7 +1786,11 @@ describe("chargingPoint management API", () => {
   test("starts a transaction on a running connector without prior authorize", async () => {
     const database = await createTestDatabase();
     const actor = createActorDouble({
-      startTransactionResults: [{ status: "accepted", transactionId: "1001" }],
+      startTransactionResults: [{
+        status: "accepted",
+        transactionId: "1001",
+        deliveryStatus: "pending",
+      }],
     });
     const app = createApp({
       database,
@@ -1826,6 +1842,7 @@ describe("chargingPoint management API", () => {
       idTag: "CARD001",
       status: "accepted",
       transactionId: "1001",
+      deliveryStatus: "pending",
     });
     expect(actor.authorizeInputs).toEqual([]);
     expect(actor.startTransactionInputs).toEqual([
@@ -1912,6 +1929,7 @@ describe("chargingPoint management API", () => {
           transactionId: "1001",
           meterStopWh: 100,
           stoppedAt,
+          deliveryStatus: "pending",
         },
       ],
     });
@@ -1966,6 +1984,7 @@ describe("chargingPoint management API", () => {
       transactionId: "1001",
       meterStopWh: 100,
       stoppedAt: "2026-07-01T00:00:00.000Z",
+      deliveryStatus: "pending",
     });
     expect(actor.stopTransactionInputs).toEqual([
       {
@@ -2638,6 +2657,7 @@ function createActorDouble(
       const result = startTransactionResults.shift() ?? {
         status: "accepted",
         transactionId: "1001",
+        deliveryStatus: "pending",
       };
       if (result.status === "accepted") {
         transactionResources.set(result.transactionId, {
@@ -2663,6 +2683,7 @@ function createActorDouble(
         transactionId: input.transactionId,
         meterStopWh: input.meterStopWh ?? 0,
         stoppedAt: new Date("2026-07-01T00:00:00.000Z"),
+        deliveryStatus: "pending",
       };
     },
     async changeConfiguration(input: ChargingPointActorChangeConfigurationInput) {
@@ -2728,6 +2749,13 @@ function expectedRuntimeSnapshot(
     connectorStatuses: [],
     connectorAvailabilities: [],
     transactionStatuses: [],
+    transactionDeliverySummary: {
+      pendingCount: 0,
+      inFlightCount: 0,
+      retryWaitCount: 0,
+      failedCount: 0,
+      oldestPendingAt: null,
+    },
     lastHeartbeatAt: null,
     recentIssue: null,
   };

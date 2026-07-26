@@ -69,6 +69,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -83,6 +84,14 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   type ConnectorCardAction,
   type ConnectorCardModel,
@@ -108,6 +117,7 @@ import {
 } from "@/features/charging-points/model/chargingPointObservationFilters";
 import type { ChargingPointObservationWorkbench } from "@/features/charging-points/model/chargingPointWorkbench";
 import { useChargingPointWorkbench } from "@/features/charging-points/model/useChargingPointWorkbench";
+import { useTransactionDeliveries } from "@/features/charging-points/model/useTransactionDeliveries";
 import { ChargingPointConnectorEditDialog } from "@/features/charging-points/ui/ChargingPointConnectorEditDialog";
 import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingPointEditDialog";
 import { cn } from "@/lib/utils";
@@ -219,6 +229,7 @@ export function ChargingPointDetailPage() {
         ))}
       </section>
       <RuntimeObservationTabs
+        chargingPointId={chargingPointId}
         observation={observation}
       />
       <ChargingPointEditDialog
@@ -681,12 +692,15 @@ function getEnergyChartDomain(samples: ChargingSamplePoint[]) {
 }
 
 function RuntimeObservationTabs({
+  chargingPointId,
   observation,
 }: {
+  chargingPointId: string;
   observation: ChargingPointObservationWorkbench;
 }) {
   const [activeObservationTab, setActiveObservationTab] =
     useState<RuntimeObservationTab>("messages");
+  const transactionDeliveries = useTransactionDeliveries(chargingPointId);
   const {
     events,
     eventHistory,
@@ -794,21 +808,24 @@ function RuntimeObservationTabs({
           <TabsList>
             <TabsTrigger value="messages">报文</TabsTrigger>
             <TabsTrigger value="events">事件</TabsTrigger>
+            <TabsTrigger value="deliveries">交易交付</TabsTrigger>
           </TabsList>
-          <RuntimeObservationToolbar
-            disabled={activeListLength === 0}
-            directionFilter={activeObservationTab === "messages"
-              ? messageDirectionFilter
-              : undefined}
-            timeFilter={activeTimeFilter}
-            typeFilter={activeTypeFilter}
-            typeOptions={activeTypeOptions}
-            onDirectionFilterChange={activeObservationTab === "messages"
-              ? setMessageDirectionFilter
-              : undefined}
-            onTimeFilterChange={handleActiveTimeFilterChange}
-            onTypeFilterChange={handleActiveTypeFilterChange}
-          />
+          {activeObservationTab !== "deliveries" && (
+            <RuntimeObservationToolbar
+              disabled={activeListLength === 0}
+              directionFilter={activeObservationTab === "messages"
+                ? messageDirectionFilter
+                : undefined}
+              timeFilter={activeTimeFilter}
+              typeFilter={activeTypeFilter}
+              typeOptions={activeTypeOptions}
+              onDirectionFilterChange={activeObservationTab === "messages"
+                ? setMessageDirectionFilter
+                : undefined}
+              onTimeFilterChange={handleActiveTimeFilterChange}
+              onTypeFilterChange={handleActiveTypeFilterChange}
+            />
+          )}
         </div>
         <TabsContent className="mt-3" value="messages">
           <ProtocolMessageList
@@ -830,12 +847,168 @@ function RuntimeObservationTabs({
             onLoadMore={eventHistory.loadMore}
           />
         </TabsContent>
+        <TabsContent className="mt-3" value="deliveries">
+          <TransactionDeliveryPanel delivery={transactionDeliveries} />
+        </TabsContent>
       </Tabs>
     </section>
   );
 }
 
-type RuntimeObservationTab = "messages" | "events";
+type RuntimeObservationTab = "messages" | "events" | "deliveries";
+
+function TransactionDeliveryPanel({
+  delivery,
+}: {
+  delivery: ReturnType<typeof useTransactionDeliveries>;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Select
+          value={delivery.statusFilter}
+          onValueChange={(value) =>
+            delivery.setStatusFilter(value as typeof delivery.statusFilter)}
+        >
+          <SelectTrigger aria-label="交付状态筛选" size="sm">
+            <SelectValue placeholder="交付状态" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="pending">待交付</SelectItem>
+              <SelectItem value="in_flight">发送中</SelectItem>
+              <SelectItem value="retry_wait">等待重试</SelectItem>
+              <SelectItem value="delivered">已交付</SelectItem>
+              <SelectItem value="failed">最终失败</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select
+          value={delivery.messageTypeFilter}
+          onValueChange={(value) =>
+            delivery.setMessageTypeFilter(
+              value as typeof delivery.messageTypeFilter,
+            )}
+        >
+          <SelectTrigger aria-label="交易消息类型筛选" size="sm">
+            <SelectValue placeholder="消息类型" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部消息</SelectItem>
+              <SelectItem value="start">开始</SelectItem>
+              <SelectItem value="meter_value">采样</SelectItem>
+              <SelectItem value="stop">停止</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+      {delivery.loading ? (
+        <div className="flex flex-col gap-2" aria-label="交易交付记录加载中">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      ) : delivery.error ? (
+        <p className="py-6 text-center text-sm text-destructive">
+          交易交付记录加载失败
+        </p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>序号</TableHead>
+              <TableHead>消息</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>尝试</TableHead>
+              <TableHead>本地交易</TableHead>
+              <TableHead>CSMS 交易</TableHead>
+              <TableHead>发生时间</TableHead>
+              <TableHead>重试 / 最近错误</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {delivery.items.length === 0 ? (
+              <TableRow>
+                <TableCell className="h-24 text-center text-muted-foreground" colSpan={8}>
+                  暂无匹配的交易交付记录
+                </TableCell>
+              </TableRow>
+            ) : delivery.items.map((item) => (
+              <TableRow key={item.messageId}>
+                <TableCell>{item.deliverySequence}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col gap-1">
+                    <span>{formatDeliveryMessageType(item.messageType)}</span>
+                    <span className="font-mono text-xs text-muted-foreground" title={item.messageId}>
+                      {item.messageId.slice(0, 8)}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <TransactionDeliveryStatusBadge status={item.status} />
+                </TableCell>
+                <TableCell>{item.attemptCount}</TableCell>
+                <TableCell>{item.transactionId}</TableCell>
+                <TableCell>{item.ocppTransactionId ?? "—"}</TableCell>
+                <TableCell>{formatLogTime(item.occurredAt)}</TableCell>
+                <TableCell>
+                  {item.nextAttemptAt !== null
+                    ? `重试 ${formatLogTime(item.nextAttemptAt)}`
+                    : item.lastError === null
+                      ? "—"
+                      : `${item.lastError.code}: ${item.lastError.message}`}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+      {delivery.hasMore && (
+        <div className="flex justify-center">
+          <Button
+            disabled={delivery.loadingMore}
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={delivery.loadMore}
+          >
+            {delivery.loadingMore ? "加载中" : "加载更早记录"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TransactionDeliveryStatusBadge({
+  status,
+}: {
+  status: ReturnType<typeof useTransactionDeliveries>["items"][number]["status"];
+}) {
+  const presentation = {
+    pending: { label: "待交付", variant: "secondary" },
+    in_flight: { label: "发送中", variant: "default" },
+    retry_wait: { label: "等待重试", variant: "outline" },
+    delivered: { label: "已交付", variant: "secondary" },
+    failed: { label: "最终失败", variant: "destructive" },
+  }[status] as {
+    label: string;
+    variant: "default" | "secondary" | "outline" | "destructive";
+  };
+  return <Badge variant={presentation.variant}>{presentation.label}</Badge>;
+}
+
+function formatDeliveryMessageType(
+  messageType: ReturnType<typeof useTransactionDeliveries>["items"][number]["messageType"],
+) {
+  return {
+    start: "StartTransaction",
+    meter_value: "MeterValues",
+    stop: "StopTransaction",
+  }[messageType];
+}
 
 function RuntimeObservationToolbar({
   disabled,

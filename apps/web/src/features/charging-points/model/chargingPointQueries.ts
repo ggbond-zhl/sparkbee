@@ -6,6 +6,7 @@ import {
 import type {
   ListProtocolEventsQuery,
   ListProtocolMessagesQuery,
+  ListTransactionDeliveriesQuery,
 } from "@spark-bee/contracts";
 
 import {
@@ -16,6 +17,7 @@ import {
   listChargingPoints,
   listProtocolEvents,
   listProtocolMessages,
+  listTransactionDeliveries,
   listProtocolConfiguration,
   type ListChargingPointsInput,
 } from "@/features/charging-points/api/chargingPoints";
@@ -148,6 +150,27 @@ export function protocolEventsInfiniteQueryOptions(
   return infiniteQueryOptions({
     queryKey: ["charging-points", id, "protocol-events", filters] as const,
     queryFn: ({ pageParam }) => listProtocolEvents(id, {
+      ...filters,
+      limit: 200,
+      ...(pageParam === null ? {} : { before: pageParam }),
+    }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.previousCursor ?? undefined,
+  });
+}
+
+type TransactionDeliveryHistoryFilters = Omit<
+  ListTransactionDeliveriesQuery,
+  "before" | "limit"
+>;
+
+export function transactionDeliveriesInfiniteQueryOptions(
+  id: string,
+  filters: TransactionDeliveryHistoryFilters = {},
+) {
+  return infiniteQueryOptions({
+    queryKey: ["charging-points", id, "transaction-deliveries", filters] as const,
+    queryFn: ({ pageParam }) => listTransactionDeliveries(id, {
       ...filters,
       limit: 200,
       ...(pageParam === null ? {} : { before: pageParam }),

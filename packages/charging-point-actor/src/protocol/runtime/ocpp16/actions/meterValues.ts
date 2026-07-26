@@ -6,7 +6,6 @@ import { emitTransactionMeterValue } from "../events";
 import { requireOcppConnectorId } from "../resourceAccess";
 import { requireConnectorSelection } from "../connectorSelection";
 import { traceOcpp16RuntimeOperation } from "../actorLogs";
-import { getUnexpectedResponseFields, toRequestErrorInfo } from "../requestErrors";
 import type { Ocpp16RuntimeContext } from "../state";
 import type {
   Ocpp16MeterValueInput,
@@ -14,12 +13,10 @@ import type {
 } from "../types";
 import {
   calculateNextMeterWh,
-  isOfflineDeliveryError,
   prepareMeterValueDelivery,
-  recordMeterValueForOfflineDelivery,
   resolveConnectorMeasurements,
-  shouldQueueTransactionDelivery,
 } from "../transactionDeliveryState";
+import { emitTransactionDeliveryChanged } from "../transactionDeliveryEvents";
 
 type MeterValueReadingContext = "Sample.Periodic" | "Trigger";
 
@@ -40,7 +37,6 @@ export async function reportMeterValue(
     }),
   );
 }
-
 export async function reportTriggeredMeterValue(
   context: Ocpp16RuntimeContext,
   input: {
@@ -96,19 +92,29 @@ async function reportMeterValueWithContext(
   const at = input.sampledAt ?? context.clock();
   const previousTransaction = context.transactions.get(input.transactionId);
   const {
-    binding: deliveryBinding,
     measurements,
     transaction: updatedTransaction,
   } = prepareMeterValueDelivery(context, input);
+  const connectorId = requireOcppConnectorId(context, updatedTransaction);
   try {
-    await context.transactionStore.saveSample({
+    const deliveryRecord = await context.transactionStore.recordSample({
+      sampleId: context.messageIdGenerator(),
       transactionId: updatedTransaction.id,
       sampledAt: at,
       meterWh: input.meterWh,
       powerW: measurements.powerW,
       currentA: measurements.currentA,
       voltageV: measurements.voltageV,
+      messageId: context.messageIdGenerator(),
+      payload: {
+        connectorId,
+        meterWh: input.meterWh,
+        powerW: measurements.powerW,
+        currentA: measurements.currentA,
+        voltageV: measurements.voltageV,
+      },
     });
+    emitTransactionDeliveryChanged(context, deliveryRecord, null);
   } catch (error) {
     if (previousTransaction !== undefined) {
       context.transactions.set(previousTransaction.id, previousTransaction);
@@ -121,131 +127,27 @@ async function reportMeterValueWithContext(
     sampledAt: at,
     occurredAt: context.clock(),
   });
-  if (deliveryBinding.status === "offline") {
-    return recordMeterValueForOfflineDelivery(context, {
-      transaction: updatedTransaction,
-      ocppConnectorId: null,
-      ocppTransactionId: null,
-      meterWh: input.meterWh,
-      sampledAt: at,
-      measurements,
-    });
-  }
-
-  const ocppTransactionId = deliveryBinding.ocppTransactionId;
-  const connectorId = requireOcppConnectorId(context, updatedTransaction);
-  if (shouldQueueTransactionDelivery(context, input.transactionId)) {
-    return recordMeterValueForOfflineDelivery(context, {
-      transaction: updatedTransaction,
-      ocppConnectorId: connectorId,
-      ocppTransactionId,
-      meterWh: input.meterWh,
-      sampledAt: at,
-      measurements,
-    });
-  }
-
-  const sentAt = context.clock();
-
-  try {
-    const result = await context.session.request("MeterValues", {
-      connectorId,
-      transactionId: ocppTransactionId,
-      meterValue: [
-        createMeterValue(
-          input.meterWh,
-          at,
-          input.readingContext,
-          measurements,
-        ),
-      ],
-    } satisfies Ocpp16RequestOf<"MeterValues">);
-
-    if (result.kind === "error") {
-      return recordMeterValuesFailure(context, {
-        transactionId: input.transactionId,
-        connectorId,
-        ocppTransactionId,
-        meterWh: input.meterWh,
-        sampledAt: at,
-        sentAt,
-        errorCode: result.errorCode,
-        errorMessage: result.errorMessage,
-      });
-    }
-
-    return recordMeterValuesSuccess(context, {
-      transactionId: input.transactionId,
-      connectorId,
-      ocppTransactionId,
-      meterWh: input.meterWh,
-      measurements,
-      sampledAt: at,
-      sentAt,
-      payload: result.payload,
-    });
-  } catch (cause) {
-    if (isOfflineDeliveryError(cause)) {
-      return recordMeterValueForOfflineDelivery(context, {
-        transaction: updatedTransaction,
-        ocppConnectorId: connectorId,
-        ocppTransactionId,
-        meterWh: input.meterWh,
-        sampledAt: at,
-        measurements,
-      });
-    }
-
-    return recordMeterValuesFailure(context, {
-      transactionId: input.transactionId,
-      connectorId,
-      ocppTransactionId,
-      meterWh: input.meterWh,
-      sampledAt: at,
-      sentAt,
-      ...toRequestErrorInfo(cause),
-    });
-  }
-}
-function recordMeterValuesSuccess(
-  context: Ocpp16RuntimeContext,
-  input: {
-    transactionId: string;
-    connectorId: number;
-    ocppTransactionId: number;
-    meterWh: number;
-    measurements: {
-      powerW: number;
-      currentA: number;
-      voltageV: number;
-    };
-    sampledAt: Date;
-    sentAt: Date;
-    payload: unknown;
-  },
-): Extract<Ocpp16MeterValuesResult, { outcome: "Accepted" }> {
-  const receivedAt = context.clock();
-  const unexpectedResponseFields = getUnexpectedResponseFields(input.payload);
-
   return {
     outcome: "Accepted",
     transactionId: input.transactionId,
-    connectorId: input.connectorId,
-    ocppTransactionId: input.ocppTransactionId,
+    connectorId,
+    ocppTransactionId:
+      context.ocppTransactionIds.get(input.transactionId) ?? null,
     meterWh: input.meterWh,
-    powerW: input.measurements.powerW,
-    currentA: input.measurements.currentA,
-    voltageV: input.measurements.voltageV,
-    sampledAt: cloneDate(input.sampledAt),
-    sentAt: cloneDate(input.sentAt),
-    receivedAt,
-    unexpectedResponseFields,
+    powerW: measurements.powerW,
+    currentA: measurements.currentA,
+    voltageV: measurements.voltageV,
+    sampledAt: cloneDate(at),
+    sentAt: cloneDate(at),
+    receivedAt: cloneDate(at),
+    unexpectedResponseFields: [],
     consecutiveFailures: 0,
-    platformCommunicationStatus: "online",
+    platformCommunicationStatus: context.session.isConnected()
+      ? "online"
+      : "offline",
     shouldReconnect: false,
   };
 }
-
 function emitPersistedMeterValue(
   context: Ocpp16RuntimeContext,
   transaction: Transaction,
@@ -350,14 +252,17 @@ async function reportPeriodicMeterValue(
   loop.isReporting = true;
   try {
     const sampledAt = context.clock();
-    await reportMeterValue(context, {
-        transactionId,
-        meterWh: calculateNextMeterWh(context, {
-          transaction,
-          intervalSec: loop.intervalSec,
+    const result = await reportMeterValue(context, {
+      transactionId,
+      meterWh: calculateNextMeterWh(context, {
+        transaction,
+        intervalSec: loop.intervalSec,
       }),
       sampledAt,
     });
+    if (result.outcome === "Accepted") {
+      context.wakeTransactionDelivery();
+    }
   } catch {
     // 周期 MeterValues 失败不改变交易状态，等待下一周期继续尝试。
   } finally {
@@ -376,36 +281,4 @@ function unrefTimer(timerId: ReturnType<typeof setInterval>): void {
   ) {
     (timerId as { unref(): void }).unref();
   }
-}
-
-function recordMeterValuesFailure(
-  context: Ocpp16RuntimeContext,
-  input: {
-    transactionId: string;
-    connectorId: number;
-    ocppTransactionId: number;
-    meterWh: number;
-    sampledAt: Date;
-    sentAt: Date;
-    errorCode: string;
-    errorMessage: string;
-  },
-): Extract<Ocpp16MeterValuesResult, { outcome: "Failed" }> {
-  const failedAt = context.clock();
-
-  return {
-    outcome: "Failed",
-    transactionId: input.transactionId,
-    connectorId: input.connectorId,
-    ocppTransactionId: input.ocppTransactionId,
-    meterWh: input.meterWh,
-    sampledAt: cloneDate(input.sampledAt),
-    sentAt: cloneDate(input.sentAt),
-    failedAt,
-    errorCode: input.errorCode,
-    errorMessage: input.errorMessage,
-    consecutiveFailures: 1,
-    platformCommunicationStatus: "unknown",
-    shouldReconnect: false,
-  };
 }

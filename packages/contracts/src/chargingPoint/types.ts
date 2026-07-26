@@ -27,6 +27,7 @@ import type {
   protocolConfigurationListResponseSchema,
   updateProtocolConfigurationRequestSchema,
   updateProtocolConfigurationResponseSchema,
+  transactionDeliveryStatusSchema,
 } from "./schemas";
 
 export type CreateChargingPointRequest = z.infer<typeof createChargingPointRequestSchema>;
@@ -54,6 +55,9 @@ export type RuntimeStopTransactionRequest = z.infer<
 >;
 export type RuntimeStopTransactionResponse = z.infer<
   typeof runtimeStopTransactionResponseSchema
+>;
+export type TransactionDeliveryStatus = z.infer<
+  typeof transactionDeliveryStatusSchema
 >;
 export type ChargingSampleResponse = z.infer<typeof chargingSampleResponseSchema>;
 export type ActiveTransactionChargingSamples = z.infer<

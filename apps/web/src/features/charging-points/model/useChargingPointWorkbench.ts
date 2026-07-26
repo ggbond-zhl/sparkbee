@@ -100,7 +100,7 @@ export function useChargingPointWorkbench(
       authorizeAndStartConnectorTransaction(chargingPointId, connectorId, { idTag }),
     onSuccess: (result) => {
       if (result.status === "accepted") {
-        toast.success("充电已启动");
+        toast.success("启动已本地提交，等待 CSMS 交付");
         void queryClient.invalidateQueries({
           queryKey: activeTransactionSamplesQueryKey(chargingPointId),
         });
@@ -123,7 +123,7 @@ export function useChargingPointWorkbench(
     }) => stopConnectorTransaction(chargingPointId, connectorId, { transactionId }),
     onSuccess: (result) => {
       if (result.status === "accepted") {
-        toast.success("充电已停止");
+        toast.success("停止已本地提交，等待 CSMS 交付");
         queryClient.setQueryData<ActiveTransactionSamplesResponse>(
           activeTransactionSamplesQueryKey(chargingPointId),
           (current) => ({

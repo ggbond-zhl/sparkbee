@@ -20,6 +20,7 @@ import { buildValidationMessage, runValidation } from "./validation";
 type QueuedOutboundRequest = {
   action: string;
   payload: unknown;
+  messageId?: string;
   deferred: Deferred<OutboundRequestResult>;
 };
 
@@ -59,7 +60,11 @@ export class OutboundRequestCoordinator {
     this.pendingOutboundRequests = new PendingOutboundRequestRegistry();
   }
 
-  request(action: string, payload: unknown): Promise<OutboundRequestResult> {
+  request(
+    action: string,
+    payload: unknown,
+    options: { messageId?: string } = {},
+  ): Promise<OutboundRequestResult> {
     if (!this.options.isConnected()) {
       return Promise.reject(this.createRequestRejectedError());
     }
@@ -70,10 +75,10 @@ export class OutboundRequestCoordinator {
     }
 
     if (this.options.outboundRequestPolicy === "serial") {
-      return this.enqueue(action, payload);
+      return this.enqueue(action, payload, options.messageId);
     }
 
-    return this.dispatch(action, payload);
+    return this.dispatch(action, payload, options.messageId);
   }
 
   handleInboundReply(message: ResponseMessage | ErrorMessage): void {
@@ -136,12 +141,21 @@ export class OutboundRequestCoordinator {
   private dispatch(
     action: string,
     payload: unknown,
+    messageId?: string,
   ): Promise<OutboundRequestResult> {
     if (!this.options.isConnected()) {
       return Promise.reject(this.createRequestAbortedError());
     }
 
-    const message = this.createOutboundRequestMessage(action, payload);
+    const message = this.createOutboundRequestMessage(action, payload, messageId);
+    if (this.pendingOutboundRequests.has(message.messageId)) {
+      return Promise.reject(
+        new SessionError(
+          "OUTBOUND_REQUEST_MESSAGE_ID_CONFLICT",
+          `出站请求 messageId ${message.messageId} 正在等待响应`,
+        ),
+      );
+    }
 
     let rawMessage: RawMessage;
     try {
@@ -161,10 +175,14 @@ export class OutboundRequestCoordinator {
     return outboundRequestPromise;
   }
 
-  private enqueue(action: string, payload: unknown): Promise<OutboundRequestResult> {
+  private enqueue(
+    action: string,
+    payload: unknown,
+    messageId?: string,
+  ): Promise<OutboundRequestResult> {
     const deferred = createDeferred<OutboundRequestResult>();
     void deferred.promise.catch(() => {});
-    this.outboundRequestQueue.push({ action, payload, deferred });
+    this.outboundRequestQueue.push({ action, payload, messageId, deferred });
     this.processQueue();
     return deferred.promise;
   }
@@ -184,7 +202,11 @@ export class OutboundRequestCoordinator {
     }
 
     this.outboundRequestInFlight = true;
-    this.dispatch(nextOutboundRequest.action, nextOutboundRequest.payload)
+    this.dispatch(
+      nextOutboundRequest.action,
+      nextOutboundRequest.payload,
+      nextOutboundRequest.messageId,
+    )
       .then(
         nextOutboundRequest.deferred.resolve,
         nextOutboundRequest.deferred.reject,
@@ -269,8 +291,11 @@ export class OutboundRequestCoordinator {
     );
   }
 
-  private createOutboundRequestMessage(action: string, payload: unknown) {
-    const messageId = this.createMessageId();
+  private createOutboundRequestMessage(
+    action: string,
+    payload: unknown,
+    messageId = this.createMessageId(),
+  ) {
 
     return {
       kind: "request" as const,

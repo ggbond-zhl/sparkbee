@@ -144,11 +144,25 @@ export class Ocpp16ChargingPointActor implements ChargingPointActor {
       );
     }
 
-    if (!this.transactionsRestored) {
-      await this.ocpp16Runtime.restorePersistedTransactions();
-      this.transactionsRestored = true;
-    }
     this.transitionChargingPointActorStatus("starting");
+    if (!this.transactionsRestored) {
+      try {
+        await this.ocpp16Runtime.restorePersistedAuthorization();
+        await this.ocpp16Runtime.restorePersistedTransactions();
+        this.transactionsRestored = true;
+      } catch (cause) {
+        const error = new ChargingPointActorError(
+          "CHARGING_POINT_ACTOR_START_FAILED",
+          cause instanceof Error ? cause.message : "恢复持久运行状态失败",
+          cause,
+        );
+        this.transitionChargingPointActorStatus("stopped", {
+          code: error.code,
+          message: error.message,
+        });
+        throw error;
+      }
+    }
     return this.startupLifecycle.start();
   }
 

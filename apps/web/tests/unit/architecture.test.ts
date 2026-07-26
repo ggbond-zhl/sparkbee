@@ -459,6 +459,12 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain(
       '<TabsTrigger value="events">事件</TabsTrigger>',
     );
+    expect(detailPageSource).toContain(
+      '<TabsTrigger value="deliveries">交易交付</TabsTrigger>',
+    );
+    expect(detailPageSource).toContain("<TransactionDeliveryStatusBadge");
+    expect(detailPageSource).not.toContain("删除交付记录");
+    expect(detailPageSource).not.toContain("跳过交付记录");
     expect(detailPageSource).not.toContain("filteredProtocolMessages.length}");
     expect(detailPageSource).not.toContain("filteredEvents.length}");
     expect(workbenchModelSource).toContain("capacity: number");

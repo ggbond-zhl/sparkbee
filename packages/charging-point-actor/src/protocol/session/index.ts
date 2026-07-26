@@ -107,8 +107,12 @@ export class ChargingPointSession implements ISession {
     return this.connection.isConnected();
   }
 
-  request(action: string, payload: unknown): Promise<OutboundRequestResult> {
-    return this.outboundRequestCoordinator.request(action, payload);
+  request(
+    action: string,
+    payload: unknown,
+    options: { messageId?: string } = {},
+  ): Promise<OutboundRequestResult> {
+    return this.outboundRequestCoordinator.request(action, payload, options);
   }
 
   on<K extends keyof SessionEvents>(

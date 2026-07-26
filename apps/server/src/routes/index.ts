@@ -18,6 +18,7 @@ import { createActorLogRoute } from "../modules/actorLog/actorLog.route";
 import { createProtocolObservationRoute } from "../modules/protocolObservation/protocolObservation.route";
 import { createProtocolConfigurationRoute } from "../modules/protocolConfiguration/protocolConfiguration.route";
 import { ChargingTransactionRepository } from "../modules/chargingTransaction/chargingTransaction.repo";
+import { createTransactionDeliveryRoute } from "../modules/transactionDelivery/transactionDelivery.route";
 import { createHealthRoute } from "./health.route";
 
 export interface RouteDependencies {
@@ -95,6 +96,10 @@ export function createRoutes(dependencies: RouteDependencies = {}) {
       createProtocolConfigurationRoute(dependencies.database, {
         chargingPointActorHost,
       }),
+    );
+    routes.route(
+      "/charging-points",
+      createTransactionDeliveryRoute(dependencies.database),
     );
   }
 

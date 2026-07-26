@@ -226,6 +226,18 @@ export const runtimeTransactionStatusSchema = z.enum([
   "failed",
 ]);
 
+export const transactionDeliveryStatusSchema = z
+  .enum(["pending", "in_flight", "retry_wait", "delivered", "failed"])
+  .describe("交易消息当前的交付状态。");
+
+export const transactionDeliverySummarySchema = z.object({
+  pendingCount: z.number().int().nonnegative().describe("等待发送的交易消息数量。"),
+  inFlightCount: z.number().int().nonnegative().describe("正在等待响应的交易消息数量。"),
+  retryWaitCount: z.number().int().nonnegative().describe("等待重试的交易消息数量。"),
+  failedCount: z.number().int().nonnegative().describe("保留期内交付失败的交易消息数量。"),
+  oldestPendingAt: z.iso.datetime().nullable().describe("最早待交付消息的发生时间；没有积压时为 null。"),
+});
+
 export const runtimeSnapshotResponseSchema = z.object({
   chargingPointId: z.string().uuid().describe("桩实例的 UUID 主键。"),
   runtimeStatus: runtimeOperationResponseSchema.describe(
@@ -310,6 +322,9 @@ export const runtimeSnapshotResponseSchema = z.object({
       }),
     )
     .describe("按交易汇总的当前运行状态。"),
+  transactionDeliverySummary: transactionDeliverySummarySchema.describe(
+    "桩实例当前的交易交付队列摘要。",
+  ),
   lastHeartbeatAt: z
     .string()
     .datetime()
@@ -395,6 +410,9 @@ export const runtimeStartTransactionResponseSchema = z.discriminatedUnion("statu
     status: z.literal("accepted").describe("交易已开始。"),
     transactionId: z.string().describe("SparkBee 记录的交易 ID。"),
     idTag: z.string().describe("本次开始交易使用的 idTag。"),
+    deliveryStatus: transactionDeliveryStatusSchema.describe(
+      "StartTransaction 当前的交付状态。",
+    ),
   }),
   runtimeConnectorOperationResponseBaseSchema.extend({
     status: z.literal("rejected").describe("开始交易被拒绝。"),
@@ -436,6 +454,9 @@ export const runtimeStopTransactionResponseSchema = z.discriminatedUnion("status
     transactionId: z.string().describe("SparkBee 记录的交易 ID。"),
     meterStopWh: z.number().int().nonnegative().describe("停止交易时的电表读数，单位 Wh。"),
     stoppedAt: z.string().datetime().describe("交易停止时间。"),
+    deliveryStatus: transactionDeliveryStatusSchema.describe(
+      "StopTransaction 当前的交付状态。",
+    ),
   }),
   runtimeConnectorOperationResponseBaseSchema.extend({
     status: z.literal("failed").describe("停止交易请求发送或处理失败。"),

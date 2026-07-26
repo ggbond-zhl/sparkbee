@@ -15,6 +15,7 @@ import {
   normalizePositiveInteger,
 } from "./constants";
 import type {
+  ChargingPointActorAuthorizationStore,
   ChargingPointActorTransactionStore,
 } from "../../../chargingPointActor/types";
 import type {
@@ -28,8 +29,7 @@ import { ConfigurationStore } from "./ConfigurationStore/index";
 import { Ocpp16ConfigurationFacts } from "./Ocpp16ConfigurationFacts";
 import { ProtocolRuntimeError } from "./errors";
 import { createProtocolClock } from "./protocolClock";
-import { MemoryOfflineTransactionOutbox } from "./OfflineTransactionOutbox";
-import type { OfflineTransactionOutbox } from "./OfflineTransactionOutbox";
+import { MemoryTransactionDeliveryStore } from "./MemoryTransactionDeliveryStore";
 
 export interface Ocpp16RuntimeThresholds {
   heartbeatUnstableThreshold: number;
@@ -46,6 +46,7 @@ export interface Ocpp16RuntimeContext {
   isProtocolClockSynced: () => boolean;
   syncProtocolClock: (currentTime: Date) => void;
   idGenerator: () => string;
+  messageIdGenerator: () => string;
   emitRuntimeEvent: (event: Ocpp16RuntimeEvent) => void;
   emitActorLog: (actorLog: Ocpp16ActorLog) => void;
   nextActorLogOperationId: () => string;
@@ -60,9 +61,9 @@ export interface Ocpp16RuntimeContext {
   authorizationAttemptSequences: Map<string, number>;
   transactions: Map<string, Transaction>;
   ocppTransactionIds: Map<string, number>;
-  offlineTransactionOutbox: OfflineTransactionOutbox;
   transactionStore: ChargingPointActorTransactionStore;
-  offlineTransactionReplayInProgress: boolean;
+  authorizationStore: ChargingPointActorAuthorizationStore;
+  wakeTransactionDelivery: () => void;
   heartbeatTimerId: ReturnType<typeof setInterval> | null;
   heartbeatLoopOptions: Ocpp16HeartbeatLoopOptions | null;
   meterValueLoops: Map<string, {
@@ -114,6 +115,7 @@ export function createOcpp16RuntimeContext(
     isProtocolClockSynced: () => protocolClock.isSynced(),
     syncProtocolClock: (currentTime) => protocolClock.sync(currentTime),
     idGenerator: options.idGenerator ?? randomUUID,
+    messageIdGenerator: options.messageIdGenerator ?? randomUUID,
     emitRuntimeEvent,
     emitActorLog: options.emitActorLog ?? (() => undefined),
     nextActorLogOperationId: () => {
@@ -131,22 +133,22 @@ export function createOcpp16RuntimeContext(
     authorizationAttemptSequences,
     transactions,
     ocppTransactionIds,
-    offlineTransactionOutbox:
-      options.offlineTransactionOutbox ?? new MemoryOfflineTransactionOutbox(),
-    transactionStore: options.transactionStore ?? createNoopTransactionStore(),
-    offlineTransactionReplayInProgress: false,
+    transactionStore: options.transactionStore ?? new MemoryTransactionDeliveryStore(),
+    authorizationStore:
+      options.authorizationStore ?? createNoopAuthorizationStore(),
+    wakeTransactionDelivery: () => undefined,
     heartbeatTimerId: null,
     heartbeatLoopOptions: null,
     meterValueLoops,
   };
 }
 
-function createNoopTransactionStore(): ChargingPointActorTransactionStore {
+function createNoopAuthorizationStore(): ChargingPointActorAuthorizationStore {
   return {
-    loadActive: async () => [],
-    saveStarted: async () => undefined,
-    saveSample: async () => undefined,
-    saveEnded: async () => undefined,
+    load: async () => ({ localList: null, cacheEntries: [] }),
+    replaceLocalList: async () => undefined,
+    upsertCacheEntry: async () => undefined,
+    clearCache: async () => undefined,
   };
 }
 

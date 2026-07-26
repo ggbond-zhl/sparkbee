@@ -7,7 +7,7 @@ export async function handleClearCache(
   context: Ocpp16RuntimeContext,
   request: InboundRequest,
 ): Promise<void> {
-  getOcpp16AuthorizationPolicy(context).clearCache();
+  await getOcpp16AuthorizationPolicy(context).clearCache();
 
   await request.respond({
     status: "Accepted",

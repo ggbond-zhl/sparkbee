@@ -27,6 +27,8 @@ import type { ChargingPointStreamEvent } from "../../lib/chargingPointEventStrea
 import { AppError } from "../../utils/errors";
 import { RuntimeOperationRepository } from "./runtimeOperation.repo";
 import { ChargingTransactionRepository } from "../chargingTransaction/chargingTransaction.repo";
+import { AuthorizationRepository } from "../authorization/authorization.repo";
+import { TransactionDeliveryRepository } from "../transactionDelivery/transactionDelivery.repo";
 import {
   RuntimeOperationLifecycle,
   createProtocolConfigurationRuntime,
@@ -50,6 +52,8 @@ export function createRuntimeOperationService(
     new RuntimeOperationRepository(database),
     dependencies.chargingTransactionRepository ??
       new ChargingTransactionRepository(database),
+    new TransactionDeliveryRepository(database),
+    new AuthorizationRepository(database),
     createProtocolConfigurationRuntime(database),
     dependencies,
   );
@@ -62,6 +66,8 @@ export class RuntimeOperationService {
   constructor(
     private readonly repository: RuntimeOperationRepository,
     private readonly chargingTransactionRepository: ChargingTransactionRepository,
+    private readonly transactionDeliveryRepository: TransactionDeliveryRepository,
+    authorizationPersistenceRepository: AuthorizationRepository,
     protocolConfigurationRuntime: ReturnType<
       typeof createProtocolConfigurationRuntime
     >,
@@ -71,6 +77,8 @@ export class RuntimeOperationService {
     this.lifecycle = new RuntimeOperationLifecycle(
       repository,
       chargingTransactionRepository,
+      transactionDeliveryRepository,
+      authorizationPersistenceRepository,
       protocolConfigurationRuntime,
       {
         actorHost: this.actorHost,
@@ -95,8 +103,8 @@ export class RuntimeOperationService {
   async getRuntimeSnapshot(id: string): Promise<RuntimeSnapshotResponse> {
     await this.repository.getOperationDetail(id);
     const runtimeStatus = toRuntimeOperationResponse(id, this.actorHost.get(id));
-
-    return this.actorHost.getRuntimeSnapshot(id, runtimeStatus);
+    const snapshot = this.actorHost.getRuntimeSnapshot(id, runtimeStatus);
+    return this.withTransactionDeliverySummary(id, snapshot);
   }
 
   async getActiveTransactionSamples(
@@ -119,7 +127,18 @@ export class RuntimeOperationService {
   ): Promise<{ snapshot: RuntimeSnapshotResponse; unsubscribe: () => void }> {
     await this.repository.getOperationDetail(id);
     const runtimeStatus = toRuntimeOperationResponse(id, this.actorHost.get(id));
-    return this.actorHost.subscribeWithSnapshot(id, runtimeStatus, listener);
+    const subscription = this.actorHost.subscribeWithSnapshot(
+      id,
+      runtimeStatus,
+      listener,
+    );
+    return {
+      ...subscription,
+      snapshot: await this.withTransactionDeliverySummary(
+        id,
+        subscription.snapshot,
+      ),
+    };
   }
 
   async plug(
@@ -337,6 +356,7 @@ export class RuntimeOperationService {
         status: "accepted",
         transactionId: result.transactionId,
         idTag: input.idTag,
+        deliveryStatus: result.deliveryStatus,
       };
     }
 
@@ -364,6 +384,7 @@ export class RuntimeOperationService {
         transactionId: result.transactionId,
         meterStopWh: result.meterStopWh,
         stoppedAt: result.stoppedAt.toISOString(),
+        deliveryStatus: result.deliveryStatus,
       };
     }
 
@@ -458,6 +479,22 @@ export class RuntimeOperationService {
       "TRANSACTION_OPERATION_FAILED",
       "Transaction operation failed",
     );
+  }
+
+  private async withTransactionDeliverySummary(
+    chargingPointId: string,
+    snapshot: RuntimeSnapshotResponse,
+  ): Promise<RuntimeSnapshotResponse> {
+    const summary = await this.transactionDeliveryRepository.getSummary(
+      chargingPointId,
+    );
+    return {
+      ...snapshot,
+      transactionDeliverySummary: {
+        ...summary,
+        oldestPendingAt: summary.oldestPendingAt?.toISOString() ?? null,
+      },
+    };
   }
 
 }

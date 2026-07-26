@@ -5,12 +5,10 @@ import {
   getOcpp16AuthorizationPolicy,
 } from "../Ocpp16AuthorizationPolicy";
 import { toOcppDate } from "../payloadBuilders";
-import { releaseTransactionOnConnector } from "../resourceAccess";
 import {
   requireLocallyStartableConnector,
   requireStartableConnector,
 } from "../connectorSelection";
-import { mapConnectorFlowStatus } from "../mappings";
 import {
   emitAuthorizationStatus,
   emitTransactionStatus,
@@ -18,9 +16,9 @@ import {
 import { toRequestErrorInfo } from "../requestErrors";
 import { parseOptionalDate } from "../responseParsers";
 import type { Ocpp16RuntimeContext } from "../state";
-import { recordTransactionStart } from "../transactionDeliveryState";
+import { recordPersistedTransactionStart } from "../transactionDeliveryState";
+import { emitTransactionDeliveryChanged } from "../transactionDeliveryEvents";
 import { startMeterValueLoop } from "./meterValues";
-import { sendStatusNotification } from "./statusNotification";
 import type {
   Ocpp16StartTransactionCallResult,
   Ocpp16StartTransactionInput,
@@ -114,125 +112,14 @@ export async function startTransaction(
     }
   }
 
-  if (shouldUseOfflineAuthorization) {
-    return startOfflineTransaction(context, {
-      selection,
-      input,
-      at,
-      authorizationSource: offlineAuthorizationSource,
-    });
-  }
-
-  const startTransactionResult = await sendStartTransaction(context, {
-    connectorId: selection.ocppConnectorId,
-    idTag: input.idTag,
-    meterStartWh: input.meterStartWh,
-    reservationId: input.reservationId,
-    at,
-  });
-  authorizationPolicy.absorbStartTransactionResult({
-    evseId: selection.evseId,
-    result: startTransactionResult,
-  });
-  if (startTransactionResult.outcome !== "Failed") {
-    emitAuthorizationStatus(context, {
-      evseId: selection.evseId,
-      connectorId: selection.connectorId,
-      idTag: input.idTag,
-      authorizationStatus: startTransactionResult.authorizationStatus,
-      occurredAt: startTransactionResult.receivedAt,
-    });
-  }
-
-  if (startTransactionResult.outcome === "Failed") {
-    releaseTransactionOnConnector(context, selection, at);
-    emitTransactionStatus(context, {
-      evseId: selection.evseId,
-      connectorId: selection.connectorId,
-      previousStatus: null,
-      currentStatus: "rejected",
-      reason: "StartTransaction 请求失败",
-      error: {
-        code: startTransactionResult.errorCode,
-        message: startTransactionResult.errorMessage,
-      },
-      occurredAt: startTransactionResult.failedAt,
-    });
-    return {
-      status: "Rejected",
-      reason: "StartTransaction 请求失败",
-      startTransactionResult,
-      statusNotificationResults,
-    };
-  }
-
-  if (startTransactionResult.outcome === "Rejected") {
-    releaseTransactionOnConnector(context, selection, at);
-    const reason = mapStartTransactionRejectionReason(
-      startTransactionResult.authorizationStatus,
-    );
-    emitTransactionStatus(context, {
-      evseId: selection.evseId,
-      connectorId: selection.connectorId,
-      previousStatus: null,
-      currentStatus: "rejected",
-      reason,
-      occurredAt: startTransactionResult.receivedAt,
-    });
-    return {
-      status: "Rejected",
-      reason,
-      authorizationStatus: startTransactionResult.authorizationStatus,
-      startTransactionResult,
-      statusNotificationResults,
-    };
-  }
-
-  const transactionId = String(startTransactionResult.ocppTransactionId);
-  await context.transactionStore.saveStarted({
-    transactionId,
-    ocppTransactionId: startTransactionResult.ocppTransactionId,
-    evseId: selection.evseId,
-    connectorId: selection.connectorId,
-    idTag: input.idTag,
-    state: "active",
-    chargingState: "charging",
-    meterStartWh: input.meterStartWh,
-    latestMeterWh: input.meterStartWh,
-    startedAt: at,
-  });
-  recordTransactionStart(context, {
-    mode: "online",
+  return startPersistedTransaction(context, {
     selection,
-    startInput: input,
-    ocppTransactionId: startTransactionResult.ocppTransactionId,
-    startedAt: at,
-  });
-  statusNotificationResults.push(await sendStatusNotification(context, {
-    connectorId: selection.ocppConnectorId,
-    status: mapConnectorFlowStatus("charging"),
+    input,
     at,
-  }));
-  emitTransactionStatus(context, {
-    evseId: selection.evseId,
-    connectorId: selection.connectorId,
-    transactionId,
-    previousStatus: null,
-    currentStatus: "active",
-    occurredAt: at,
+    authorizationSource: offlineAuthorizationSource,
   });
-  startMeterValueLoop(context, transactionId);
-
-  return {
-    status: "Accepted",
-    transactionId,
-    ocppTransactionId: startTransactionResult.ocppTransactionId,
-    startTransactionResult,
-    statusNotificationResults,
-  };
 }
-
-async function startOfflineTransaction(
+async function startPersistedTransaction(
   context: Ocpp16RuntimeContext,
   input: {
     selection: ReturnType<typeof requireLocallyStartableConnector>;
@@ -242,24 +129,35 @@ async function startOfflineTransaction(
   },
 ): Promise<Ocpp16TransactionStartResult> {
   const transactionId = context.idGenerator();
-  await context.transactionStore.saveStarted({
-    transactionId,
-    evseId: input.selection.evseId,
-    connectorId: input.selection.connectorId,
-    idTag: input.input.idTag,
-    state: "active",
-    chargingState: "charging",
-    meterStartWh: input.input.meterStartWh,
-    latestMeterWh: input.input.meterStartWh,
-    startedAt: input.at,
+  const deliveryRecord = await context.transactionStore.start({
+    transaction: {
+      transactionId,
+      evseId: input.selection.evseId,
+      connectorId: input.selection.connectorId,
+      idTag: input.input.idTag,
+      state: "active",
+      chargingState: "charging",
+      meterStartWh: input.input.meterStartWh,
+      latestMeterWh: input.input.meterStartWh,
+      startedAt: input.at,
+    },
+    messageId: context.messageIdGenerator(),
+    payload: {
+      evseId: input.selection.evseId,
+      connectorId: input.selection.ocppConnectorId,
+      idTag: input.input.idTag,
+      meterStartWh: input.input.meterStartWh,
+      ...(input.input.reservationId === undefined
+        ? {}
+        : { reservationId: input.input.reservationId }),
+    },
   });
-  recordTransactionStart(context, {
-    mode: "offline",
+  emitTransactionDeliveryChanged(context, deliveryRecord, null);
+  recordPersistedTransactionStart(context, {
     transactionId,
     selection: input.selection,
     startInput: input.input,
     startedAt: input.at,
-    authorizationSource: input.authorizationSource,
   });
   startMeterValueLoop(context, transactionId);
   emitTransactionStatus(context, {
@@ -270,7 +168,6 @@ async function startOfflineTransaction(
     currentStatus: "active",
     occurredAt: input.at,
   });
-
   return {
     status: "Accepted",
     transactionId,
@@ -288,6 +185,7 @@ export async function sendStartTransaction(
     reservationId?: number;
     at: Date;
   },
+  options: { messageId?: string } = {},
 ): Promise<Ocpp16StartTransactionCallResult> {
   const sentAt = context.clock();
 
@@ -298,7 +196,7 @@ export async function sendStartTransaction(
       meterStart: input.meterStartWh,
       reservationId: input.reservationId,
       timestamp: toOcppDate(input.at),
-    } satisfies Ocpp16RequestOf<"StartTransaction">);
+    } satisfies Ocpp16RequestOf<"StartTransaction">, options);
 
     if (result.kind === "error") {
       return recordStartTransactionFailure(context, {
@@ -392,23 +290,4 @@ function recordStartTransactionFailure(
     platformCommunicationStatus: "unknown",
     shouldReconnect: false,
   };
-}
-
-function mapStartTransactionRejectionReason(
-  authorizationStatus: Exclude<
-    Ocpp16StartTransactionCallResult,
-    { outcome: "Accepted" | "Failed" }
-  >["authorizationStatus"],
-): string {
-  switch (authorizationStatus) {
-    case "Blocked":
-      return "卡被禁用";
-    case "Expired":
-      return "卡已过期";
-    case "ConcurrentTx":
-      return "已有并发交易";
-    case "Invalid":
-    default:
-      return "无效卡";
-  }
 }

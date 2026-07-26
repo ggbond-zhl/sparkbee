@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type {
   ActiveTransactionSamplesResponse,
@@ -7,11 +6,11 @@ import type {
 import type { ServerDatabase } from "../../db";
 import type {
   ChargingPointActorPersistedTransaction,
-  ChargingPointActorTransactionStore,
 } from "../../lib/chargingPointActor";
 import {
   chargingSamples,
   chargingTransactions,
+  transactionDeliveryMessages,
 } from "../../db/schema";
 
 export interface StartPersistedTransactionInput {
@@ -24,43 +23,8 @@ export interface StartPersistedTransactionInput {
   meterStartWh: number;
   startedAt: Date;
 }
-
 export class ChargingTransactionRepository {
   constructor(private readonly db: ServerDatabase) {}
-
-  forChargingPoint(chargingPointId: string): ChargingPointActorTransactionStore {
-    return {
-      loadActive: () => withPersistenceRetry(
-        () => this.loadActive(chargingPointId),
-      ),
-      saveStarted: (transaction) => withPersistenceRetry(() => this.start({
-        chargingPointId,
-        transactionId: transaction.transactionId,
-        ocppTransactionId: transaction.ocppTransactionId,
-        evseId: transaction.evseId,
-        connectorId: transaction.connectorId,
-        idTag: transaction.idTag,
-        meterStartWh: transaction.meterStartWh,
-        startedAt: transaction.startedAt,
-      })),
-      saveSample: (sample) => withPersistenceRetry(() =>
-        this.recordSample(chargingPointId, {
-          id: randomUUID(),
-          resource: { transactionId: sample.transactionId },
-          sampledAt: sample.sampledAt.toISOString(),
-          meterWh: sample.meterWh,
-          powerW: sample.powerW,
-          currentA: sample.currentA,
-          voltageV: sample.voltageV,
-        })),
-      saveEnded: (transaction) => withPersistenceRetry(() => this.end({
-        chargingPointId,
-        transactionId: transaction.transactionId,
-        meterStopWh: transaction.meterStopWh,
-        stoppedAt: transaction.stoppedAt,
-      })),
-    };
-  }
 
   async loadActive(
     chargingPointId: string,
@@ -287,6 +251,14 @@ export class ChargingTransactionRepository {
       where id in (
         select id from ${chargingSamples}
         where ${chargingSamples.sampledAt} < ${before}
+          and not exists (
+            select 1 from ${transactionDeliveryMessages}
+            where ${transactionDeliveryMessages.transactionRecordId} =
+              ${chargingSamples.transactionRecordId}
+              and ${transactionDeliveryMessages.status} in (
+                'pending', 'in_flight', 'retry_wait'
+              )
+          )
         order by ${chargingSamples.sampledAt}
         limit ${limit}
       )
@@ -297,6 +269,14 @@ export class ChargingTransactionRepository {
       where id in (
         select id from ${chargingTransactions}
         where ${chargingTransactions.endedAt} < ${before}
+          and not exists (
+            select 1 from ${transactionDeliveryMessages}
+            where ${transactionDeliveryMessages.transactionRecordId} =
+              ${chargingTransactions.id}
+              and ${transactionDeliveryMessages.status} in (
+                'pending', 'in_flight', 'retry_wait'
+              )
+          )
         order by ${chargingTransactions.endedAt}
         limit ${limit}
       )
@@ -307,19 +287,4 @@ export class ChargingTransactionRepository {
       transactions: deletedTransactions.rows.length,
     };
   }
-}
-
-async function withPersistenceRetry<T>(operation: () => Promise<T>): Promise<T> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-      if (attempt < 2) {
-        await new Promise((resolve) => setTimeout(resolve, 50 * 2 ** attempt));
-      }
-    }
-  }
-  throw lastError;
 }

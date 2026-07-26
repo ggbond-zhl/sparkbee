@@ -92,6 +92,7 @@ export function toChargingPointActorTransactionStartResult(
     return {
       status: "accepted",
       transactionId: result.transactionId,
+      deliveryStatus: "pending",
       authorization: {
         status: "accepted",
         source: result.authorizationSource ?? "online",
@@ -148,6 +149,7 @@ export function toChargingPointActorStopTransactionResult(
       transactionId: result.transactionId,
       meterStopWh: result.meterStop,
       stoppedAt: result.stoppedAt,
+      deliveryStatus: "pending",
     };
   }
 
@@ -191,6 +193,7 @@ export function toPublicTransactionStartResult(
     return {
       status: "accepted",
       transactionId: result.transactionId,
+      deliveryStatus: result.deliveryStatus,
     };
   }
 

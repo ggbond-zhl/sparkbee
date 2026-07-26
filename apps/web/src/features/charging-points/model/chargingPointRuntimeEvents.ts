@@ -318,6 +318,8 @@ export function reduceChargingPointRuntimeEventState(
       return state;
     case "configuration.changed":
       return state;
+    case "transaction-delivery.changed":
+      return state;
     case "transaction.status": {
       const { connectorId, evseId } = message.data.resource;
       const transactionId = message.data.resource.transactionId ??
@@ -590,6 +592,10 @@ function formatRuntimeEventSummary(
       } Wh`;
     case "configuration.changed":
       return `协议配置 ${message.data.resource.key} 已更新`;
+    case "transaction-delivery.changed":
+      return `${formatDeliveryMessageType(message.data.messageType)}: ${
+        formatDeliveryStatus(message.data.currentStatus)
+      }`;
   }
 }
 
@@ -624,6 +630,10 @@ function formatResource(resource: ChargingPointActorEvent["resource"]) {
 
   if (resource.scope === "configuration") {
     return `配置 ${resource.key}`;
+  }
+
+  if (resource.scope === "transactionDelivery") {
+    return `交易交付 ${resource.deliverySequence}`;
   }
 
   return "协议";
@@ -730,6 +740,24 @@ function formatTransactionStatus(status: TransactionRuntimeStatus) {
   }
 
   return "失败";
+}
+
+function formatDeliveryMessageType(
+  messageType: "start" | "meter_value" | "stop",
+) {
+  if (messageType === "start") return "StartTransaction";
+  if (messageType === "meter_value") return "MeterValues";
+  return "StopTransaction";
+}
+
+function formatDeliveryStatus(
+  status: "pending" | "in_flight" | "retry_wait" | "delivered" | "failed",
+) {
+  if (status === "pending") return "待交付";
+  if (status === "in_flight") return "发送中";
+  if (status === "retry_wait") return "等待重试";
+  if (status === "delivered") return "已交付";
+  return "最终失败";
 }
 
 function prepend<TItem>(items: TItem[], item: TItem) {

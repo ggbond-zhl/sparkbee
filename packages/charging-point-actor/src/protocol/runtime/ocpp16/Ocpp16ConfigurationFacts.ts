@@ -103,6 +103,16 @@ export class Ocpp16ConfigurationFacts {
     return parsed;
   }
 
+  readNonNegativeIntegerConfig(key: Ocpp16ConfigurationKeyInput): number | null {
+    const value = this.configurationStore.getValue(key);
+    if (value === undefined || !/^\d+$/.test(value.trim())) {
+      return null;
+    }
+
+    const parsed = Number(value.trim());
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+  }
+
   private isEnabled(key: Ocpp16ConfigurationKeyInput): boolean {
     return this.configurationStore.getValue(key) === "true";
   }

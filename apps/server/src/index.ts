@@ -11,9 +11,9 @@ import { ProtocolObservationWriter } from "./modules/protocolObservation/protoco
 import { ProtocolConfigurationRepository } from "./modules/protocolConfiguration/protocolConfiguration.repo";
 import { ActorLogRetentionScheduler } from "./modules/actorLog/actorLogRetentionScheduler";
 import { ChargingTransactionRepository } from "./modules/chargingTransaction/chargingTransaction.repo";
-import { ChargingTransactionRetentionScheduler } from "./modules/chargingTransaction/chargingTransactionRetentionScheduler";
 import { ProtocolObservationRetentionScheduler } from "./modules/protocolObservation/protocolObservationRetentionScheduler";
 import { createRuntimeOperationService } from "./modules/runtimeOperation/runtimeOperation.service";
+import { TransactionDeliveryRetentionScheduler } from "./modules/transactionDelivery/transactionDeliveryRetentionScheduler";
 
 const config = loadServerConfig();
 const logger = createServerLogger({
@@ -62,8 +62,8 @@ const retentionScheduler = new ActorLogRetentionScheduler(database, {
   logger,
   errorReporter,
 });
-const chargingTransactionRetentionScheduler =
-  new ChargingTransactionRetentionScheduler(database, {
+const transactionDeliveryRetentionScheduler =
+  new TransactionDeliveryRetentionScheduler(database, {
     logger,
     errorReporter,
   });
@@ -100,7 +100,7 @@ await startServer({
       environment: config.environment,
     }, "SparkBee server started");
     retentionScheduler.start();
-    chargingTransactionRetentionScheduler.start();
+    transactionDeliveryRetentionScheduler.start();
     protocolObservationRetentionScheduler.start();
     void runtimeOperationService.recoverActiveTransactions().then((result) => {
       logger.info({
@@ -127,7 +127,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     shuttingDown = true;
     logger.info({ event: "server.stopping", signal }, "SparkBee server stopping");
     retentionScheduler.stop();
-    chargingTransactionRetentionScheduler.stop();
+    transactionDeliveryRetentionScheduler.stop();
     protocolObservationRetentionScheduler.stop();
     void Promise.all([
       actorLogWriter.flush(),

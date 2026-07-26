@@ -9,6 +9,10 @@ import {
   runtimeSnapshotResponseSchema,
   runtimeTransactionStatusSchema,
 } from "./schemas";
+import {
+  transactionDeliveryMessageTypeSchema,
+} from "./transactionDeliverySchemas";
+import { transactionDeliveryStatusSchema } from "./schemas";
 
 export const chargingPointActorStatusSchema = z.enum([
   "starting",
@@ -100,6 +104,12 @@ const protocolResourceSchema = z.object({ scope: z.literal("protocol") });
 const configurationResourceSchema = z.object({
   scope: z.literal("configuration"),
   key: z.string().min(1),
+});
+const transactionDeliveryResourceSchema = z.object({
+  scope: z.literal("transactionDelivery"),
+  transactionId: z.string().min(1),
+  messageId: z.string().uuid(),
+  deliverySequence: z.string().regex(/^\d+$/),
 });
 
 const eventBaseSchema = z.object({
@@ -221,6 +231,17 @@ export const configurationChangedEventSchema = eventBaseSchema.extend({
   pendingRestart: z.boolean(),
 });
 
+export const transactionDeliveryChangedEventSchema = eventBaseSchema.extend({
+  type: z.literal("transaction-delivery.changed"),
+  resource: transactionDeliveryResourceSchema,
+  messageType: transactionDeliveryMessageTypeSchema,
+  previousStatus: transactionDeliveryStatusSchema.nullable(),
+  currentStatus: transactionDeliveryStatusSchema,
+  attemptCount: z.number().int().nonnegative(),
+  nextAttemptAt: z.iso.datetime().nullable(),
+  lastError: chargingPointEventErrorSchema.nullable(),
+});
+
 export const protocolEventTypeSchema = z.enum([
   "chargingPoint.lifecycle",
   "chargingPoint.boot",
@@ -234,6 +255,7 @@ export const protocolEventTypeSchema = z.enum([
   "transaction.status",
   "transaction.meterValue",
   "configuration.changed",
+  "transaction-delivery.changed",
 ]);
 
 export const protocolEventSchema = z.discriminatedUnion("type", [
@@ -249,6 +271,7 @@ export const protocolEventSchema = z.discriminatedUnion("type", [
   transactionStatusEventSchema,
   transactionMeterValueEventSchema,
   configurationChangedEventSchema,
+  transactionDeliveryChangedEventSchema,
 ]);
 
 export const chargingPointActorEventSchema = z.discriminatedUnion("type", [
@@ -264,6 +287,7 @@ export const chargingPointActorEventSchema = z.discriminatedUnion("type", [
   transactionStatusEventSchema,
   transactionMeterValueEventSchema,
   configurationChangedEventSchema,
+  transactionDeliveryChangedEventSchema,
   protocolMessageEventSchema,
 ]);
 
@@ -281,6 +305,7 @@ export const chargingPointEventStreamTypes = [
   "transaction.status",
   "transaction.meterValue",
   "configuration.changed",
+  "transaction-delivery.changed",
   "protocol.message",
   "deleted",
 ] as const;
@@ -328,6 +353,10 @@ export const chargingPointEventStreamMessageSchema = z.discriminatedUnion("event
   z.object({
     event: z.literal("configuration.changed"),
     data: configurationChangedEventSchema,
+  }),
+  z.object({
+    event: z.literal("transaction-delivery.changed"),
+    data: transactionDeliveryChangedEventSchema,
   }),
   z.object({
     event: z.literal("protocol.message"),

@@ -18,6 +18,10 @@ import {
   runtimeStartTransactionResponseSchema,
   runtimeStopTransactionRequestSchema,
   runtimeStopTransactionResponseSchema,
+  transactionDeliveryStatusSchema,
+  listTransactionDeliveriesQuerySchema,
+  listTransactionDeliveriesResponseSchema,
+  transactionDeliverySummarySchema,
 } from "../../src";
 
 describe("chargingPoint contract schemas", () => {
@@ -139,6 +143,32 @@ describe("chargingPoint contract schemas", () => {
     expect(chargingPointEventStreamMessageSchema.parse(bootMessage)).toEqual(
       bootMessage,
     );
+    const transactionDeliveryMessage = {
+      event: "transaction-delivery.changed",
+      data: {
+        id: "event-delivery-1",
+        sequence: 3,
+        type: "transaction-delivery.changed",
+        chargingPointId,
+        protocol: "OCPP16J",
+        resource: {
+          scope: "transactionDelivery",
+          transactionId: "transaction-1",
+          messageId: "00000000-0000-4000-8000-000000000011",
+          deliverySequence: "42",
+        },
+        occurredAt: "2026-07-10T00:00:02.000Z",
+        messageType: "start",
+        previousStatus: "pending",
+        currentStatus: "in_flight",
+        attemptCount: 1,
+        nextAttemptAt: null,
+        lastError: null,
+      },
+    } as const;
+    expect(
+      chargingPointEventStreamMessageSchema.parse(transactionDeliveryMessage),
+    ).toEqual(transactionDeliveryMessage);
     expect(
       chargingPointEventStreamMessageSchema.safeParse({
         ...meterValueMessage,
@@ -363,6 +393,13 @@ describe("chargingPoint contract schemas", () => {
             occurredAt: "2026-07-04T09:00:04.000Z",
           },
         ],
+        transactionDeliverySummary: {
+          pendingCount: 2,
+          inFlightCount: 0,
+          retryWaitCount: 1,
+          failedCount: 0,
+          oldestPendingAt: "2026-07-04T08:59:00.000Z",
+        },
         lastHeartbeatAt: "2026-07-04T09:00:05.000Z",
         recentIssue: null,
       }),
@@ -374,6 +411,7 @@ describe("chargingPoint contract schemas", () => {
         requestedAvailability: "inoperative",
       }],
       connectorStatuses: [{ currentStatus: "occupied" }],
+      transactionDeliverySummary: { pendingCount: 2, retryWaitCount: 1 },
     });
     expect(runtimeSnapshotResponseSchema.shape.sessionStatus.description).toBe(
       "桩实例当前会话状态；没有运行态事件时为 null。",
@@ -405,6 +443,13 @@ describe("chargingPoint contract schemas", () => {
           occurredAt: "2026-07-04T09:00:04.000Z",
         },
       ],
+      transactionDeliverySummary: {
+        pendingCount: 0,
+        inFlightCount: 0,
+        retryWaitCount: 0,
+        failedCount: 0,
+        oldestPendingAt: null,
+      },
       lastHeartbeatAt: null,
       recentIssue: null,
     });
@@ -520,10 +565,12 @@ describe("chargingPoint contract schemas", () => {
         idTag: "CARD001",
         status: "accepted",
         transactionId: "1001",
+        deliveryStatus: "pending",
       }),
     ).toMatchObject({
       status: "accepted",
       transactionId: "1001",
+      deliveryStatus: "pending",
     });
     expect(
       runtimeStopTransactionResponseSchema.parse({
@@ -535,13 +582,79 @@ describe("chargingPoint contract schemas", () => {
         transactionId: "1001",
         meterStopWh: 100,
         stoppedAt: "2026-07-01T00:00:00.000Z",
+        deliveryStatus: "pending",
       }),
     ).toMatchObject({
       status: "accepted",
       meterStopWh: 100,
+      deliveryStatus: "pending",
     });
     expect(runtimeStopTransactionRequestSchema.shape.reason.description).toContain(
       "未提供时 OCPP StopTransaction 不携带 reason",
     );
+  });
+
+  test("requires transaction delivery status for locally accepted transactions", () => {
+    expect(transactionDeliveryStatusSchema.options).toEqual([
+      "pending",
+      "in_flight",
+      "retry_wait",
+      "delivered",
+      "failed",
+    ]);
+    expect(transactionDeliveryStatusSchema.description).toBe(
+      "交易消息当前的交付状态。",
+    );
+    expect(() =>
+      runtimeStartTransactionResponseSchema.parse({
+        chargingPointId: "00000000-0000-4000-8000-000000000001",
+        connectorId: "00000000-0000-4000-8000-000000000002",
+        evseId: 1,
+        protocolConnectorId: 2,
+        idTag: "CARD001",
+        status: "accepted",
+        transactionId: "1001",
+      }),
+    ).toThrow();
+  });
+
+  test("validates the read-only transaction delivery query contract", () => {
+    expect(listTransactionDeliveriesQuerySchema.parse({
+      limit: "50",
+      before: "42",
+      status: "retry_wait",
+      messageType: "meter_value",
+    })).toEqual({
+      limit: 50,
+      before: "42",
+      status: "retry_wait",
+      messageType: "meter_value",
+    });
+    expect(transactionDeliverySummarySchema.parse({
+      pendingCount: 2,
+      inFlightCount: 1,
+      retryWaitCount: 3,
+      failedCount: 4,
+      oldestPendingAt: "2026-07-24T01:00:00.000Z",
+    })).toMatchObject({ pendingCount: 2, failedCount: 4 });
+    expect(listTransactionDeliveriesResponseSchema.parse({
+      items: [
+        {
+          id: "00000000-0000-4000-8000-000000000010",
+          messageId: "00000000-0000-4000-8000-000000000011",
+          transactionId: "local-tx-1",
+          ocppTransactionId: null,
+          deliverySequence: "42",
+          messageType: "meter_value",
+          status: "retry_wait",
+          attemptCount: 2,
+          nextAttemptAt: "2026-07-24T01:02:00.000Z",
+          occurredAt: "2026-07-24T01:00:00.000Z",
+          lastError: { code: "Timeout", message: "等待响应超时" },
+          payload: { idTag: "不得公开" },
+        },
+      ],
+      previousCursor: "42",
+    }).items[0]).not.toHaveProperty("payload");
   });
 });

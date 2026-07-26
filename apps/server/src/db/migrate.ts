@@ -182,6 +182,90 @@ export async function migrateDatabase(client: Pick<PGlite, "exec">): Promise<voi
       on charging_samples (transaction_record_id, sampled_at);
     create index charging_samples_sampled_at_idx
       on charging_samples (sampled_at);
+
+    create table transaction_delivery_sequences (
+      charging_point_id uuid primary key references charging_points(id) on delete cascade,
+      next_sequence bigint not null default 1,
+      updated_at timestamptz not null default now()
+    );
+
+    create table transaction_delivery_messages (
+      id uuid primary key default gen_random_uuid(),
+      charging_point_id uuid not null references charging_points(id) on delete cascade,
+      transaction_record_id uuid not null references charging_transactions(id) on delete cascade,
+      delivery_sequence bigint not null,
+      message_id uuid not null,
+      message_type text not null,
+      payload jsonb not null,
+      occurred_at timestamptz not null,
+      status text not null default 'pending',
+      attempt_count integer not null default 0,
+      next_attempt_at timestamptz,
+      in_flight_at timestamptz,
+      delivered_at timestamptz,
+      failed_at timestamptz,
+      last_error_code text,
+      last_error_message text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create unique index transaction_delivery_point_sequence_unique
+      on transaction_delivery_messages (charging_point_id, delivery_sequence);
+    create unique index transaction_delivery_message_id_unique
+      on transaction_delivery_messages (message_id);
+    create index transaction_delivery_point_status_sequence_idx
+      on transaction_delivery_messages (charging_point_id, status, delivery_sequence);
+    create index transaction_delivery_retry_idx
+      on transaction_delivery_messages (charging_point_id, next_attempt_at, delivery_sequence);
+    create index transaction_delivery_terminal_idx
+      on transaction_delivery_messages (status, delivered_at, failed_at);
+    alter table transaction_delivery_messages enable row level security;
+    alter table transaction_delivery_sequences enable row level security;
+
+    create table local_authorization_lists (
+      charging_point_id uuid not null references charging_points(id) on delete cascade,
+      protocol charging_point_protocol not null,
+      version integer not null,
+      source text not null,
+      updated_at timestamptz not null,
+      created_at timestamptz not null default now(),
+      constraint local_authorization_lists_point_protocol_pk
+        primary key (charging_point_id, protocol)
+    );
+
+    create table local_authorization_entries (
+      charging_point_id uuid not null references charging_points(id) on delete cascade,
+      protocol charging_point_protocol not null,
+      credential_id text not null,
+      status text not null,
+      valid_until timestamptz,
+      group_credential_id text,
+      constraint local_authorization_entries_point_protocol_credential_pk
+        primary key (charging_point_id, protocol, credential_id)
+    );
+
+    create table authorization_cache_entries (
+      charging_point_id uuid not null references charging_points(id) on delete cascade,
+      protocol charging_point_protocol not null,
+      credential_id text not null,
+      evse_id integer not null,
+      status text not null,
+      valid_until timestamptz,
+      group_credential_id text,
+      last_evaluated_at timestamptz not null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint authorization_cache_entries_point_protocol_credential_evse_pk
+        primary key (charging_point_id, protocol, credential_id, evse_id)
+    );
+
+    create index authorization_cache_entries_point_protocol_idx
+      on authorization_cache_entries (charging_point_id, protocol);
+    alter table local_authorization_lists enable row level security;
+    alter table local_authorization_entries enable row level security;
+    alter table authorization_cache_entries enable row level security;
+
     alter table charging_transactions enable row level security;
     alter table charging_samples enable row level security;
   `);

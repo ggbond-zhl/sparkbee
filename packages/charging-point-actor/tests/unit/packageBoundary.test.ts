@@ -177,7 +177,6 @@ describe("charging point actor package seam", () => {
       `${actorPackageRoot}/src/protocol/runtime/ocpp16/actions/transactionStart.ts`,
       `${actorPackageRoot}/src/protocol/runtime/ocpp16/actions/stopTransaction.ts`,
       `${actorPackageRoot}/src/protocol/runtime/ocpp16/actions/meterValues.ts`,
-      `${actorPackageRoot}/src/protocol/runtime/ocpp16/actions/offlineTransactionReplay.ts`,
     ];
     const forbiddenHelperImports = [
       "recordOnlineTransactionStart",
@@ -212,9 +211,8 @@ describe("charging point actor package seam", () => {
     expect(internalSource).not.toContain("class Ocpp16TransactionDeliveryInternals");
     expect(internalSource).not.toContain("WeakMap");
     for (const operation of [
-      "recordTransactionStart",
-      "resolveTransactionDelivery",
-      "completeTransactionDelivery",
+      "recordPersistedTransactionStart",
+      "endTransactionDelivery",
       "prepareMeterValueDelivery",
     ]) {
       expect(publicSource).not.toContain(operation);

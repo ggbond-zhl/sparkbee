@@ -2,6 +2,7 @@ import type { InboundRequest } from "../../../session/types";
 import type { Ocpp16RequestOf, Ocpp16ResponseOf } from "../../../validator/Ocpp16";
 import type {
   AuthorizationStatus,
+  LocalAuthorizationList,
   LocalAuthorizationEntryInput,
 } from "../../../../model";
 import type { Ocpp16RuntimeContext } from "../state";
@@ -56,13 +57,15 @@ export async function handleSendLocalList(
       return;
     }
 
-    context.localAuthorizationList =
+    await persistLocalAuthorizationList(
+      context,
       context.localAuthorizationList.replaceEntries(
         payload.listVersion,
         context.clock(),
         "ocpp16",
         nextEntries,
-      );
+      ),
+    );
     await respond(request, "Accepted");
     return;
   }
@@ -92,14 +95,29 @@ export async function handleSendLocalList(
     return;
   }
 
-  context.localAuthorizationList =
+  await persistLocalAuthorizationList(
+    context,
     context.localAuthorizationList.replaceEntries(
       payload.listVersion,
       context.clock(),
       "ocpp16",
       nextEntries,
-    );
+    ),
+  );
   await respond(request, "Accepted");
+}
+
+async function persistLocalAuthorizationList(
+  context: Ocpp16RuntimeContext,
+  nextList: LocalAuthorizationList,
+): Promise<void> {
+  await context.authorizationStore.replaceLocalList({
+    version: nextList.version,
+    source: nextList.source,
+    updatedAt: nextList.updatedAt,
+    entries: nextList.listAuthorizationEntries(),
+  });
+  context.localAuthorizationList = nextList;
 }
 
 function respond(

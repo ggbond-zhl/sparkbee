@@ -42,6 +42,9 @@ import {
   listProtocolMessagesResponseSchema,
   type ListProtocolMessagesQuery,
   type ListProtocolMessagesResponse,
+  listTransactionDeliveriesResponseSchema,
+  type ListTransactionDeliveriesQuery,
+  type ListTransactionDeliveriesResponse,
   protocolConfigurationListResponseSchema,
   type ProtocolConfigurationListResponse,
   updateProtocolConfigurationRequestSchema,
@@ -247,6 +250,22 @@ export async function listProtocolEvents(
   ));
   if (!response.ok) throw new Error("协议事件加载失败");
   return listProtocolEventsResponseSchema.parse(await response.json());
+}
+
+export async function listTransactionDeliveries(
+  chargingPointId: string,
+  input: ListTransactionDeliveriesQuery = { limit: 200 },
+): Promise<ListTransactionDeliveriesResponse> {
+  const search = new URLSearchParams({ limit: String(input.limit ?? 200) });
+  for (const key of ["before", "status", "messageType"] as const) {
+    const value = input[key];
+    if (value !== undefined) search.set(key, String(value));
+  }
+  const response = await fetch(toApiUrl(
+    `/api/charging-points/${chargingPointId}/transaction-deliveries?${search.toString()}`,
+  ));
+  if (!response.ok) throw new Error("交易交付记录加载失败");
+  return listTransactionDeliveriesResponseSchema.parse(await response.json());
 }
 
 export async function getActiveTransactionSamples(

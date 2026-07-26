@@ -14,14 +14,16 @@ import type {
   TransactionStopReason,
 } from "../../../model";
 import type { ISession } from "../../session/types";
-import type { ChargingPointActorTransactionStore } from "../../../chargingPointActor/types";
+import type {
+  ChargingPointActorAuthorizationStore,
+  ChargingPointActorTransactionStore,
+} from "../../../chargingPointActor/types";
 import type { Ocpp16ConfigurationCatalogInput } from "./ConfigurationStore/index";
 import type {
   Ocpp16ConfigurationChangeSource,
   Ocpp16ConfigurationPersistence,
 } from "./ConfigurationStore/index";
 import type { ConfigurationStore } from "./ConfigurationStore";
-import type { OfflineTransactionOutbox } from "./OfflineTransactionOutbox";
 
 export type Ocpp16RegistrationStatus = "Accepted" | "Pending" | "Rejected";
 export type Ocpp16AuthorizationStatus =
@@ -86,9 +88,10 @@ export interface Ocpp16RuntimeOptions {
     sync(currentTime: Date): void;
   };
   idGenerator?: () => string;
+  messageIdGenerator?: () => string;
   emitActorLog?: Ocpp16ActorLogEmitter;
-  offlineTransactionOutbox?: OfflineTransactionOutbox;
   transactionStore?: ChargingPointActorTransactionStore;
+  authorizationStore?: ChargingPointActorAuthorizationStore;
   heartbeatUnstableThreshold?: number;
   heartbeatReconnectThreshold?: number;
   heartbeatTimeDriftThresholdMs?: number | null;
@@ -118,6 +121,12 @@ export type Ocpp16RuntimeResourceRef =
   | { scope: "connector"; evseId: number; connectorId: number }
   | { scope: "authorization"; idTag: string; evseId?: number; connectorId?: number }
   | { scope: "configuration"; key: string }
+  | {
+      scope: "transactionDelivery";
+      transactionId: string;
+      messageId: string;
+      deliverySequence: bigint;
+    }
   | {
       scope: "transaction";
       evseId: number;
@@ -233,6 +242,28 @@ export interface Ocpp16RuntimeConfigurationChangedEvent
   pendingRestart: boolean;
 }
 
+export interface Ocpp16RuntimeTransactionDeliveryChangedEvent
+  extends Ocpp16RuntimeEventBase<
+    "transaction-delivery.changed",
+    Extract<Ocpp16RuntimeResourceRef, { scope: "transactionDelivery" }>
+  > {
+  messageType: "start" | "meter_value" | "stop";
+  previousStatus:
+    | "pending"
+    | "in_flight"
+    | "retry_wait"
+    | "delivered"
+    | "failed"
+    | null;
+  currentStatus: Exclude<
+    Ocpp16RuntimeTransactionDeliveryChangedEvent["previousStatus"],
+    null
+  >;
+  attemptCount: number;
+  nextAttemptAt: Date | null;
+  lastError: { code: string; message: string } | null;
+}
+
 export type Ocpp16RuntimeEventMap = {
   "chargingPoint.availability": Ocpp16RuntimeChargingPointAvailabilityEvent;
   "chargingPoint.status": Ocpp16RuntimeChargingPointStatusEvent;
@@ -243,6 +274,7 @@ export type Ocpp16RuntimeEventMap = {
   "transaction.status": Ocpp16RuntimeTransactionStatusEvent;
   "transaction.meterValue": Ocpp16RuntimeTransactionMeterValueEvent;
   "configuration.changed": Ocpp16RuntimeConfigurationChangedEvent;
+  "transaction-delivery.changed": Ocpp16RuntimeTransactionDeliveryChangedEvent;
 };
 
 export type Ocpp16RuntimeEventType = keyof Ocpp16RuntimeEventMap;

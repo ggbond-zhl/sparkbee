@@ -39,6 +39,7 @@ import {
 } from "./events";
 import { restartActiveMeterValueLoops } from "./actions/meterValues";
 import { restorePersistedTransactions } from "./transactionPersistence";
+import { restorePersistedAuthorization } from "./authorizationPersistence";
 import type {
   Ocpp16BootResult,
   Ocpp16AuthorizeInput,
@@ -91,6 +92,7 @@ export class Ocpp16Runtime {
       });
     };
     this.onlineListener = (): void => {
+      this.transactionDelivery.wake();
       const heartbeatLoopOptions = this.context.heartbeatLoopOptions;
       if (
         heartbeatLoopOptions === null ||
@@ -171,8 +173,13 @@ export class Ocpp16Runtime {
     return this.transactionDelivery.start(input);
   }
 
-  restorePersistedTransactions(): Promise<void> {
-    return restorePersistedTransactions(this.context);
+  async restorePersistedTransactions(): Promise<void> {
+    await restorePersistedTransactions(this.context);
+    await this.transactionDelivery.recoverInterrupted();
+  }
+
+  restorePersistedAuthorization(): Promise<void> {
+    return restorePersistedAuthorization(this.context);
   }
 
   resumeActiveTransactionSampling(): void {

@@ -210,6 +210,20 @@ export class Ocpp16EventEnvelope {
           pendingRestart: event.pendingRestart,
         }, event.occurredAt);
         return;
+      case "transaction-delivery.changed":
+        this.publisher.publish("transaction-delivery.changed", {
+          resource: {
+            ...event.resource,
+            deliverySequence: event.resource.deliverySequence.toString(),
+          },
+          messageType: event.messageType,
+          previousStatus: event.previousStatus,
+          currentStatus: event.currentStatus,
+          attemptCount: event.attemptCount,
+          nextAttemptAt: event.nextAttemptAt?.toISOString() ?? null,
+          lastError: event.lastError,
+        }, event.occurredAt);
+        return;
     }
   };
 

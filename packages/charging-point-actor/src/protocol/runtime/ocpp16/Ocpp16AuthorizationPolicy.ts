@@ -56,15 +56,38 @@ export class Ocpp16AuthorizationPolicy {
   absorbAuthorizeResult(input: {
     evseId: number;
     result: Ocpp16AuthorizeResult;
-  }): void {
-    recordAuthorizationGrantFromAuthorizeResult(this.context, input);
+  }): Promise<void> {
+    return recordAuthorizationGrantFromAuthorizeResult(this.context, input);
   }
 
   absorbStartTransactionResult(input: {
     evseId: number;
     result: Ocpp16StartTransactionCallResult;
-  }): void {
-    recordAuthorizationGrantFromStartTransactionResult(this.context, input);
+  }): Promise<void> {
+    return recordAuthorizationGrantFromStartTransactionResult(this.context, input);
+  }
+
+  absorbStopTransactionResult(input: {
+    evseId: number;
+    idTag: string;
+    authorizationStatus: Ocpp16AuthorizationStatus | null;
+    expiryDate: Date | null;
+    parentIdTag: string | null;
+    receivedAt: Date;
+  }): Promise<void> {
+    if (input.authorizationStatus === null) {
+      return Promise.resolve();
+    }
+
+    return recordAuthorizationGrant(this.context, {
+      evseId: input.evseId,
+      idTag: input.idTag,
+      authorizationStatus: input.authorizationStatus,
+      expiryDate: input.expiryDate,
+      parentIdTag: input.parentIdTag,
+      source: "online",
+      evaluatedAt: input.receivedAt,
+    });
   }
 
   authorizeAcceptedTransactionStart(input: {
@@ -125,12 +148,12 @@ export class Ocpp16AuthorizationPolicy {
     return nextAuthorizationAttemptSequence(this.context, input);
   }
 
-  absorbCurrentAuthorizeResult(input: {
+  async absorbCurrentAuthorizeResult(input: {
     evseId: number;
     idTag: string;
     attemptSequence: number;
     result: Ocpp16AuthorizeResult;
-  }): boolean {
+  }): Promise<boolean> {
     if (
       input.result.outcome === "Failed" ||
       !isCurrentAuthorizationAttempt(this.context, input)
@@ -138,14 +161,15 @@ export class Ocpp16AuthorizationPolicy {
       return false;
     }
 
-    recordAuthorizationGrantFromAuthorizeResult(this.context, {
+    await recordAuthorizationGrantFromAuthorizeResult(this.context, {
       evseId: input.evseId,
       result: input.result,
     });
     return true;
   }
 
-  clearCache(): void {
+  async clearCache(): Promise<void> {
+    await this.context.authorizationStore.clearCache();
     clearAuthorizationCache(this.context);
   }
 }
@@ -168,12 +192,12 @@ function recordAuthorizationGrantFromAuthorizeResult(
     evseId: number;
     result: Ocpp16AuthorizeResult;
   },
-): void {
+): Promise<void> {
   if (input.result.outcome === "Failed") {
-    return;
+    return Promise.resolve();
   }
 
-  recordAuthorizationGrant(context, {
+  return recordAuthorizationGrant(context, {
     evseId: input.evseId,
     idTag: input.result.idTag,
     authorizationStatus: input.result.authorizationStatus,
@@ -190,12 +214,12 @@ function recordAuthorizationGrantFromStartTransactionResult(
     evseId: number;
     result: Ocpp16StartTransactionCallResult;
   },
-): void {
+): Promise<void> {
   if (input.result.outcome === "Failed") {
-    return;
+    return Promise.resolve();
   }
 
-  recordAuthorizationGrant(context, {
+  return recordAuthorizationGrant(context, {
     evseId: input.evseId,
     idTag: input.result.idTag,
     authorizationStatus: input.result.authorizationStatus,
@@ -300,7 +324,7 @@ function recordAuthorizationGrantFromOfflineDecision(
     evaluatedAt: Date;
   },
 ): void {
-  recordAuthorizationGrant(context, {
+  const grantInput = {
     evseId: input.evseId,
     idTag: input.idTag,
     authorizationStatus: input.decision.authorizationStatus,
@@ -308,7 +332,11 @@ function recordAuthorizationGrantFromOfflineDecision(
     parentIdTag: input.decision.parentIdTag,
     source: input.decision.source,
     evaluatedAt: input.evaluatedAt,
-  });
+  };
+  context.authorizationGrants.set(
+    authorizationGrantKey(grantInput.idTag, grantInput.evseId),
+    createAuthorizationGrant(grantInput),
+  );
 }
 
 function nextAuthorizationAttemptSequence(
@@ -376,7 +404,7 @@ function validateStoredAuthorization(
   return null;
 }
 
-function recordAuthorizationGrant(
+async function recordAuthorizationGrant(
   context: Ocpp16RuntimeContext,
   input: {
     evseId: number;
@@ -387,19 +415,28 @@ function recordAuthorizationGrant(
     source: AuthorizationSource;
     evaluatedAt: Date;
   },
-): void {
+): Promise<void> {
   const key = authorizationGrantKey(input.idTag, input.evseId);
   const grant = createAuthorizationGrant(input);
-  context.authorizationGrants.set(key, grant);
+  const shouldCache = shouldWriteAuthorizationCache(context, input);
+  const cacheGrant = shouldCache
+    ? createAuthorizationGrant({ ...input, source: "cache" })
+    : null;
 
-  if (shouldWriteAuthorizationCache(context, input)) {
-    context.authorizationCache.set(
-      key,
-      createAuthorizationGrant({
-        ...input,
-        source: "cache",
-      }),
-    );
+  if (cacheGrant !== null) {
+    await context.authorizationStore.upsertCacheEntry({
+      credentialId: input.idTag,
+      evseId: input.evseId,
+      status: cacheGrant.status,
+      validUntil: cacheGrant.validUntil,
+      groupCredentialId: cacheGrant.groupCredentialId,
+      lastEvaluatedAt: cacheGrant.lastEvaluatedAt,
+    });
+  }
+
+  context.authorizationGrants.set(key, grant);
+  if (cacheGrant !== null) {
+    context.authorizationCache.set(key, cacheGrant);
   }
 }
 

@@ -100,7 +100,7 @@ async function authorizeCore(
   }
 
   const result = await sendAuthorize(context, input.idTag);
-  authorizationPolicy.absorbAuthorizeResult({
+  await authorizationPolicy.absorbAuthorizeResult({
     evseId: selection.evseId,
     result,
   });
@@ -196,7 +196,7 @@ async function reconcileAuthorizeInBackground(
     return;
   }
 
-  if (!getOcpp16AuthorizationPolicy(context).absorbCurrentAuthorizeResult({
+  if (!await getOcpp16AuthorizationPolicy(context).absorbCurrentAuthorizeResult({
     evseId: input.evseId,
     idTag: input.idTag,
     attemptSequence: input.attemptSequence,

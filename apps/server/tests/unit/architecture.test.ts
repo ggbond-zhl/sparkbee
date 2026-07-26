@@ -134,7 +134,10 @@ describe("server architecture", () => {
 
   test("keeps business modules behind route and deep optional module seams", () => {
     const modules = moduleDirectories();
-    const routeOptionalDeepModules = new Set(["chargingTransaction"]);
+    const routeOptionalDeepModules = new Set([
+      "authorization",
+      "chargingTransaction",
+    ]);
 
     const missingRouteFiles = modules.flatMap((modulePath) => {
       const moduleName = modulePath.split(/[\\/]/).at(-1);
@@ -179,7 +182,9 @@ describe("server architecture", () => {
     });
 
     const allowedCrossModuleServiceRepoImports = new Set([
+      "../authorization/authorization.repo",
       "../chargingTransaction/chargingTransaction.repo",
+      "../transactionDelivery/transactionDelivery.repo",
     ]);
     const crossModuleServiceRepoImports = modules.flatMap((modulePath) =>
       walk(modulePath)

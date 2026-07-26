@@ -27,6 +27,10 @@ export class PendingOutboundRequestRegistry {
     private readonly options: PendingOutboundRequestRegistryOptions = {},
   ) {}
 
+  has(messageId: string): boolean {
+    return this.pendingOutboundRequests.has(messageId);
+  }
+
   register(messageId: string, action: string, timeoutMs: number): Promise<OutboundRequestResult> {
     const deferred = createDeferred<OutboundRequestResult>();
     // registry 只负责状态管理，真正的失败由调用方在返回的 promise 上感知。

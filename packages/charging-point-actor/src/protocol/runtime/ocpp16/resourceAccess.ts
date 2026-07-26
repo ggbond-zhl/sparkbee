@@ -52,8 +52,11 @@ export function releaseTransactionOnConnector(
   context.chargingPoint = context.chargingPoint.updateEvse(input.evseId, (evse) =>
     evse
       .releaseTransaction(at)
+      .applyRequestedAvailability(at)
       .updateConnector(input.connectorId, (connector) =>
-        connector.setLockState("unlocked", at)
+        connector
+          .applyRequestedAvailability(at)
+          .setLockState("unlocked", at)
       )
   );
 }

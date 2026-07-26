@@ -85,6 +85,11 @@ export interface ReconnectOptions {
 /** 出站请求的调度模式。 */
 export type OutboundRequestPolicy = "parallel" | "serial";
 
+export interface OutboundRequestOptions {
+  /** 重试已持久化消息时复用的 OCPP messageId；缺省时自动生成。 */
+  messageId?: string;
+}
+
 /** 构造协议会话时注入的依赖与行为开关。 */
 export interface SessionOptions {
   /** 底层传输实现。 */
@@ -119,7 +124,11 @@ export interface ISession {
   isConnected(): boolean;
 
   /** 发送一个协议请求，并在对端回复或失败后结束。 */
-  request(action: string, payload: unknown): Promise<OutboundRequestResult>;
+  request(
+    action: string,
+    payload: unknown,
+    options?: OutboundRequestOptions,
+  ): Promise<OutboundRequestResult>;
 
   /** 注册协议会话事件监听器。 */
   on<K extends keyof SessionEvents>(
@@ -144,6 +153,7 @@ export type SessionErrorCode =
   | "OUTBOUND_REQUEST_TIMEOUT"
   | "OUTBOUND_REQUEST_REJECTED"
   | "OUTBOUND_REQUEST_DISCONNECTED"
+  | "OUTBOUND_REQUEST_MESSAGE_ID_CONFLICT"
   | "TRANSPORT_RUNTIME_ERROR"
   | "DECODE_ERROR"
   | "INBOUND_REQUEST_REPLY_FAILED"

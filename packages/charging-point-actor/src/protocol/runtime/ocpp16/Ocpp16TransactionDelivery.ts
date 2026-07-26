@@ -14,9 +14,9 @@ import {
   restartActiveMeterValueLoops,
   stopMeterValueLoops,
 } from "./actions/meterValues";
-import { replayOfflineTransactions } from "./actions/offlineTransactionReplay";
 import { stopTransaction } from "./actions/stopTransaction";
 import { startTransaction } from "./actions/transactionStart";
+import { TransactionDeliveryDispatcher } from "./TransactionDeliveryDispatcher";
 
 const transactionDeliveries = new WeakMap<
   Ocpp16RuntimeContext,
@@ -36,7 +36,12 @@ export function getOcpp16TransactionDelivery(
 }
 
 export class Ocpp16TransactionDelivery {
-  constructor(private readonly context: Ocpp16RuntimeContext) {}
+  private readonly dispatcher: TransactionDeliveryDispatcher;
+
+  constructor(private readonly context: Ocpp16RuntimeContext) {
+    this.dispatcher = new TransactionDeliveryDispatcher(context);
+    context.wakeTransactionDelivery = () => this.dispatcher.wake();
+  }
 
   start(
     input: Ocpp16StartTransactionInput,
@@ -49,14 +54,25 @@ export class Ocpp16TransactionDelivery {
         name: "StartTransaction",
         input: { ...input, requireAuthorization: options.requireAuthorization },
       },
-      () => startTransaction(this.context, input, options),
+      async () => {
+        const result = await startTransaction(this.context, input, options);
+        if (result.status === "Accepted") {
+          this.dispatcher.wake();
+        }
+        return result;
+      },
     );
   }
 
   recordMeterValue(
     input: Ocpp16MeterValueInput,
   ): Promise<Ocpp16MeterValuesResult> {
-    return reportMeterValue(this.context, input);
+    return reportMeterValue(this.context, input).then((result) => {
+      if (result.outcome === "Accepted") {
+        this.dispatcher.wake();
+      }
+      return result;
+    });
   }
 
   recordTriggeredMeterValue(input: {
@@ -75,7 +91,13 @@ export class Ocpp16TransactionDelivery {
         name: "StopTransaction",
         input,
       },
-      () => stopTransaction(this.context, input),
+      async () => {
+        const result = await stopTransaction(this.context, input);
+        if (result.outcome === "Accepted") {
+          this.dispatcher.wake();
+        }
+        return result;
+      },
     );
   }
 
@@ -86,8 +108,16 @@ export class Ocpp16TransactionDelivery {
         category: "action",
         name: "OfflineTransactionReplay",
       },
-      () => replayOfflineTransactions(this.context),
+      () => this.dispatcher.drain(),
     );
+  }
+
+  wake(): void {
+    this.dispatcher.wake();
+  }
+
+  recoverInterrupted(): Promise<unknown[]> {
+    return this.dispatcher.recoverInterrupted();
   }
 
   applyMeterValueSampleIntervalChange(): void {
@@ -96,5 +126,6 @@ export class Ocpp16TransactionDelivery {
 
   stopAll(): void {
     stopMeterValueLoops(this.context);
+    this.dispatcher.stop();
   }
 }

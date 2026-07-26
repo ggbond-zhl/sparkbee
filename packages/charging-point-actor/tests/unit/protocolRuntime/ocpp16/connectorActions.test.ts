@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { Transaction } from "../../../../src/model/index.ts";
 import {
@@ -64,6 +64,11 @@ describe("Ocpp16Runtime connector actions", () => {
       connectorId: 1,
       idTag: "CARD001",
       meterStartWh: 0,
+    });
+    await vi.waitFor(() => {
+      expect(session.requests.filter((request) =>
+        request.action === "StatusNotification"
+      )).toHaveLength(2);
     });
 
     expect(plugResult).toEqual({
@@ -184,6 +189,11 @@ describe("Ocpp16Runtime connector actions", () => {
       idTag: "CARD001",
       meterStartWh: 0,
     });
+    await vi.waitFor(() => {
+      expect(session.requests.filter((request) =>
+        request.action === "StatusNotification"
+      )).toHaveLength(2);
+    });
 
     await expect(
       protocolRuntime.unplugConnector({ evseId: 1, connectorId: 1 }),
@@ -191,6 +201,9 @@ describe("Ocpp16Runtime connector actions", () => {
       plugState: "unplugged",
       vehiclePresence: "absent",
       connectorStatus: "available",
+    });
+    await vi.waitFor(() => {
+      expect(session.requests.slice(5)).toHaveLength(3);
     });
 
     const unplugRequests = session.requests.slice(5);

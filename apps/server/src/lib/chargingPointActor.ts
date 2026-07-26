@@ -5,6 +5,7 @@ export {
 } from "@spark-bee/charging-point-actor";
 export type {
   ChargingPointActor,
+  ChargingPointActorAuthorizationStore,
   ChargingPointActorAuthorizeResult,
   ChargingPointActorConnectorActionResult,
   ChargingPointActorChangeConfigurationInput,
@@ -15,6 +16,9 @@ export type {
   ChargingPointActorLogSink,
   ChargingPointActorEvent,
   ChargingPointActorOptions,
+  ChargingPointActorPersistedAuthorizationCacheEntry,
+  ChargingPointActorPersistedAuthorizationState,
+  ChargingPointActorPersistedLocalAuthorizationList,
   ChargingPointActorProtocol,
   ChargingPointActorStartResult,
   ChargingPointActorStartTransactionInput,
@@ -22,6 +26,10 @@ export type {
   ChargingPointActorStopTransactionResult,
   ChargingPointActorTransactionStartResult,
   ChargingPointActorPersistedTransaction,
+  ChargingPointActorTransactionDeliveryMessageType,
+  ChargingPointActorTransactionDeliveryRecord,
+  ChargingPointActorTransactionDeliveryStatus,
+  ChargingPointActorTransactionDeliverySummary,
   ChargingPointActorTransactionStore,
   ConfigurationDefinition,
 } from "@spark-bee/charging-point-actor";

@@ -17,7 +17,6 @@ import type {
   Ocpp16PersistedConfigurationEntry,
 } from "../protocol/runtime/ocpp16/ConfigurationStore";
 import type { SessionOfflineReason } from "../protocol/session/types";
-import type { ProtocolVersion } from "../shared/types";
 
 export type ChargingPointActorProtocol = "OCPP16J";
 export type ChargingPointActorOperationStatus = "accepted" | "rejected" | "failed";
@@ -53,6 +52,12 @@ export type ChargingPointActorResourceRef =
   | { scope: "authorization"; idTag: string; evseId?: number; connectorId?: number }
   | { scope: "configuration"; key: string }
   | {
+      scope: "transactionDelivery";
+      transactionId: string;
+      messageId: string;
+      deliverySequence: string;
+    }
+  | {
       scope: "transaction";
       evseId: number;
       connectorId: number;
@@ -68,7 +73,7 @@ export interface ChargingPointActorEventBase<
   sequence: number;
   type: TType;
   chargingPointId: string;
-  protocol: ProtocolVersion;
+  protocol: ChargingPointActorProtocol;
   resource: TResource;
   occurredAt: string;
 }
@@ -197,6 +202,25 @@ export interface ConfigurationChangedEvent
   pendingRestart: boolean;
 }
 
+export interface TransactionDeliveryChangedEvent
+  extends ChargingPointActorEventBase<
+    "transaction-delivery.changed",
+    Extract<ChargingPointActorResourceRef, { scope: "transactionDelivery" }>
+  > {
+  messageType: "start" | "meter_value" | "stop";
+  previousStatus:
+    | "pending"
+    | "in_flight"
+    | "retry_wait"
+    | "delivered"
+    | "failed"
+    | null;
+  currentStatus: Exclude<TransactionDeliveryChangedEvent["previousStatus"], null>;
+  attemptCount: number;
+  nextAttemptAt: string | null;
+  lastError: ChargingPointActorEventError | null;
+}
+
 export interface SessionStatusEvent
   extends ChargingPointActorEventBase<
     "session.status",
@@ -223,6 +247,7 @@ export type ChargingPointActorEventMap = {
   "transaction.status": TransactionStatusEvent;
   "transaction.meterValue": TransactionMeterValueEvent;
   "configuration.changed": ConfigurationChangedEvent;
+  "transaction-delivery.changed": TransactionDeliveryChangedEvent;
   "protocol.message": ProtocolMessageEvent;
 };
 
@@ -263,22 +288,132 @@ export interface ChargingPointActorPersistedTransaction {
   startedAt: Date;
 }
 
+export type ChargingPointActorTransactionDeliveryStatus =
+  | "pending"
+  | "in_flight"
+  | "retry_wait"
+  | "delivered"
+  | "failed";
+
+export type ChargingPointActorTransactionDeliveryMessageType =
+  | "start"
+  | "meter_value"
+  | "stop";
+
+export interface ChargingPointActorTransactionDeliveryRecord {
+  id: string;
+  transactionId: string;
+  ocppTransactionId: number | null;
+  deliverySequence: bigint;
+  messageId: string;
+  messageType: ChargingPointActorTransactionDeliveryMessageType;
+  payload: Record<string, unknown>;
+  occurredAt: Date;
+  status: ChargingPointActorTransactionDeliveryStatus;
+  attemptCount: number;
+  nextAttemptAt: Date | null;
+  inFlightAt: Date | null;
+  deliveredAt: Date | null;
+  failedAt: Date | null;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+}
+
+export interface ChargingPointActorTransactionDeliverySummary {
+  pendingCount: number;
+  inFlightCount: number;
+  retryWaitCount: number;
+  failedCount: number;
+  oldestPendingAt: Date | null;
+}
+
 export interface ChargingPointActorTransactionStore {
   loadActive(): Promise<ChargingPointActorPersistedTransaction[]>;
-  saveStarted(transaction: ChargingPointActorPersistedTransaction): Promise<void>;
-  saveSample(input: {
+  start(input: {
+    transaction: ChargingPointActorPersistedTransaction;
+    messageId: string;
+    payload: Record<string, unknown>;
+  }): Promise<ChargingPointActorTransactionDeliveryRecord>;
+  recordSample(input: {
+    sampleId: string;
     transactionId: string;
     sampledAt: Date;
     meterWh: number;
     powerW: number;
     currentA: number;
     voltageV: number;
-  }): Promise<void>;
-  saveEnded(input: {
+    messageId: string;
+    payload: Record<string, unknown>;
+  }): Promise<ChargingPointActorTransactionDeliveryRecord>;
+  end(input: {
     transactionId: string;
     stoppedAt: Date;
     meterStopWh: number;
-  }): Promise<void>;
+    messageId: string;
+    payload: Record<string, unknown>;
+  }): Promise<ChargingPointActorTransactionDeliveryRecord>;
+  listPending(): Promise<ChargingPointActorTransactionDeliveryRecord[]>;
+  claimHead(claimedAt: Date): Promise<ChargingPointActorTransactionDeliveryRecord | null>;
+  recordSuccess(input: {
+    id: string;
+    deliveredAt: Date;
+    ocppTransactionId?: number;
+  }): Promise<ChargingPointActorTransactionDeliveryRecord>;
+  recordFailure(input: {
+    id: string;
+    failedAt: Date;
+    maxAttempts: number;
+    retryIntervalSec: number;
+    errorCode: string;
+    errorMessage: string;
+  }): Promise<ChargingPointActorTransactionDeliveryRecord>;
+  recoverInFlight(input: {
+    recoveredAt: Date;
+    maxAttempts: number;
+    retryIntervalSec: number;
+    errorCode: string;
+    errorMessage: string;
+  }): Promise<ChargingPointActorTransactionDeliveryRecord[]>;
+  getSummary(): Promise<ChargingPointActorTransactionDeliverySummary>;
+}
+
+export interface ChargingPointActorPersistedLocalAuthorizationEntry {
+  credentialId: string;
+  status: AuthorizationStatus;
+  validUntil: Date | null;
+  groupCredentialId: string | null;
+}
+
+export interface ChargingPointActorPersistedLocalAuthorizationList {
+  version: number;
+  source: string;
+  updatedAt: Date;
+  entries: ChargingPointActorPersistedLocalAuthorizationEntry[];
+}
+
+export interface ChargingPointActorPersistedAuthorizationCacheEntry {
+  credentialId: string;
+  evseId: number;
+  status: AuthorizationStatus;
+  validUntil: Date | null;
+  groupCredentialId: string | null;
+  lastEvaluatedAt: Date;
+}
+
+export interface ChargingPointActorPersistedAuthorizationState {
+  localList: ChargingPointActorPersistedLocalAuthorizationList | null;
+  cacheEntries: ChargingPointActorPersistedAuthorizationCacheEntry[];
+}
+
+export interface ChargingPointActorAuthorizationStore {
+  load(): Promise<ChargingPointActorPersistedAuthorizationState>;
+  replaceLocalList(
+    list: ChargingPointActorPersistedLocalAuthorizationList,
+  ): Promise<void>;
+  upsertCacheEntry(
+    entry: ChargingPointActorPersistedAuthorizationCacheEntry,
+  ): Promise<void>;
+  clearCache(): Promise<void>;
 }
 
 export type ChargingPointActorStartResult =
@@ -320,6 +455,7 @@ export type ChargingPointActorTransactionStartResult =
   | {
       status: "accepted";
       transactionId: string;
+      deliveryStatus: "pending";
     }
   | ChargingPointActorRejectedOperationResult;
 
@@ -341,6 +477,7 @@ export type ChargingPointActorStopTransactionResult =
       transactionId: string;
       meterStopWh: number;
       stoppedAt: Date;
+      deliveryStatus: "pending";
     }
   | ChargingPointActorFailedOperationResult;
 
@@ -416,7 +553,7 @@ export type ChargingPointActorChangeConfigurationResult =
 
 export interface ChargingPointActor {
   readonly id: string;
-  readonly protocol: ProtocolVersion;
+  readonly protocol: ChargingPointActorProtocol;
   readonly status: ChargingPointActorStatus;
   readonly events: ChargingPointActorEventBus;
   start(): Promise<ChargingPointActorStartResult>;
@@ -445,6 +582,7 @@ export type Ocpp16ChargingPointActorOptions = {
   configurationPersistence?: ChargingPointActorConfigurationPersistence;
   actorLogSink?: ChargingPointActorLogSink;
   transactionStore?: ChargingPointActorTransactionStore;
+  authorizationStore?: ChargingPointActorAuthorizationStore;
 };
 
 export type ChargingPointActorOptions = Ocpp16ChargingPointActorOptions;

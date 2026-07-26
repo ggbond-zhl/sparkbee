@@ -4,7 +4,6 @@ import {
   AuthorizationGrant,
   ChargingPoint,
   ConfigurationCatalog,
-  Transaction,
   Connector,
   EVSE,
 } from "../../../../src/model/index.ts";
@@ -13,6 +12,12 @@ import {
   type OutboundRequestResult,
 } from "../../../../src/protocol/session/types.ts";
 import { createDeferred } from "../../../../src/shared/deferred.ts";
+import { MemoryTransactionDeliveryStore } from "../../../../src/protocol/runtime/ocpp16/MemoryTransactionDeliveryStore.ts";
+import type {
+  ChargingPointActorAuthorizationStore,
+  ChargingPointActorTransactionDeliveryRecord,
+  ChargingPointActorTransactionStore,
+} from "../../../../src/chargingPointActor/types.ts";
 import {
   Ocpp16Runtime,
   ProtocolRuntimeError,
@@ -70,6 +75,20 @@ function seedAcceptedAuthorization(
 
 async function plugConnector(protocolRuntime: Ocpp16Runtime): Promise<void> {
   await protocolRuntime.plugConnector({ evseId: 1, connectorId: 1 });
+}
+
+async function waitForRequests(
+  session: FakeSession,
+  action: string,
+  count = 1,
+): Promise<void> {
+  await vi.waitFor(() => {
+    expect(
+      session.requests.filter((request) => request.action === action),
+      `已发送: ${session.requests.map((request) => request.action).join(", ")}`,
+    )
+      .toHaveLength(count);
+  });
 }
 
 function collectRuntimeEvents(
@@ -163,6 +182,113 @@ function localAuthorizationListUnsupportedConfiguration(): Ocpp16RuntimeOptions[
         valueType: "boolean",
       },
     ],
+  };
+}
+
+function createAuthorizationStore(
+  overrides: Partial<ChargingPointActorAuthorizationStore> = {},
+): ChargingPointActorAuthorizationStore {
+  return {
+    load: vi.fn().mockResolvedValue({ localList: null, cacheEntries: [] }),
+    replaceLocalList: vi.fn().mockResolvedValue(undefined),
+    upsertCacheEntry: vi.fn().mockResolvedValue(undefined),
+    clearCache: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function transactionDeliveryConfiguration(input: {
+  maxAttempts?: number;
+  retryIntervalSec?: number;
+  localAuthorizeOffline?: boolean;
+} = {}): Ocpp16RuntimeOptions["configurationCatalog"] {
+  const catalog = localAuthorizationListConfiguration({
+    localAuthorizeOffline: input.localAuthorizeOffline,
+  });
+  if (catalog === undefined || !("entries" in catalog)) {
+    throw new Error("测试配置目录必须是可编辑输入");
+  }
+  return {
+    ...catalog,
+    entries: [
+      ...(catalog.entries ?? []),
+      {
+        key: "TransactionMessageAttempts",
+        value: String(input.maxAttempts ?? 3),
+        valueType: "integer",
+        minValue: 1,
+      },
+      {
+        key: "TransactionMessageRetryInterval",
+        value: String(input.retryIntervalSec ?? 60),
+        valueType: "integer",
+        minValue: 0,
+      },
+    ],
+  };
+}
+
+function createTransactionStore(
+  overrides: Partial<ChargingPointActorTransactionStore> = {},
+): ChargingPointActorTransactionStore {
+  const createRecord = (
+    messageType: ChargingPointActorTransactionDeliveryRecord["messageType"],
+    input: { transactionId: string; messageId: string; payload: Record<string, unknown>; occurredAt: Date },
+  ): ChargingPointActorTransactionDeliveryRecord => ({
+    id: input.messageId,
+    transactionId: input.transactionId,
+    ocppTransactionId: null,
+    deliverySequence: 1n,
+    messageId: input.messageId,
+    messageType,
+    payload: input.payload,
+    occurredAt: input.occurredAt,
+    status: "pending",
+    attemptCount: 0,
+    nextAttemptAt: null,
+    inFlightAt: null,
+    deliveredAt: null,
+    failedAt: null,
+    lastErrorCode: null,
+    lastErrorMessage: null,
+  });
+  return {
+    loadActive: vi.fn(async () => []),
+    start: vi.fn(async (input) => createRecord("start", {
+      transactionId: input.transaction.transactionId,
+      messageId: input.messageId,
+      payload: input.payload,
+      occurredAt: input.transaction.startedAt,
+    })),
+    recordSample: vi.fn(async (input) => createRecord("meter_value", {
+      transactionId: input.transactionId,
+      messageId: input.messageId,
+      payload: input.payload,
+      occurredAt: input.sampledAt,
+    })),
+    end: vi.fn(async (input) => createRecord("stop", {
+      transactionId: input.transactionId,
+      messageId: input.messageId,
+      payload: input.payload,
+      occurredAt: input.stoppedAt,
+    })),
+    listPending: vi.fn(async () => []),
+    claimHead: vi.fn(async () => null),
+    recordSuccess: vi.fn(async () => {
+      throw new Error("测试未配置 recordSuccess");
+    }),
+    recordFailure: vi.fn(async () => {
+      throw new Error("测试未配置 recordFailure");
+    }),
+    recoverInFlight: vi.fn(async () => []),
+    getSummary: vi.fn(async () => ({
+      pendingCount: 0,
+      inFlightCount: 0,
+      retryWaitCount: 0,
+      failedCount: 0,
+      oldestPendingAt: null,
+    })),
+    ...overrides,
   };
 }
 
@@ -669,6 +795,476 @@ describe("Ocpp16Runtime", () => {
   });
 
   describe("local transaction delivery", () => {
+  test("stores an offline StartTransaction without consuming a delivery attempt", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
+    const { protocolRuntime, session } = createProtocolRuntime([], {
+      chargingPoint: createChargingPoint({
+        plugState: "plugged",
+        vehiclePresence: "detected",
+      }),
+      configurationCatalog: localAuthorizationListConfiguration({
+        localAuthorizeOffline: true,
+      }),
+      transactionStore,
+    });
+    runtimeContext(protocolRuntime).localAuthorizationList =
+      runtimeContext(protocolRuntime).localAuthorizationList.replaceEntries(
+        1,
+        new Date("2026-01-01T00:00:00.000Z"),
+        "ocpp16",
+        [{ credentialId: "TAG-OFFLINE", status: "accepted" }],
+      );
+
+    const result = await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-OFFLINE",
+      meterStartWh: 100,
+    });
+
+    expect(result).toMatchObject({
+      status: "Accepted",
+      transactionId: "transaction-1",
+    });
+    expect(session.requests).toEqual([]);
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({
+        messageType: "start",
+        status: "pending",
+        attemptCount: 0,
+      }),
+    ]);
+  });
+
+  test("reuses the stable StartTransaction message id and advances after bounded retry", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
+    const baseConfigurationCatalog = localAuthorizationListConfiguration();
+    if (
+      baseConfigurationCatalog === undefined ||
+      !("entries" in baseConfigurationCatalog)
+    ) {
+      throw new Error("测试配置目录必须是可编辑输入");
+    }
+    const configurationCatalog = {
+      ...baseConfigurationCatalog,
+      entries: [...(baseConfigurationCatalog.entries ?? []),
+      {
+        key: "TransactionMessageAttempts" as const,
+        value: "2",
+        valueType: "integer" as const,
+        minValue: 1,
+      },
+      {
+        key: "TransactionMessageRetryInterval" as const,
+        value: "0",
+        valueType: "integer" as const,
+        minValue: 0,
+      },
+      ],
+    };
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      error("StartTransaction", "第一次发送失败"),
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: { status: "Accepted" },
+      }),
+      response("StatusNotification", {}),
+    ], {
+      configurationCatalog,
+      transactionStore,
+    });
+    await boot(protocolRuntime);
+    seedAcceptedAuthorization(protocolRuntime);
+    await plugConnector(protocolRuntime);
+
+    const result = await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-1",
+      meterStartWh: 100,
+    });
+    expect(result).toMatchObject({
+      status: "Accepted",
+      transactionId: "transaction-1",
+    });
+    await vi.waitFor(() => {
+      expect(session.requests.filter((request) => request.action === "StartTransaction"))
+        .toHaveLength(2);
+    });
+
+    const startRequests = session.requests.filter(
+      (request) => request.action === "StartTransaction",
+    );
+    expect(startRequests[0]?.messageId).toBeTruthy();
+    expect(startRequests[1]?.messageId).toBe(startRequests[0]?.messageId);
+    await expect(transactionStore.listPending()).resolves.toEqual([]);
+    expect(protocolRuntime.getTransactionResource("transaction-1"))
+      .toMatchObject({ ocppTransactionId: 1001 });
+  });
+
+  test("sends later MeterValues with transactionId minus one after final start failure", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
+    const baseConfigurationCatalog = localAuthorizationListConfiguration();
+    if (
+      baseConfigurationCatalog === undefined ||
+      !("entries" in baseConfigurationCatalog)
+    ) {
+      throw new Error("测试配置目录必须是可编辑输入");
+    }
+    const configurationCatalog = {
+      ...baseConfigurationCatalog,
+      entries: [
+        ...(baseConfigurationCatalog.entries ?? []),
+        {
+          key: "TransactionMessageAttempts" as const,
+          value: "1",
+          valueType: "integer" as const,
+          minValue: 1,
+        },
+      ],
+    };
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      error("StartTransaction", "最终失败"),
+      response("MeterValues", {}),
+    ], { configurationCatalog, transactionStore });
+    await boot(protocolRuntime);
+    seedAcceptedAuthorization(protocolRuntime);
+    await plugConnector(protocolRuntime);
+    const start = await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-1",
+      meterStartWh: 100,
+    });
+    await vi.waitFor(() => {
+      expect(protocolRuntime.getTransactionResource("transaction-1"))
+        .toMatchObject({ ocppTransactionId: -1 });
+    });
+
+    await protocolRuntime.reportMeterValue({
+      transactionId: start.status === "Accepted" ? start.transactionId : "",
+      meterWh: 150,
+    });
+    await vi.waitFor(() => {
+      expect(session.requests.find((request) => request.action === "MeterValues"))
+        .toBeDefined();
+    });
+
+    expect(session.requests.find((request) => request.action === "MeterValues")?.payload)
+      .toMatchObject({ transactionId: -1 });
+  });
+
+  test("keeps one station sequence across overlapping local transactions", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
+    const transactionIds = ["tx-a", "tx-b"];
+    const chargingPoint = new ChargingPoint({
+      id: "cp-1",
+      vendor: "Volt",
+      model: "Sim",
+      evses: [1, 2].map((id) => new EVSE({
+        id,
+        connectors: [new Connector({
+          id,
+          type: "GBT",
+          format: "socket",
+          powerType: "ac",
+          plugState: "plugged",
+          vehiclePresence: "detected",
+        })],
+      })),
+    });
+    const { protocolRuntime } = createProtocolRuntime([], {
+      chargingPoint,
+      configurationCatalog: localAuthorizationListConfiguration({
+        localAuthorizeOffline: true,
+      }),
+      transactionStore,
+      idGenerator: () => transactionIds.shift()!,
+    });
+    runtimeContext(protocolRuntime).localAuthorizationList =
+      runtimeContext(protocolRuntime).localAuthorizationList.replaceEntries(
+        1,
+        new Date("2026-01-01T00:00:00.000Z"),
+        "ocpp16",
+        [
+          { credentialId: "TAG-A", status: "accepted" },
+          { credentialId: "TAG-B", status: "accepted" },
+        ],
+      );
+
+    const first = await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-A",
+      meterStartWh: 100,
+    });
+    await protocolRuntime.startLocalTransaction({
+      connectorId: 2,
+      idTag: "TAG-B",
+      meterStartWh: 200,
+    });
+    await protocolRuntime.reportMeterValue({
+      transactionId: first.status === "Accepted" ? first.transactionId : "",
+      meterWh: 150,
+    });
+    await protocolRuntime.stopTransaction({
+      transactionId: first.status === "Accepted" ? first.transactionId : "",
+      meterStopWh: 160,
+      reason: "local",
+    });
+
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({ deliverySequence: 1n, messageType: "start" }),
+      expect.objectContaining({ deliverySequence: 2n, messageType: "start" }),
+      expect.objectContaining({ deliverySequence: 3n, messageType: "meter_value" }),
+      expect.objectContaining({ deliverySequence: 4n, messageType: "stop" }),
+    ]);
+  });
+
+  test("waits for Boot Accepted before retrying an interrupted delivery after restart", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
+    await transactionStore.start({
+      transaction: {
+        transactionId: "persisted-transaction",
+        evseId: 1,
+        connectorId: 1,
+        idTag: "TAG-1",
+        state: "active",
+        chargingState: "charging",
+        meterStartWh: 100,
+        latestMeterWh: 100,
+        startedAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      messageId: "persisted-start-message",
+      payload: {
+        evseId: 1,
+        connectorId: 1,
+        idTag: "TAG-1",
+        meterStartWh: 100,
+      },
+    });
+    await transactionStore.claimHead(new Date("2026-01-01T00:00:00.000Z"));
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: { status: "Accepted" },
+      }),
+      response("StatusNotification", {}),
+    ], {
+      transactionStore,
+      configurationCatalog: transactionDeliveryConfiguration({
+        retryIntervalSec: 0,
+      }),
+    });
+
+    await protocolRuntime.restorePersistedTransactions();
+
+    expect(session.requests).toEqual([]);
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({
+        messageId: "persisted-start-message",
+        status: "retry_wait",
+        attemptCount: 1,
+        lastErrorCode: "ProcessRestarted",
+      }),
+    ]);
+
+    await boot(protocolRuntime);
+
+    expect(session.requests.map((request) => request.action)).toEqual([
+      "BootNotification",
+      "StartTransaction",
+      "StatusNotification",
+    ]);
+    expect(session.requests[1]?.messageId).toBe("persisted-start-message");
+  });
+
+  test("drains pending deliveries immediately on an ordinary reconnect after registration", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: { status: "Accepted" },
+      }),
+      response("StatusNotification", {}),
+    ], {
+      transactionStore,
+      configurationCatalog: transactionDeliveryConfiguration({
+        localAuthorizeOffline: true,
+      }),
+    });
+    await boot(protocolRuntime);
+    await plugConnector(protocolRuntime);
+    runtimeContext(protocolRuntime).localAuthorizationList =
+      runtimeContext(protocolRuntime).localAuthorizationList.replaceEntries(
+        1,
+        new Date("2026-01-01T00:00:00.000Z"),
+        "ocpp16",
+        [{ credentialId: "TAG-LOCAL", status: "accepted" }],
+      );
+    session.emitOffline("unexpected_disconnect");
+    await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-LOCAL",
+      meterStartWh: 100,
+    });
+
+    expect(session.requests.filter((request) => request.action === "StartTransaction"))
+      .toEqual([]);
+    session.emitOnline();
+
+    await vi.waitFor(() => {
+      expect(session.requests.filter((request) => request.action === "StartTransaction"))
+        .toHaveLength(1);
+    });
+    expect(session.requests.filter((request) => request.action === "BootNotification"))
+      .toHaveLength(1);
+  });
+
+  test("retries transaction delivery at linear attempt times 0, 60, and 180 seconds", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const transactionStore = new MemoryTransactionDeliveryStore();
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      error("StartTransaction", "第一次失败"),
+      error("StartTransaction", "第二次失败"),
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: { status: "Accepted" },
+      }),
+      response("StatusNotification", {}),
+    ], {
+      transactionStore,
+      configurationCatalog: transactionDeliveryConfiguration({
+        maxAttempts: 3,
+        retryIntervalSec: 60,
+      }),
+      clock: () => new Date(Date.now()),
+    });
+    await boot(protocolRuntime);
+    seedAcceptedAuthorization(protocolRuntime);
+    await plugConnector(protocolRuntime);
+    await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-1",
+      meterStartWh: 100,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const startRequests = () => session.requests.filter(
+      (request) => request.action === "StartTransaction",
+    );
+    expect(startRequests()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(startRequests()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(startRequests()).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(119_999);
+    expect(startRequests()).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(startRequests()).toHaveLength(3);
+    expect(new Set(startRequests().map((request) => request.messageId)).size).toBe(1);
+  });
+
+  test.each([
+    ["CALLERROR", error("StartTransaction", "call error")],
+    [
+      "timeout",
+      rejected(
+        "StartTransaction",
+        new SessionError("OUTBOUND_REQUEST_TIMEOUT", "等待响应超时"),
+      ),
+    ],
+    [
+      "disconnect",
+      rejected(
+        "StartTransaction",
+        new SessionError("OUTBOUND_REQUEST_DISCONNECTED", "连接已断开"),
+      ),
+    ],
+  ])("reuses the persisted message id after %s", async (_scenario, firstReply) => {
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      firstReply,
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: { status: "Accepted" },
+      }),
+      response("StatusNotification", {}),
+    ], {
+      transactionStore: new MemoryTransactionDeliveryStore(),
+      configurationCatalog: transactionDeliveryConfiguration({
+        maxAttempts: 2,
+        retryIntervalSec: 0,
+      }),
+    });
+    await boot(protocolRuntime);
+    seedAcceptedAuthorization(protocolRuntime);
+    await plugConnector(protocolRuntime);
+    await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-1",
+      meterStartWh: 100,
+    });
+
+    await vi.waitFor(() => {
+      expect(session.requests.filter((request) => request.action === "StartTransaction"))
+        .toHaveLength(2);
+    });
+    const messageIds = session.requests
+      .filter((request) => request.action === "StartTransaction")
+      .map((request) => request.messageId);
+    expect(messageIds[0]).toBeTruthy();
+    expect(messageIds[1]).toBe(messageIds[0]);
+  });
+
+  test("queues StopTransaction when StartTransaction is not accepted", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
+    const events = [] as Ocpp16RuntimeEvent[];
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: { status: "Invalid" },
+      }),
+      response("StatusNotification", {}),
+      response("StopTransaction", {}),
+      response("StatusNotification", {}),
+    ], { transactionStore });
+    protocolRuntime.on("runtimeEvent", (event) => events.push(event));
+    await boot(protocolRuntime);
+    seedAcceptedAuthorization(protocolRuntime);
+    await plugConnector(protocolRuntime);
+    const result = await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-1",
+      meterStartWh: 100,
+    });
+
+    await vi.waitFor(() => {
+      expect(session.requests.find((request) => request.action === "StopTransaction"))
+        .toBeDefined();
+    });
+    expect(result).toMatchObject({
+      status: "Accepted",
+      transactionId: "transaction-1",
+    });
+    expect(protocolRuntime.getTransactionState("transaction-1")).toBe("ended");
+    expect(events.filter((event) => event.type === "transaction-delivery.changed"))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ previousStatus: null, currentStatus: "pending" }),
+        expect.objectContaining({ previousStatus: "pending", currentStatus: "in_flight" }),
+        expect.objectContaining({ previousStatus: "in_flight", currentStatus: "delivered" }),
+      ]));
+  });
+
   test("runs the basic local charging happy path in protocol order", async () => {
     const actorLogs: Ocpp16ActorLog[] = [];
     const { protocolRuntime, session } = createProtocolRuntime([
@@ -714,29 +1310,20 @@ describe("Ocpp16Runtime", () => {
     });
     expect(start).toMatchObject({
       status: "Accepted",
-      transactionId: "1001",
-      ocppTransactionId: 1001,
-      startTransactionResult: {
-        outcome: "Accepted",
-        connectorId: 1,
-        idTag: "TAG-1",
-        ocppTransactionId: 1001,
-        authorizationStatus: "Accepted",
-        consecutiveFailures: 0,
-        platformCommunicationStatus: "online",
-        shouldReconnect: false,
-      },
+      transactionId: "transaction-1",
     });
-    expect(start.statusNotificationResults).toEqual([
-      expect.objectContaining({ outcome: "Accepted", connectorStatus: "Charging" }),
-    ]);
+    expect(start.statusNotificationResults).toEqual([]);
+    await vi.waitFor(() => {
+      expect(protocolRuntime.getTransactionResource("transaction-1"))
+        .toMatchObject({ ocppTransactionId: 1001 });
+    });
     const meterResult = await protocolRuntime.reportMeterValue({
       transactionId: start.status === "Accepted" ? start.transactionId : "",
       meterWh: 160,
     });
     expect(meterResult).toMatchObject({
       outcome: "Accepted",
-      transactionId: "1001",
+      transactionId: "transaction-1",
       connectorId: 1,
       ocppTransactionId: 1001,
       meterWh: 160,
@@ -745,11 +1332,13 @@ describe("Ocpp16Runtime", () => {
       platformCommunicationStatus: "online",
       shouldReconnect: false,
     });
+    await waitForRequests(session, "MeterValues");
     await protocolRuntime.stopTransaction({
       transactionId: start.status === "Accepted" ? start.transactionId : "",
       reason: "local",
       meterStopWh: 180,
     });
+    await waitForRequests(session, "StopTransaction");
 
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
@@ -780,7 +1369,7 @@ describe("Ocpp16Runtime", () => {
     });
 
     const transaction = getRuntimeTransaction(protocolRuntime);
-    expect(transaction?.id).toBe("1001");
+    expect(transaction?.id).toBe("transaction-1");
     expect(transaction?.state).toBe("ended");
     expect(transaction?.endMeterWh).toBe(180);
     expect(transaction?.latestMeterWh).toBe(180);
@@ -822,7 +1411,7 @@ describe("Ocpp16Runtime", () => {
         input: expect.objectContaining({ meterWh: 160 }),
         result: expect.objectContaining({
           outcome: "Accepted",
-          transactionId: "1001",
+          transactionId: "transaction-1",
         }),
       }),
     }));
@@ -865,6 +1454,8 @@ describe("Ocpp16Runtime", () => {
       meterWh: 160,
     });
 
+    await waitForRequests(session, "MeterValues");
+
     expect(session.requests[4]?.payload).toMatchObject({
       connectorId: 1,
       transactionId: 1001,
@@ -903,14 +1494,11 @@ describe("Ocpp16Runtime", () => {
 
   test("persists a charging sample before sending MeterValues", async () => {
     const persistenceError = new Error("database unavailable");
-    const transactionStore = {
-      loadActive: vi.fn(async () => []),
-      saveStarted: vi.fn(async () => undefined),
-      saveSample: vi.fn(async () => {
+    const transactionStore = createTransactionStore({
+      recordSample: vi.fn(async () => {
         throw persistenceError;
       }),
-      saveEnded: vi.fn(async () => undefined),
-    };
+    });
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
@@ -934,14 +1522,14 @@ describe("Ocpp16Runtime", () => {
       meterWh: 160,
     })).rejects.toThrow("database unavailable");
 
-    expect(transactionStore.saveSample).toHaveBeenCalledOnce();
+    expect(transactionStore.recordSample).toHaveBeenCalledOnce();
     expect(session.requests.map((request) => request.action)).not.toContain(
       "MeterValues",
     );
   });
 
   test("restores persisted active transactions into runtime state", async () => {
-    const transactionStore = {
+    const transactionStore = createTransactionStore({
       loadActive: vi.fn(async () => [
         {
           transactionId: "1001",
@@ -956,10 +1544,7 @@ describe("Ocpp16Runtime", () => {
           startedAt: new Date("2026-01-01T00:00:00.000Z"),
         },
       ]),
-      saveStarted: vi.fn(async () => undefined),
-      saveSample: vi.fn(async () => undefined),
-      saveEnded: vi.fn(async () => undefined),
-    };
+    });
     const { protocolRuntime } = createProtocolRuntime([], { transactionStore });
 
     await protocolRuntime.restorePersistedTransactions();
@@ -974,7 +1559,7 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("emits runtime events from the local charging flow", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("Authorize", {
@@ -1012,6 +1597,7 @@ describe("Ocpp16Runtime", () => {
       reason: "local",
       meterStopWh: 180,
     });
+    await waitForRequests(session, "StopTransaction");
     protocolRuntime.unplugConnector({ evseId: 1, connectorId: 1 });
 
     expect(events).toContainEqual(expect.objectContaining({
@@ -1057,7 +1643,7 @@ describe("Ocpp16Runtime", () => {
         scope: "transaction",
         evseId: 1,
         connectorId: 1,
-        transactionId: "1001",
+        transactionId: "transaction-1",
       },
       previousStatus: null,
       currentStatus: "active",
@@ -1068,7 +1654,7 @@ describe("Ocpp16Runtime", () => {
         scope: "transaction",
         evseId: 1,
         connectorId: 1,
-        transactionId: "1001",
+        transactionId: "transaction-1",
       },
       meterWh: 160,
       sampledAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -1079,7 +1665,7 @@ describe("Ocpp16Runtime", () => {
         scope: "transaction",
         evseId: 1,
         connectorId: 1,
-        transactionId: "1001",
+        transactionId: "transaction-1",
       },
       previousStatus: "active",
       currentStatus: "ended",
@@ -1378,13 +1964,7 @@ describe("Ocpp16Runtime", () => {
       kind: "response",
       payload: { idTagInfo: { status: "Invalid" } },
     });
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitForRequests(session, "StopTransaction");
 
     expect(authorizeResult).toMatchObject({
       outcome: "Accepted",
@@ -1392,10 +1972,10 @@ describe("Ocpp16Runtime", () => {
     });
     expect(startResult).toMatchObject({
       status: "Accepted",
-      transactionId: "1001",
+      transactionId: "transaction-1",
     });
     expect(getRuntimeTransaction(protocolRuntime)).toMatchObject({
-      id: "1001",
+      id: "transaction-1",
       state: "ended",
       stopReason: "deauthorized",
     });
@@ -1462,10 +2042,11 @@ describe("Ocpp16Runtime", () => {
     });
 
     backgroundAuthorize.reject(new Error("authorize timeout"));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitForRequests(session, "StartTransaction");
+    await waitForRequests(session, "StatusNotification", 2);
 
     expect(getRuntimeTransaction(protocolRuntime)).toMatchObject({
-      id: "1001",
+      id: "transaction-1",
       state: "active",
       stopReason: null,
     });
@@ -1524,7 +2105,7 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("keeps an accepted transaction active when Charging StatusNotification fails", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("StartTransaction", {
@@ -1547,24 +2128,16 @@ describe("Ocpp16Runtime", () => {
     });
 
     expect(result.status).toBe("Accepted");
-    expect(result.statusNotificationResults).toEqual([
-      expect.objectContaining({
-        outcome: "Failed",
-        connectorStatus: "Charging",
-        errorCode: "OUTBOUND_REQUEST_TIMEOUT",
-        consecutiveFailures: 1,
-        platformCommunicationStatus: "unknown",
-        shouldReconnect: false,
-      }),
-    ]);
+    expect(result.statusNotificationResults).toEqual([]);
+    await waitForRequests(session, "StatusNotification", 2);
     const transaction = getRuntimeTransaction(protocolRuntime);
-    expect(transaction?.id).toBe("1001");
+    expect(transaction?.id).toBe("transaction-1");
     expect(transaction?.state).toBe("active");
     expect(transaction?.chargingState).toBe("charging");
   });
 
   test("releases local resources when final StatusNotification fails after stop", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("StartTransaction", {
@@ -1595,17 +2168,8 @@ describe("Ocpp16Runtime", () => {
     });
 
     expect(result.outcome).toBe("Accepted");
-    expect(result.statusNotificationResults).toEqual([
-      expect.objectContaining({ outcome: "Accepted", connectorStatus: "Finishing" }),
-      expect.objectContaining({
-        outcome: "Failed",
-        connectorStatus: "Preparing",
-        errorCode: "OUTBOUND_REQUEST_TIMEOUT",
-        consecutiveFailures: 1,
-        platformCommunicationStatus: "unknown",
-        shouldReconnect: false,
-      }),
-    ]);
+    expect(result.statusNotificationResults).toEqual([]);
+    await waitForRequests(session, "StopTransaction");
     const state = runtimeState(protocolRuntime);
     const [evse] = Array.from(state.chargingPoint.evses ?? []);
     const [connector] = evse?.listConnectors() ?? [];
@@ -1615,6 +2179,7 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("stopTransaction reports current protocol status without unplugging the vehicle", async () => {
+    const authorizationStore = createAuthorizationStore();
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
@@ -1625,10 +2190,19 @@ describe("Ocpp16Runtime", () => {
       response("StatusNotification", {}),
       response("StatusNotification", {}),
       response("StopTransaction", {
-        idTagInfo: { status: "Accepted" },
+        idTagInfo: {
+          status: "Accepted",
+          expiryDate: "2026-07-01T00:00:00.000Z",
+          parentIdTag: "PARENT-STOP",
+        },
       }),
       response("StatusNotification", {}),
-    ]);
+    ], {
+      configurationCatalog: localAuthorizationListConfiguration({
+        authorizationCacheEnabled: true,
+      }),
+      authorizationStore,
+    });
     await boot(protocolRuntime);
     seedAcceptedAuthorization(protocolRuntime);
     await plugConnector(protocolRuntime);
@@ -1643,6 +2217,7 @@ describe("Ocpp16Runtime", () => {
       reason: "local",
       meterStopWh: 150,
     });
+    await waitForRequests(session, "StopTransaction");
 
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
@@ -1667,6 +2242,14 @@ describe("Ocpp16Runtime", () => {
     expect(connector?.vehiclePresence).toBe("detected");
     expect(connector?.status).toBe("occupied");
     expect(connector?.lockState).toBe("unlocked");
+    expect(authorizationStore.upsertCacheEntry).toHaveBeenLastCalledWith({
+      credentialId: "TAG-1",
+      evseId: 1,
+      status: "accepted",
+      validUntil: new Date("2026-07-01T00:00:00.000Z"),
+      groupCredentialId: "PARENT-STOP",
+      lastEvaluatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
   });
 
   test("unplug remains the explicit physical disconnect operation after stopTransaction", async () => {
@@ -1709,7 +2292,7 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("treats StopTransaction idTagInfo statuses as successful delivery metadata", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("StartTransaction", {
@@ -1737,20 +2320,22 @@ describe("Ocpp16Runtime", () => {
       reason: "local",
       meterStopWh: 180,
     });
+    await waitForRequests(session, "StopTransaction");
 
     expect(result).toMatchObject({
       outcome: "Accepted",
-      ocppTransactionId: 1001,
-      idTagInfoStatus: "Expired",
+      transactionId: "transaction-1",
       responseIssue: null,
       unexpectedResponseFields: [],
     });
+    expect(runtimeContext(protocolRuntime).authorizationCache.get("TAG-1\u00001"))
+      .toMatchObject({ status: "expired" });
     const state = runtimeState(protocolRuntime);
     expect(state.transactions[0]?.state).toBe("ended");
   });
 
   test("records non-standard StopTransaction response fields without rejecting the local stop", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("StartTransaction", {
@@ -1776,17 +2361,19 @@ describe("Ocpp16Runtime", () => {
       reason: "local",
       meterStopWh: 180,
     });
+    await waitForRequests(session, "StopTransaction");
 
     expect(result).toMatchObject({
       outcome: "Accepted",
       idTagInfoStatus: null,
-      unexpectedResponseFields: ["status"],
+      unexpectedResponseFields: [],
     });
     const state = runtimeState(protocolRuntime);
     expect(state.transactions[0]?.state).toBe("ended");
   });
 
-  test("ends the local transaction without pending retry data when StopTransaction fails", async () => {
+  test("ends the local transaction and retains retry state when StopTransaction fails", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
@@ -1798,7 +2385,7 @@ describe("Ocpp16Runtime", () => {
       response("StatusNotification", {}),
       error("StopTransaction", "stop rejected"),
       response("StatusNotification", {}),
-    ]);
+    ], { transactionStore });
 
     await boot(protocolRuntime);
     seedAcceptedAuthorization(protocolRuntime);
@@ -1813,21 +2400,26 @@ describe("Ocpp16Runtime", () => {
       reason: "ev-disconnected",
       meterStopWh: 180,
     });
+    await waitForRequests(session, "StopTransaction");
 
     expect(result).toMatchObject({
-      outcome: "Failed",
-      ocppTransactionId: 1001,
+      outcome: "Accepted",
+      transactionId: "transaction-1",
       meterStop: 180,
-      errorCode: "InternalError",
-      errorMessage: "stop rejected",
-      consecutiveFailures: 1,
-      platformCommunicationStatus: "unknown",
+      consecutiveFailures: 0,
+      platformCommunicationStatus: "online",
       shouldReconnect: false,
     });
-    expect(result.statusNotificationResults).toEqual([
-      expect.objectContaining({ outcome: "Accepted", connectorStatus: "Finishing" }),
-      expect.objectContaining({ outcome: "Accepted", connectorStatus: "Preparing" }),
+    expect(result.statusNotificationResults).toEqual([]);
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({
+        messageType: "stop",
+        status: "retry_wait",
+        attemptCount: 1,
+        lastErrorMessage: "stop rejected",
+      }),
     ]);
+    await waitForRequests(session, "StatusNotification", 4);
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StatusNotification",
@@ -1894,7 +2486,8 @@ describe("Ocpp16Runtime", () => {
     expect(connector?.status).toBe("occupied");
   });
 
-  test("does not create pending StopTransaction retry state after failure", async () => {
+  test("creates pending StopTransaction retry state after timeout", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
@@ -1909,7 +2502,7 @@ describe("Ocpp16Runtime", () => {
         new SessionError("OUTBOUND_REQUEST_TIMEOUT", "等待 StopTransaction 响应超时"),
       ),
       response("StatusNotification", {}),
-    ]);
+    ], { transactionStore });
 
     await boot(protocolRuntime);
     seedAcceptedAuthorization(protocolRuntime);
@@ -1924,13 +2517,22 @@ describe("Ocpp16Runtime", () => {
       reason: "local",
       meterStopWh: 180,
     });
+    await waitForRequests(session, "StopTransaction");
 
     expect(result).toMatchObject({
-      outcome: "Failed",
-      consecutiveFailures: 1,
-      platformCommunicationStatus: "unknown",
+      outcome: "Accepted",
+      consecutiveFailures: 0,
+      platformCommunicationStatus: "online",
       shouldReconnect: false,
     });
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({
+        messageType: "stop",
+        status: "retry_wait",
+        attemptCount: 1,
+        lastErrorCode: "OUTBOUND_REQUEST_TIMEOUT",
+      }),
+    ]);
     const state = runtimeState(protocolRuntime);
     expect(state.transactions[0]?.state).toBe("ended");
     expect(session.requests.map((request) => request.action)).toEqual([
@@ -1940,7 +2542,6 @@ describe("Ocpp16Runtime", () => {
       "StatusNotification",
       "StatusNotification",
       "StopTransaction",
-      "StatusNotification",
     ]);
   });
 
@@ -1986,8 +2587,9 @@ describe("Ocpp16Runtime", () => {
     expect(duplicateStopError).toBeInstanceOf(ProtocolRuntimeError);
     expect(duplicateStopError).toMatchObject({
       code: "PROTOCOL_RUNTIME_INVALID_OPERATION",
-      message: "充电交易 1001 已结束，不能重复停止",
+      message: "充电交易 transaction-1 已结束，不能重复停止",
     });
+    await waitForRequests(session, "StopTransaction");
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StatusNotification",
@@ -2167,7 +2769,7 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("counts heartbeat CALLERROR without changing an active transaction", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("StartTransaction", {
@@ -2186,6 +2788,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await waitForRequests(session, "StatusNotification", 2);
     const result = await protocolRuntime.sendHeartbeat();
 
     expect(result).toMatchObject({
@@ -2195,7 +2798,7 @@ describe("Ocpp16Runtime", () => {
       consecutiveFailures: 1,
     });
     const state = runtimeState(protocolRuntime);
-    expect(state.transactions[0]?.id).toBe("1001");
+    expect(state.transactions[0]?.id).toBe("transaction-1");
     expect(state.transactions[0]?.state).toBe("active");
     expect(state.transactions[0]?.chargingState).toBe("charging");
   });
@@ -2285,7 +2888,7 @@ describe("Ocpp16Runtime", () => {
 
     const state = runtimeState(protocolRuntime);
     expect(protocolRuntime.getRuntimeSnapshot().heartbeatTimerActive).toBe(false);
-    expect(state.transactions[0]?.id).toBe("1001");
+    expect(state.transactions[0]?.id).toBe("transaction-1");
     expect(state.transactions[0]?.state).toBe("active");
     expect(state.transactions[0]?.chargingState).toBe("charging");
   });
@@ -2655,6 +3258,61 @@ describe("Ocpp16Runtime", () => {
     });
   });
 
+  test("restores persistent local authorization and keeps local-list priority over cache", async () => {
+    const authorizationStore = createAuthorizationStore({
+      load: vi.fn().mockResolvedValue({
+        localList: {
+          version: 3,
+          source: "ocpp16",
+          updatedAt: new Date("2025-12-31T23:00:00.000Z"),
+          entries: [{
+            credentialId: "TAG-SHARED",
+            status: "invalid",
+            validUntil: null,
+            groupCredentialId: null,
+          }],
+        },
+        cacheEntries: [{
+          credentialId: "TAG-SHARED",
+          evseId: 1,
+          status: "accepted",
+          validUntil: null,
+          groupCredentialId: null,
+          lastEvaluatedAt: new Date("2025-12-31T22:00:00.000Z"),
+        }],
+      }),
+    });
+    const { protocolRuntime } = createProtocolRuntime([], {
+      chargingPoint: createChargingPoint({
+        plugState: "plugged",
+        vehiclePresence: "detected",
+      }),
+      configurationCatalog: localAuthorizationListConfiguration({
+        localAuthorizeOffline: true,
+        allowOfflineUnknownId: true,
+        authorizationCacheEnabled: true,
+      }),
+      authorizationStore,
+    });
+
+    await protocolRuntime.restorePersistedAuthorization();
+    const result = await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-SHARED",
+      meterStartWh: 100,
+    });
+
+    expect(result).toEqual({
+      status: "Rejected",
+      reason: "无效卡",
+      authorizationStatus: "Invalid",
+      statusNotificationResults: [],
+    });
+    expect(runtimeContext(protocolRuntime).localAuthorizationList.version).toBe(3);
+    expect([...runtimeContext(protocolRuntime).authorizationCache.keys()])
+      .toEqual(["TAG-SHARED\u00001"]);
+  });
+
   test("rejects a denied offline local authorization list entry before unknown-id policy", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
@@ -2867,8 +3525,8 @@ describe("Ocpp16Runtime", () => {
         transactionId: 1001,
         idTagInfo: { status: "Accepted" },
       }),
-      response("MeterValues", {}),
       response("StatusNotification", {}),
+      response("MeterValues", {}),
     ], {
       chargingPoint: createChargingPoint({
         plugState: "plugged",
@@ -2894,7 +3552,7 @@ describe("Ocpp16Runtime", () => {
       transactionId: "transaction-1",
       ocppTransactionId: null,
       meterWh: 150,
-      platformCommunicationStatus: "offline",
+      platformCommunicationStatus: "online",
     });
     expect(session.requests).toEqual([]);
 
@@ -2903,10 +3561,10 @@ describe("Ocpp16Runtime", () => {
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StartTransaction",
-      "MeterValues",
       "StatusNotification",
+      "MeterValues",
     ]);
-    expect(session.requests[2]?.payload).toMatchObject({
+    expect(session.requests[3]?.payload).toMatchObject({
       connectorId: 1,
       transactionId: 1001,
       meterValue: [
@@ -2928,7 +3586,9 @@ describe("Ocpp16Runtime", () => {
         transactionId: 1001,
         idTagInfo: { status: "Accepted" },
       }),
+      response("StatusNotification", {}),
       response("MeterValues", {}),
+      response("StatusNotification", {}),
       response("StopTransaction", {}),
       response("StatusNotification", {}),
     ], {
@@ -2962,7 +3622,7 @@ describe("Ocpp16Runtime", () => {
       transactionId: "transaction-1",
       ocppTransactionId: null,
       meterStop: 180,
-      platformCommunicationStatus: "offline",
+      platformCommunicationStatus: "online",
     });
     expect(session.requests).toEqual([]);
 
@@ -2971,11 +3631,13 @@ describe("Ocpp16Runtime", () => {
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StartTransaction",
+      "StatusNotification",
       "MeterValues",
+      "StatusNotification",
       "StopTransaction",
       "StatusNotification",
     ]);
-    expect(session.requests[3]?.payload).toMatchObject({
+    expect(session.requests[5]?.payload).toMatchObject({
       transactionId: 1001,
       meterStop: 180,
       reason: "Local",
@@ -2995,8 +3657,8 @@ describe("Ocpp16Runtime", () => {
         transactionId: 1001,
         idTagInfo: { status: "Accepted" },
       }),
-      response("MeterValues", {}),
       response("StatusNotification", {}),
+      response("MeterValues", {}),
     ], {
       chargingPoint: createChargingPoint({
         plugState: "plugged",
@@ -3049,10 +3711,10 @@ describe("Ocpp16Runtime", () => {
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StartTransaction",
-      "MeterValues",
       "StatusNotification",
+      "MeterValues",
     ]);
-    expect(session.requests[2]?.payload).toMatchObject({
+    expect(session.requests[3]?.payload).toMatchObject({
       transactionId: 1001,
       meterValue: [
         {
@@ -3071,6 +3733,7 @@ describe("Ocpp16Runtime", () => {
         transactionId: 1001,
         idTagInfo: { status: "Invalid" },
       }),
+      response("StatusNotification", {}),
       response("StopTransaction", {}),
       response("StatusNotification", {}),
     ], {
@@ -3094,10 +3757,11 @@ describe("Ocpp16Runtime", () => {
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StartTransaction",
+      "StatusNotification",
       "StopTransaction",
       "StatusNotification",
     ]);
-    expect(session.requests[2]?.payload).toMatchObject({
+    expect(session.requests[3]?.payload).toMatchObject({
       transactionId: 1001,
       reason: "DeAuthorized",
     });
@@ -3159,7 +3823,6 @@ describe("Ocpp16Runtime", () => {
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StartTransaction",
-      "StatusNotification",
     ]);
     expect(protocolRuntime.getTransactionResource("transaction-1"))
       .toMatchObject({ ocppTransactionId: 1001 });
@@ -3169,16 +3832,11 @@ describe("Ocpp16Runtime", () => {
     });
   });
 
-  test("retries offline replay after a successful Heartbeat", async () => {
+  test("does not bypass StartTransaction retry wait after a successful Heartbeat", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       error("StartTransaction", "start unavailable"),
       response("Heartbeat", {}),
-      response("StartTransaction", {
-        transactionId: 1001,
-        idTagInfo: { status: "Accepted" },
-      }),
-      response("StatusNotification", {}),
     ], {
       chargingPoint: createChargingPoint({
         plugState: "plugged",
@@ -3209,24 +3867,21 @@ describe("Ocpp16Runtime", () => {
       "BootNotification",
       "StartTransaction",
       "Heartbeat",
-      "StartTransaction",
-      "StatusNotification",
     ]);
     expect(protocolRuntime.getTransactionResource("transaction-1"))
-      .toMatchObject({ ocppTransactionId: 1001 });
+      .toMatchObject({ ocppTransactionId: null });
   });
 
-  test("retries offline replay from failed MeterValues without replaying StartTransaction", async () => {
+  test("does not bypass MeterValues retry wait after a successful Heartbeat", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StartTransaction", {
         transactionId: 1001,
         idTagInfo: { status: "Accepted" },
       }),
+      response("StatusNotification", {}),
       error("MeterValues", "meter unavailable"),
       response("Heartbeat", {}),
-      response("MeterValues", {}),
-      response("StatusNotification", {}),
     ], {
       chargingPoint: createChargingPoint({
         plugState: "plugged",
@@ -3252,6 +3907,7 @@ describe("Ocpp16Runtime", () => {
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StartTransaction",
+      "StatusNotification",
       "MeterValues",
     ]);
     expect(protocolRuntime.getTransactionResource("transaction-1"))
@@ -3262,19 +3918,16 @@ describe("Ocpp16Runtime", () => {
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StartTransaction",
+      "StatusNotification",
       "MeterValues",
       "Heartbeat",
-      "MeterValues",
-      "StatusNotification",
     ]);
     expect(session.requests.filter((request) => request.action === "StartTransaction"))
       .toHaveLength(1);
-    expect(session.requests[4]?.payload).toMatchObject({
-      transactionId: 1001,
-    });
   });
 
   test("starts an offline local transaction from an authorization cache entry", async () => {
+    const authorizationStore = createAuthorizationStore();
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("Authorize", {
@@ -3301,6 +3954,7 @@ describe("Ocpp16Runtime", () => {
           },
         ],
       },
+      authorizationStore,
     });
     await boot(protocolRuntime);
     await protocolRuntime.authorize({
@@ -3332,12 +3986,61 @@ describe("Ocpp16Runtime", () => {
       status: "accepted",
       source: "cache",
     });
+    expect(authorizationStore.upsertCacheEntry).toHaveBeenCalledWith({
+      credentialId: "TAG-CACHE",
+      evseId: 1,
+      status: "accepted",
+      validUntil: new Date("2026-06-01T00:00:00.000Z"),
+      groupCredentialId: null,
+      lastEvaluatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
   });
 
   });
 
   describe("online transaction delivery", () => {
-  test("removes the local transaction when StartTransaction is rejected", async () => {
+  test("writes StartTransaction authorization result through to the persistent cache", async () => {
+    const authorizationStore = createAuthorizationStore();
+    const { protocolRuntime, session } = createProtocolRuntime([
+      bootAccepted(),
+      response("StatusNotification", {}),
+      response("StartTransaction", {
+        transactionId: 1001,
+        idTagInfo: {
+          status: "Accepted",
+          expiryDate: "2026-06-01T00:00:00.000Z",
+          parentIdTag: "PARENT-1",
+        },
+      }),
+      response("StatusNotification", {}),
+    ], {
+      configurationCatalog: localAuthorizationListConfiguration({
+        authorizationCacheEnabled: true,
+      }),
+      authorizationStore,
+    });
+    await boot(protocolRuntime);
+    seedAcceptedAuthorization(protocolRuntime);
+    await plugConnector(protocolRuntime);
+
+    await protocolRuntime.startLocalTransaction({
+      connectorId: 1,
+      idTag: "TAG-1",
+      meterStartWh: 100,
+    });
+    await waitForRequests(session, "StatusNotification", 2);
+
+    expect(authorizationStore.upsertCacheEntry).toHaveBeenCalledWith({
+      credentialId: "TAG-1",
+      evseId: 1,
+      status: "accepted",
+      validUntil: new Date("2026-06-01T00:00:00.000Z"),
+      groupCredentialId: "PARENT-1",
+      lastEvaluatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+  });
+
+  test("keeps the local result accepted when StartTransaction is rejected asynchronously", async () => {
     const rejectedStatuses = [
       ["Blocked", "卡被禁用"],
       ["Expired", "卡已过期"],
@@ -3345,7 +4048,7 @@ describe("Ocpp16Runtime", () => {
       ["ConcurrentTx", "已有并发交易"],
     ] as const;
 
-    for (const [authorizationStatus, reason] of rejectedStatuses) {
+    for (const [authorizationStatus] of rejectedStatuses) {
       const { protocolRuntime, session } = createProtocolRuntime([
         bootAccepted(),
         response("StatusNotification", {}),
@@ -3353,8 +4056,17 @@ describe("Ocpp16Runtime", () => {
           transactionId: 1001,
           idTagInfo: { status: authorizationStatus },
         }),
-        response("StatusNotification", {}),
-      ]);
+      ], {
+        configurationCatalog: {
+          chargingPointId: "cp-1",
+          protocolVersion: "OCPP16J",
+          entries: [{
+            key: "StopTransactionOnInvalidId",
+            value: "false",
+            valueType: "boolean",
+          }],
+        },
+      });
 
       await boot(protocolRuntime);
       seedAcceptedAuthorization(protocolRuntime);
@@ -3366,33 +4078,29 @@ describe("Ocpp16Runtime", () => {
       });
 
       expect(result).toMatchObject({
-        status: "Rejected",
-        reason,
-        authorizationStatus,
-        startTransactionResult: {
-          outcome: "Rejected",
-          ocppTransactionId: 1001,
-          authorizationStatus,
-          consecutiveFailures: 0,
-          platformCommunicationStatus: "online",
-          shouldReconnect: false,
-        },
+        status: "Accepted",
+        transactionId: "transaction-1",
       });
       expect(result.statusNotificationResults).toEqual([]);
+      await waitForRequests(session, "StartTransaction");
       expect(session.requests.map((request) => request.action)).toEqual([
         "BootNotification",
         "StatusNotification",
         "StartTransaction",
       ]);
       const state = runtimeState(protocolRuntime);
-      expect(state.transactions).toEqual([]);
+      expect(state.transactions[0]).toMatchObject({
+        id: "transaction-1",
+        state: "active",
+      });
       const [evse] = Array.from(state.chargingPoint.evses ?? []);
       const [connector] = evse?.listConnectors() ?? [];
       expect(connector?.status).toBe("occupied");
     }
   });
 
-  test("fails closed when StartTransaction times out with stateless failure results", async () => {
+  test("keeps a timed out StartTransaction in persistent retry state", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
@@ -3400,83 +4108,47 @@ describe("Ocpp16Runtime", () => {
         "StartTransaction",
         new SessionError("OUTBOUND_REQUEST_TIMEOUT", "等待 StartTransaction 响应超时"),
       ),
-      response("StatusNotification", {}),
-      response("StatusNotification", {}),
-      rejected(
-        "StartTransaction",
-        new SessionError("OUTBOUND_REQUEST_TIMEOUT", "等待 StartTransaction 响应超时"),
-      ),
-      response("StatusNotification", {}),
-      response("StatusNotification", {}),
-      rejected(
-        "StartTransaction",
-        new SessionError("OUTBOUND_REQUEST_TIMEOUT", "等待 StartTransaction 响应超时"),
-      ),
-      response("StatusNotification", {}),
-    ]);
+    ], { transactionStore });
 
     await boot(protocolRuntime);
     seedAcceptedAuthorization(protocolRuntime);
     await plugConnector(protocolRuntime);
-    const first = await protocolRuntime.startLocalTransaction({
+    const result = await protocolRuntime.startLocalTransaction({
       connectorId: 1,
       idTag: "TAG-1",
       meterStartWh: 100,
     });
-    const second = await protocolRuntime.startLocalTransaction({
-      connectorId: 1,
-      idTag: "TAG-1",
-      meterStartWh: 100,
+    expect(result).toMatchObject({
+      status: "Accepted",
+      transactionId: "transaction-1",
     });
-    const third = await protocolRuntime.startLocalTransaction({
-      connectorId: 1,
-      idTag: "TAG-1",
-      meterStartWh: 100,
-    });
-
-    expect(first).toMatchObject({
-      status: "Rejected",
-      reason: "StartTransaction 请求失败",
-      startTransactionResult: {
-        outcome: "Failed",
-        errorCode: "OUTBOUND_REQUEST_TIMEOUT",
-        consecutiveFailures: 1,
-        shouldReconnect: false,
-      },
-    });
-    expect(second).toMatchObject({
-      status: "Rejected",
-      startTransactionResult: {
-        outcome: "Failed",
-        consecutiveFailures: 1,
-        platformCommunicationStatus: "unknown",
-        shouldReconnect: false,
-      },
-    });
-    expect(third).toMatchObject({
-      status: "Rejected",
-      startTransactionResult: {
-        outcome: "Failed",
-        consecutiveFailures: 1,
-        platformCommunicationStatus: "unknown",
-        shouldReconnect: false,
-      },
-    });
-    expect(session.requests.filter((request) => request.action === "StartTransaction")).toHaveLength(3);
+    await waitForRequests(session, "StartTransaction");
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({
+        messageType: "start",
+        status: "retry_wait",
+        attemptCount: 1,
+        lastErrorCode: "OUTBOUND_REQUEST_TIMEOUT",
+      }),
+    ]);
     const state = runtimeState(protocolRuntime);
-    expect(state.transactions).toEqual([]);
+    expect(state.transactions[0]).toMatchObject({
+      id: "transaction-1",
+      state: "active",
+    });
     const [evse] = Array.from(state.chargingPoint.evses ?? []);
     const [connector] = evse?.listConnectors() ?? [];
     expect(connector?.status).toBe("occupied");
   });
 
-  test("treats StartTransaction CALLERROR as failed and does not create a transaction", async () => {
+  test("keeps StartTransaction CALLERROR for asynchronous retry", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       error("StartTransaction", "start rejected"),
       response("StatusNotification", {}),
-    ]);
+    ], { transactionStore });
 
     await boot(protocolRuntime);
     seedAcceptedAuthorization(protocolRuntime);
@@ -3488,24 +4160,25 @@ describe("Ocpp16Runtime", () => {
     });
 
     expect(result).toMatchObject({
-      status: "Rejected",
-      reason: "StartTransaction 请求失败",
-      startTransactionResult: {
-        outcome: "Failed",
-        errorCode: "InternalError",
-        errorMessage: "start rejected",
-        consecutiveFailures: 1,
-      },
+      status: "Accepted",
+      transactionId: "transaction-1",
     });
+    await waitForRequests(session, "StartTransaction");
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StatusNotification",
       "StartTransaction",
     ]);
-    expect(listRuntimeTransactions(protocolRuntime)).toEqual([]);
+    expect(listRuntimeTransactions(protocolRuntime)).toEqual([
+      expect.objectContaining({ id: "transaction-1", state: "active" }),
+    ]);
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({ status: "retry_wait", lastErrorMessage: "start rejected" }),
+    ]);
   });
 
-  test("treats disconnected StartTransaction as failed and keeps the connector plugged locally", async () => {
+  test("keeps disconnected StartTransaction for asynchronous retry", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
@@ -3514,7 +4187,7 @@ describe("Ocpp16Runtime", () => {
         new SessionError("OUTBOUND_REQUEST_DISCONNECTED", "WebSocket 已断开"),
       ),
       response("StatusNotification", {}),
-    ]);
+    ], { transactionStore });
 
     await boot(protocolRuntime);
     seedAcceptedAuthorization(protocolRuntime);
@@ -3526,19 +4199,24 @@ describe("Ocpp16Runtime", () => {
     });
 
     expect(result).toMatchObject({
-      status: "Rejected",
-      reason: "StartTransaction 请求失败",
-      startTransactionResult: {
-        outcome: "Failed",
-        errorCode: "OUTBOUND_REQUEST_DISCONNECTED",
-      },
+      status: "Accepted",
+      transactionId: "transaction-1",
     });
+    await waitForRequests(session, "StartTransaction");
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
       "StatusNotification",
       "StartTransaction",
     ]);
-    expect(listRuntimeTransactions(protocolRuntime)).toEqual([]);
+    expect(listRuntimeTransactions(protocolRuntime)).toEqual([
+      expect.objectContaining({ id: "transaction-1", state: "active" }),
+    ]);
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({
+        status: "retry_wait",
+        lastErrorCode: "OUTBOUND_REQUEST_DISCONNECTED",
+      }),
+    ]);
     const [evse] = Array.from(listRuntimeEvses(protocolRuntime) ?? []);
     const [connector] = evse?.listConnectors() ?? [];
     expect(connector?.status).toBe("occupied");
@@ -3588,7 +4266,8 @@ describe("Ocpp16Runtime", () => {
     })).rejects.toThrow("connector 1 当前不可启动交易");
   });
 
-  test("keeps reported meter cursor unchanged when MeterValues returns CALLERROR", async () => {
+  test("advances local meter cursor and retains retry when MeterValues returns CALLERROR", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
@@ -3598,7 +4277,7 @@ describe("Ocpp16Runtime", () => {
       }),
       response("StatusNotification", {}),
       error("MeterValues", "meter rejected"),
-    ]);
+    ], { transactionStore });
     const events = collectRuntimeEvents(protocolRuntime);
 
     await boot(protocolRuntime);
@@ -3609,31 +4288,38 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await waitForRequests(session, "StatusNotification", 2);
     const result = await protocolRuntime.reportMeterValue({
       transactionId: start.status === "Accepted" ? start.transactionId : "",
       meterWh: 150,
     });
 
     expect(result).toMatchObject({
-      outcome: "Failed",
-      transactionId: "1001",
+      outcome: "Accepted",
+      transactionId: "transaction-1",
       connectorId: 1,
       ocppTransactionId: 1001,
       meterWh: 150,
-      errorCode: "InternalError",
-      errorMessage: "meter rejected",
-      consecutiveFailures: 1,
-      platformCommunicationStatus: "unknown",
+      consecutiveFailures: 0,
+      platformCommunicationStatus: "online",
       shouldReconnect: false,
     });
+    await waitForRequests(session, "MeterValues");
     expect(session.requests.at(-1)?.action).toBe("MeterValues");
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({
+        messageType: "meter_value",
+        status: "retry_wait",
+        lastErrorMessage: "meter rejected",
+      }),
+    ]);
     expect(events).toContainEqual(expect.objectContaining({
       type: "transaction.meterValue",
       resource: {
         scope: "transaction",
         evseId: 1,
         connectorId: 1,
-        transactionId: "1001",
+        transactionId: "transaction-1",
       },
       meterWh: 150,
     }));
@@ -3650,7 +4336,7 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("records unexpected MeterValues response fields as successful delivery", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("StartTransaction", {
@@ -3673,10 +4359,11 @@ describe("Ocpp16Runtime", () => {
       transactionId: start.status === "Accepted" ? start.transactionId : "",
       meterWh: 150,
     });
+    await waitForRequests(session, "MeterValues");
 
     expect(result).toMatchObject({
       outcome: "Accepted",
-      unexpectedResponseFields: ["status"],
+      unexpectedResponseFields: [],
       consecutiveFailures: 0,
     });
     const state = runtimeState(protocolRuntime);
@@ -3723,6 +4410,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(start.status).toBe("Accepted");
     expect(session.requests.map((request) => request.action)).toEqual([
@@ -3796,6 +4484,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await vi.advanceTimersByTimeAsync(0);
 
     vi.advanceTimersByTime(2_000);
     await flushMicrotasks();
@@ -3842,6 +4531,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await vi.advanceTimersByTimeAsync(0);
 
     vi.advanceTimersByTime(2_000);
     await flushMicrotasks();
@@ -3931,6 +4621,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await vi.advanceTimersByTimeAsync(0);
 
     vi.advanceTimersByTime(2_000);
     await flushMicrotasks();
@@ -3946,8 +4637,9 @@ describe("Ocpp16Runtime", () => {
     expect(session.requests.filter((request) => request.action === "MeterValues")).toHaveLength(1);
   });
 
-  test("returns stateless MeterValues failure results after repeated failures", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+  test("keeps ordered MeterValues queued after the head delivery fails", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("StartTransaction", {
@@ -3967,7 +4659,7 @@ describe("Ocpp16Runtime", () => {
         "MeterValues",
         new SessionError("OUTBOUND_REQUEST_TIMEOUT", "等待 MeterValues 响应超时"),
       ),
-    ]);
+    ], { transactionStore });
 
     await boot(protocolRuntime);
     seedAcceptedAuthorization(protocolRuntime);
@@ -3977,6 +4669,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await waitForRequests(session, "StatusNotification", 2);
     const first = await protocolRuntime.reportMeterValue({
       transactionId: start.status === "Accepted" ? start.transactionId : "",
       meterWh: 150,
@@ -3991,23 +4684,33 @@ describe("Ocpp16Runtime", () => {
     });
 
     expect(first).toMatchObject({
-      outcome: "Failed",
-      consecutiveFailures: 1,
-      platformCommunicationStatus: "unknown",
+      outcome: "Accepted",
+      consecutiveFailures: 0,
+      platformCommunicationStatus: "online",
       shouldReconnect: false,
     });
     expect(second).toMatchObject({
-      outcome: "Failed",
-      consecutiveFailures: 1,
-      platformCommunicationStatus: "unknown",
+      outcome: "Accepted",
+      consecutiveFailures: 0,
+      platformCommunicationStatus: "online",
       shouldReconnect: false,
     });
     expect(third).toMatchObject({
-      outcome: "Failed",
-      consecutiveFailures: 1,
-      platformCommunicationStatus: "unknown",
+      outcome: "Accepted",
+      consecutiveFailures: 0,
+      platformCommunicationStatus: "online",
       shouldReconnect: false,
     });
+    await waitForRequests(session, "MeterValues");
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({
+        messageType: "meter_value",
+        status: "retry_wait",
+        attemptCount: 1,
+      }),
+      expect.objectContaining({ messageType: "meter_value", status: "pending" }),
+      expect.objectContaining({ messageType: "meter_value", status: "pending" }),
+    ]);
     const state = runtimeState(protocolRuntime);
     expect(state.transactions[0]?.latestMeterWh).toBe(170);
     expect(state.transactions[0]?.state).toBe("active");
@@ -4041,6 +4744,7 @@ describe("Ocpp16Runtime", () => {
       transactionId: start.status === "Accepted" ? start.transactionId : "",
       meterWh: 120,
     });
+    await waitForRequests(session, "MeterValues");
     session.emitOffline("unexpected_disconnect");
     const firstOffline = await protocolRuntime.reportMeterValue({
       transactionId: start.status === "Accepted" ? start.transactionId : "",
@@ -4053,7 +4757,7 @@ describe("Ocpp16Runtime", () => {
 
     expect(firstOffline).toMatchObject({
       outcome: "Accepted",
-      transactionId: "1001",
+      transactionId: "transaction-1",
       ocppTransactionId: 1001,
       meterWh: 150,
       consecutiveFailures: 0,
@@ -4061,7 +4765,7 @@ describe("Ocpp16Runtime", () => {
     });
     expect(secondOffline).toMatchObject({
       outcome: "Accepted",
-      transactionId: "1001",
+      transactionId: "transaction-1",
       ocppTransactionId: 1001,
       meterWh: 160,
       consecutiveFailures: 0,
@@ -4087,7 +4791,6 @@ describe("Ocpp16Runtime", () => {
       "Heartbeat",
       "MeterValues",
       "MeterValues",
-      "StatusNotification",
     ]);
     expect(session.requests.filter((request) => request.action === "StartTransaction"))
       .toHaveLength(1);
@@ -4143,6 +4846,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await waitForRequests(session, "StatusNotification", 2);
     protocolRuntime.startHeartbeatLoop();
     session.emitOffline("unexpected_disconnect");
     await protocolRuntime.reportMeterValue({
@@ -4151,7 +4855,7 @@ describe("Ocpp16Runtime", () => {
     });
 
     session.emitOnline();
-    await flushMicrotasks();
+    await waitForRequests(session, "MeterValues");
 
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
@@ -4160,7 +4864,6 @@ describe("Ocpp16Runtime", () => {
       "StatusNotification",
       "Heartbeat",
       "MeterValues",
-      "StatusNotification",
     ]);
     expect(session.requests.filter((request) => request.action === "StartTransaction"))
       .toHaveLength(1);
@@ -4192,10 +4895,7 @@ describe("Ocpp16Runtime", () => {
         action: "MeterValues",
         result: replayedMeterValue.promise,
       },
-      response("StatusNotification", {}),
-      response("Heartbeat", {}),
       response("MeterValues", {}),
-      response("StatusNotification", {}),
     ]);
 
     await boot(protocolRuntime);
@@ -4206,6 +4906,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await waitForRequests(session, "StatusNotification", 2);
     session.emitOffline("unexpected_disconnect");
     await protocolRuntime.reportMeterValue({
       transactionId: start.status === "Accepted" ? start.transactionId : "",
@@ -4224,7 +4925,7 @@ describe("Ocpp16Runtime", () => {
       outcome: "Accepted",
       ocppTransactionId: 1001,
       meterWh: 160,
-      platformCommunicationStatus: "offline",
+      platformCommunicationStatus: "online",
     });
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
@@ -4237,7 +4938,7 @@ describe("Ocpp16Runtime", () => {
 
     replayedMeterValue.resolve({ kind: "response", payload: {} });
     await heartbeat;
-    await protocolRuntime.sendHeartbeat();
+    await waitForRequests(session, "MeterValues", 2);
 
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
@@ -4246,12 +4947,9 @@ describe("Ocpp16Runtime", () => {
       "StatusNotification",
       "Heartbeat",
       "MeterValues",
-      "StatusNotification",
-      "Heartbeat",
       "MeterValues",
-      "StatusNotification",
     ]);
-    expect(session.requests[8]?.payload).toMatchObject({
+    expect(session.requests[6]?.payload).toMatchObject({
       connectorId: 1,
       transactionId: 1001,
       meterValue: [
@@ -4264,7 +4962,7 @@ describe("Ocpp16Runtime", () => {
     });
   });
 
-  test("queues MeterValues when the outbound request disconnects before a response", async () => {
+  test("keeps disconnected MeterValues in retry wait without bypassing its delay", async () => {
     const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
@@ -4278,8 +4976,6 @@ describe("Ocpp16Runtime", () => {
         new SessionError("OUTBOUND_REQUEST_DISCONNECTED", "连接已断开，未收到响应"),
       ),
       response("Heartbeat", {}),
-      response("MeterValues", {}),
-      response("StatusNotification", {}),
     ]);
 
     await boot(protocolRuntime);
@@ -4290,6 +4986,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await waitForRequests(session, "StatusNotification", 2);
     const disconnected = await protocolRuntime.reportMeterValue({
       transactionId: start.status === "Accepted" ? start.transactionId : "",
       meterWh: 150,
@@ -4299,7 +4996,7 @@ describe("Ocpp16Runtime", () => {
       outcome: "Accepted",
       ocppTransactionId: 1001,
       meterWh: 150,
-      platformCommunicationStatus: "offline",
+      platformCommunicationStatus: "online",
     });
     expect(session.requests.map((request) => request.action)).toEqual([
       "BootNotification",
@@ -4318,54 +5015,45 @@ describe("Ocpp16Runtime", () => {
       "StatusNotification",
       "MeterValues",
       "Heartbeat",
-      "MeterValues",
-      "StatusNotification",
     ]);
     expect(session.requests.filter((request) => request.action === "StartTransaction"))
       .toHaveLength(1);
   });
 
-  test("rejects transaction MeterValues when transaction id is not a valid OCPP id", async () => {
-    const { protocolRuntime, session } = createProtocolRuntime([bootAccepted()]);
-    const context = runtimeContext(protocolRuntime);
-    context.transactions.set(
-      "transaction-1",
-      new Transaction({
-          id: "transaction-1",
-          target: {
-            scope: "connector",
-            chargingPointId: "cp-1",
-            evseId: 1,
-            connectorId: 1,
-          },
-          credentialId: "TAG-1",
-          startedAt: new Date("2026-01-01T00:00:00.000Z"),
-          startMeterWh: 100,
-          latestMeterWh: 100,
-          state: "starting",
-          chargingState: "idle",
-      }),
-    );
+  test("queues MeterValues while the transaction has no OCPP binding", async () => {
+    const transactionStore = new MemoryTransactionDeliveryStore();
+    await transactionStore.start({
+      transaction: {
+        transactionId: "transaction-1",
+        evseId: 1,
+        connectorId: 1,
+        idTag: "TAG-1",
+        state: "active",
+        chargingState: "charging",
+        meterStartWh: 100,
+        latestMeterWh: 100,
+        startedAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      messageId: "start-message",
+      payload: { evseId: 1, connectorId: 1, idTag: "TAG-1", meterStartWh: 100 },
+    });
+    const { protocolRuntime, session } = createProtocolRuntime([], {
+      transactionStore,
+    });
+    await protocolRuntime.restorePersistedTransactions();
 
-    await boot(protocolRuntime);
     await expect(protocolRuntime.reportMeterValue({
       transactionId: "transaction-1",
       meterWh: 150,
-    })).rejects.toThrow("交易 transaction-1 未绑定有效 OCPP transactionId");
-    try {
-      await protocolRuntime.reportMeterValue({
-        transactionId: "transaction-1",
-        meterWh: 150,
-      });
-    } catch (error) {
-      expect(error).toBeInstanceOf(ProtocolRuntimeError);
-      expect(error).toMatchObject({
-        code: "PROTOCOL_RUNTIME_TRANSACTION_NOT_BOUND",
-        message: "交易 transaction-1 未绑定有效 OCPP transactionId",
-      });
-    }
-    expect(session.requests.map((request) => request.action)).toEqual([
-      "BootNotification",
+    })).resolves.toMatchObject({
+      outcome: "Accepted",
+      transactionId: "transaction-1",
+      ocppTransactionId: null,
+    });
+    expect(session.requests).toEqual([]);
+    await expect(transactionStore.listPending()).resolves.toEqual([
+      expect.objectContaining({ messageType: "start", status: "pending" }),
+      expect.objectContaining({ messageType: "meter_value", status: "pending" }),
     ]);
   });
 
@@ -4390,6 +5078,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "REMOTE",
     });
     await protocolRuntime.handleInboundRequest(request);
+    await waitForRequests(session, "StatusNotification", 2);
 
     expect(request.responses).toEqual([{ status: "Accepted" }]);
     expect(session.requests.map((item) => item.action)).toEqual([
@@ -4398,7 +5087,9 @@ describe("Ocpp16Runtime", () => {
       "StartTransaction",
       "StatusNotification",
     ]);
-    expect(getRuntimeTransaction(protocolRuntime)?.id).toBe("2001");
+    expect(getRuntimeTransaction(protocolRuntime)?.id).toBe("transaction-1");
+    expect(runtimeContext(protocolRuntime).ocppTransactionIds.get("transaction-1"))
+      .toBe(2001);
   });
 
   test("rejects RemoteStartTransaction before plug-in", async () => {
@@ -4589,13 +5280,15 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("keeps the connector plugged when remote StartTransaction is rejected", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("StartTransaction", {
         transactionId: 2001,
         idTagInfo: { status: "Invalid" },
       }),
+      response("StatusNotification", {}),
+      response("StopTransaction", {}),
       response("StatusNotification", {}),
     ]);
 
@@ -4606,12 +5299,18 @@ describe("Ocpp16Runtime", () => {
       idTag: "REMOTE",
     });
     await protocolRuntime.handleInboundRequest(request);
+    await waitForRequests(session, "StopTransaction");
 
     const connector = getConnectorFact(protocolRuntime);
     expect(request.responses).toEqual([{ status: "Accepted" }]);
     expect(connector?.status).toBe("occupied");
     expect(connector?.plugState).toBe("plugged");
-    expect(listRuntimeTransactions(protocolRuntime)).toEqual([]);
+    expect(getRuntimeTransaction(protocolRuntime)).toMatchObject({
+      id: "transaction-1",
+      state: "ended",
+    });
+    expect(session.requests.find((item) => item.action === "StopTransaction")?.payload)
+      .toMatchObject({ transactionId: 2001 });
   });
 
   test("rejects RemoteStartTransaction when no connector is available", async () => {
@@ -4636,7 +5335,7 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("handles RemoteStopTransaction and rejects unknown transactions", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("StartTransaction", {
@@ -4657,11 +5356,13 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await waitForRequests(session, "StatusNotification", 2);
 
     const accepted = new FakeInboundRequest("RemoteStopTransaction", {
       transactionId: 1001,
     });
     await protocolRuntime.handleInboundRequest(accepted);
+    await waitForRequests(session, "StopTransaction");
     expect(accepted.responses).toEqual([{ status: "Accepted" }]);
     expect(getRuntimeTransaction(protocolRuntime)?.state).toBe("ended");
 
@@ -4673,7 +5374,7 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("keeps a remote-stopped transaction ended when StopTransaction report fails", async () => {
-    const { protocolRuntime } = createProtocolRuntime([
+    const { protocolRuntime, session } = createProtocolRuntime([
       bootAccepted(),
       response("StatusNotification", {}),
       response("StartTransaction", {
@@ -4694,11 +5395,13 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await waitForRequests(session, "StatusNotification", 2);
 
     const accepted = new FakeInboundRequest("RemoteStopTransaction", {
       transactionId: 1001,
     });
     await protocolRuntime.handleInboundRequest(accepted);
+    await waitForRequests(session, "StopTransaction");
 
     expect(accepted.responses).toEqual([{ status: "Accepted" }]);
     expect(getRuntimeTransaction(protocolRuntime)?.state).toBe("ended");
@@ -4758,11 +5461,13 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await waitForRequests(session, "StatusNotification", 2);
 
     const request = new FakeInboundRequest("UnlockConnector", {
       connectorId: 1,
     });
     await protocolRuntime.handleInboundRequest(request);
+    await waitForRequests(session, "StopTransaction");
 
     const connector = getConnectorFact(protocolRuntime);
     const stopTransactionRequest = session.requests.find(
@@ -5052,8 +5757,10 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("handles Full SendLocalList by replacing entries and updating version", async () => {
+    const authorizationStore = createAuthorizationStore();
     const { protocolRuntime } = createProtocolRuntime([], {
       configurationCatalog: localAuthorizationListConfiguration(),
+      authorizationStore,
     });
     const context = runtimeContext(protocolRuntime);
     context.localAuthorizationList = context.localAuthorizationList.replaceEntries(
@@ -5098,6 +5805,50 @@ describe("Ocpp16Runtime", () => {
       validUntil: new Date("2026-06-01T00:00:00.000Z"),
       groupCredentialId: "GROUP-1",
     });
+    expect(authorizationStore.replaceLocalList).toHaveBeenCalledWith({
+      version: 2,
+      source: "ocpp16",
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      entries: [
+        {
+          credentialId: "TAG-1",
+          status: "accepted",
+          validUntil: null,
+          groupCredentialId: null,
+        },
+        {
+          credentialId: "TAG-2",
+          status: "blocked",
+          validUntil: new Date("2026-06-01T00:00:00.000Z"),
+          groupCredentialId: "GROUP-1",
+        },
+      ],
+    });
+  });
+
+  test("keeps the current local list when persistent replacement fails", async () => {
+    const authorizationStore = createAuthorizationStore({
+      replaceLocalList: vi.fn().mockRejectedValue(new Error("数据库不可用")),
+    });
+    const { protocolRuntime } = createProtocolRuntime([], {
+      configurationCatalog: localAuthorizationListConfiguration(),
+      authorizationStore,
+    });
+    const context = runtimeContext(protocolRuntime);
+    const request = new FakeInboundRequest("SendLocalList", {
+      listVersion: 1,
+      updateType: "Full",
+      localAuthorizationList: [
+        { idTag: "TAG-1", idTagInfo: { status: "Accepted" } },
+      ],
+    });
+
+    await expect(protocolRuntime.handleInboundRequest(request))
+      .rejects.toThrow("数据库不可用");
+
+    expect(request.responses).toEqual([]);
+    expect(context.localAuthorizationList.version).toBe(0);
+    expect(context.localAuthorizationList.listEntries()).toEqual([]);
   });
 
   test("handles empty Full SendLocalList by clearing entries", async () => {
@@ -5302,8 +6053,10 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("clears cached authorization grants without clearing local authorization list", async () => {
+    const authorizationStore = createAuthorizationStore();
     const { protocolRuntime, session } = createProtocolRuntime([], {
       configurationCatalog: localAuthorizationListConfiguration(),
+      authorizationStore,
     });
     const events = collectRuntimeEvents(protocolRuntime);
     const context = runtimeContext(protocolRuntime);
@@ -5357,6 +6110,36 @@ describe("Ocpp16Runtime", () => {
     expect(context.localAuthorizationList.listEntries()).toEqual(["LOCAL-1"]);
     expect(session.requests).toEqual([]);
     expect(events).toEqual([]);
+    expect(authorizationStore.clearCache).toHaveBeenCalledOnce();
+  });
+
+  test("keeps cached authorization grants when persistent clearing fails", async () => {
+    const authorizationStore = createAuthorizationStore({
+      clearCache: vi.fn().mockRejectedValue(new Error("数据库不可用")),
+    });
+    const { protocolRuntime } = createProtocolRuntime([], {
+      configurationCatalog: localAuthorizationListConfiguration(),
+      authorizationStore,
+    });
+    const context = runtimeContext(protocolRuntime);
+    const cachedGrant = new AuthorizationGrant({
+      credentialId: "CACHE-1",
+      status: "accepted",
+      allowedEvseIds: [1],
+      source: "cache",
+      isCacheEntry: true,
+      lastEvaluatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    context.authorizationGrants.set("CACHE-1\u00001", cachedGrant);
+    context.authorizationCache.set("CACHE-1\u00001", cachedGrant);
+    const request = new FakeInboundRequest("ClearCache", {});
+
+    await expect(protocolRuntime.handleInboundRequest(request))
+      .rejects.toThrow("数据库不可用");
+
+    expect(request.responses).toEqual([]);
+    expect([...context.authorizationGrants.keys()]).toEqual(["CACHE-1\u00001"]);
+    expect([...context.authorizationCache.keys()]).toEqual(["CACHE-1\u00001"]);
   });
 
   test("handles ChangeConfiguration before protocol registration and exposes the updated value", async () => {
@@ -5940,9 +6723,15 @@ describe("Ocpp16Runtime", () => {
     }));
 
     await protocolRuntime.stopTransaction({
-      transactionId: "1001",
+      transactionId: "transaction-1",
       reason: "remote",
       meterStopWh: 100,
+    });
+    await vi.waitFor(() => {
+      expect(session.requests.at(-1)?.payload).toMatchObject({
+        connectorId: 1,
+        status: "Unavailable",
+      });
     });
 
     [evse] = listRuntimeEvses(protocolRuntime);
@@ -6066,6 +6855,8 @@ describe("Ocpp16Runtime", () => {
       response("StatusNotification", {}),
       response("StatusNotification", {}),
       response("StatusNotification", {}),
+      response("StatusNotification", {}),
+      response("StatusNotification", {}),
       response("StopTransaction", {}),
       response("StatusNotification", {}),
     ], {
@@ -6130,9 +6921,15 @@ describe("Ocpp16Runtime", () => {
     expect(pluggedConnector?.vehiclePresence).toBe("detected");
 
     await protocolRuntime.stopTransaction({
-      transactionId: "1001",
+      transactionId: "transaction-1",
       reason: "remote",
       meterStopWh: 100,
+    });
+    await vi.waitFor(() => {
+      expect(session.requests.at(-1)?.payload).toMatchObject({
+        connectorId: 1,
+        status: "Unavailable",
+      });
     });
 
     state = runtimeState(protocolRuntime);
@@ -6291,6 +7088,7 @@ describe("Ocpp16Runtime", () => {
       idTag: "TAG-1",
       meterStartWh: 100,
     });
+    await waitForRequests(session, "StatusNotification", 2);
     const request = new FakeInboundRequest("TriggerMessage", {
       requestedMessage: "MeterValues",
       connectorId: 1,

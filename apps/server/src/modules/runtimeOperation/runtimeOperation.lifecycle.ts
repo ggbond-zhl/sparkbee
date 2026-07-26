@@ -17,6 +17,8 @@ import {
 } from "../../lib/chargingPointActorHost";
 import { AppError } from "../../utils/errors";
 import { ChargingTransactionRepository } from "../chargingTransaction/chargingTransaction.repo";
+import { AuthorizationRepository } from "../authorization/authorization.repo";
+import { TransactionDeliveryRepository } from "../transactionDelivery/transactionDelivery.repo";
 import { ProtocolConfigurationRepository } from "../protocolConfiguration/protocolConfiguration.repo";
 import { toChargingPointActorOptions } from "./chargingPointActorOptions";
 import { RuntimeOperationRepository } from "./runtimeOperation.repo";
@@ -52,6 +54,8 @@ export class RuntimeOperationLifecycle {
   constructor(
     private readonly repository: RuntimeOperationRepository,
     private readonly chargingTransactionRepository: ChargingTransactionRepository,
+    private readonly transactionDeliveryRepository: TransactionDeliveryRepository,
+    private readonly authorizationPersistenceRepository: AuthorizationRepository,
     private readonly protocolConfigurationRuntime: ProtocolConfigurationRuntime,
     private readonly dependencies: RuntimeOperationLifecycleDependencies,
   ) {
@@ -144,8 +148,12 @@ export class RuntimeOperationLifecycle {
         chargingPointId: chargingPoint.identity,
       },
       configurationPersistence,
-      transactionStore: this.chargingTransactionRepository.forChargingPoint(
+      transactionStore: this.transactionDeliveryRepository.forChargingPoint(
         chargingPoint.id,
+      ),
+      authorizationStore: this.authorizationPersistenceRepository.forChargingPoint(
+        chargingPoint.id,
+        chargingPoint.protocol,
       ),
       ...(actorLogSink === undefined ? {} : { actorLogSink }),
     };

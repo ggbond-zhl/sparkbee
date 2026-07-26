@@ -61,12 +61,16 @@ export function parseHeartbeatCurrentTime(
 
 export function parseStopTransactionResponse(payload: unknown): {
   idTagInfoStatus: Ocpp16AuthorizationStatus | null;
+  expiryDate: Date | null;
+  parentIdTag: string | null;
   responseIssue: string | null;
   unexpectedResponseFields: string[];
 } {
   if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
     return {
       idTagInfoStatus: null,
+      expiryDate: null,
+      parentIdTag: null,
       responseIssue: "StopTransaction.conf 不是对象",
       unexpectedResponseFields: [],
     };
@@ -78,6 +82,8 @@ export function parseStopTransactionResponse(payload: unknown): {
   if (!("idTagInfo" in record) || record.idTagInfo === undefined) {
     return {
       idTagInfoStatus: null,
+      expiryDate: null,
+      parentIdTag: null,
       responseIssue: null,
       unexpectedResponseFields,
     };
@@ -90,6 +96,8 @@ export function parseStopTransactionResponse(payload: unknown): {
   ) {
     return {
       idTagInfoStatus: null,
+      expiryDate: null,
+      parentIdTag: null,
       responseIssue: "StopTransaction.conf.idTagInfo 格式非法",
       unexpectedResponseFields,
     };
@@ -102,6 +110,8 @@ export function parseStopTransactionResponse(payload: unknown): {
   ) {
     return {
       idTagInfoStatus: null,
+      expiryDate: null,
+      parentIdTag: null,
       responseIssue: "StopTransaction.conf.idTagInfo.status 非法",
       unexpectedResponseFields,
     };
@@ -109,6 +119,12 @@ export function parseStopTransactionResponse(payload: unknown): {
 
   return {
     idTagInfoStatus: idTagInfo.status as Ocpp16AuthorizationStatus,
+    expiryDate: typeof idTagInfo.expiryDate === "string"
+      ? parseOptionalDate(idTagInfo.expiryDate)
+      : null,
+    parentIdTag: typeof idTagInfo.parentIdTag === "string"
+      ? idTagInfo.parentIdTag
+      : null,
     responseIssue: null,
     unexpectedResponseFields,
   };

@@ -200,6 +200,71 @@ describe("ChargingPointSession", () => {
     });
   });
 
+  test("uses a caller-provided message id for a retried transaction delivery", async () => {
+    const transport = new MemoryTransport();
+    const codec = new ConfigurableCodec();
+    const session = new ChargingPointSession({
+      transport,
+      codec,
+      validator: createValidator(),
+      protocolVersion: "OCPP16J",
+    });
+    const messageId = "00000000-0000-4000-8000-000000000011";
+
+    await session.connect();
+    const outboundRequest = session.request(
+      "MeterValues",
+      { connectorId: 1, transactionId: -1, meterValue: [] },
+      { messageId },
+    );
+    await flushMicrotasks();
+
+    expect(JSON.parse(transport.sentMessages[0] as string)).toMatchObject({
+      messageId,
+      action: "MeterValues",
+    });
+
+    codec.decodeImplementation = () => ({
+      success: true,
+      message: { kind: "response", messageId, payload: {} },
+    });
+    transport.emitMessage('[3,"ignored",{}]');
+
+    await expect(outboundRequest).resolves.toEqual({
+      kind: "response",
+      payload: {},
+    });
+  });
+
+  test("rejects concurrent outbound requests with the same caller-provided id", async () => {
+    const transport = new MemoryTransport();
+    const codec = new ConfigurableCodec();
+    const session = new ChargingPointSession({
+      transport,
+      codec,
+      validator: createValidator(),
+    });
+    const messageId = "00000000-0000-4000-8000-000000000011";
+
+    await session.connect();
+    const firstRequest = session.request("Heartbeat", {}, { messageId });
+    await flushMicrotasks();
+
+    await expect(
+      session.request("Heartbeat", {}, { messageId }),
+    ).rejects.toMatchObject({
+      code: "OUTBOUND_REQUEST_MESSAGE_ID_CONFLICT",
+    });
+    expect(transport.sentMessages).toHaveLength(1);
+
+    codec.decodeImplementation = () => ({
+      success: true,
+      message: { kind: "response", messageId, payload: {} },
+    });
+    transport.emitMessage('[3,"ignored",{}]');
+    await expect(firstRequest).resolves.toEqual({ kind: "response", payload: {} });
+  });
+
   test("emits inbound requests with normalized inbound metadata", async () => {
     const transport = new MemoryTransport();
     const codec = new ConfigurableCodec();

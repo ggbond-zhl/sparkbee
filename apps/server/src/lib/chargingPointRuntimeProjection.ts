@@ -48,6 +48,7 @@ export class ChargingPointRuntimeProjection {
       transactionStatuses: [...projection.transactionStatuses].sort((left, right) =>
         left.transactionId.localeCompare(right.transactionId)
       ),
+      transactionDeliverySummary: projection.transactionDeliverySummary,
       lastHeartbeatAt: projection.lastHeartbeatAt,
       recentIssue: projection.recentIssue,
     };
@@ -72,6 +73,13 @@ function createEmptyProjection(): RuntimeProjection {
     connectorStatuses: [],
     connectorAvailabilities: [],
     transactionStatuses: [],
+    transactionDeliverySummary: {
+      pendingCount: 0,
+      inFlightCount: 0,
+      retryWaitCount: 0,
+      failedCount: 0,
+      oldestPendingAt: null,
+    },
     lastHeartbeatAt: null,
     recentIssue: null,
   };
@@ -103,6 +111,7 @@ function reduceRuntimeProjection(
     case "authorization.status":
       return projection;
     case "configuration.changed":
+    case "transaction-delivery.changed":
       return projection;
     case "transaction.status":
       return reduceTransactionStatus(projection, event);

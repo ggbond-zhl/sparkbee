@@ -28,6 +28,7 @@ import type { Ocpp16RuntimeContext } from "../../../../src/protocol/runtime/ocpp
 export type RequestRecord = {
   action: string;
   payload: unknown;
+  messageId?: string;
 };
 
 export type QueuedReply = {
@@ -56,16 +57,25 @@ export class FakeSession implements ISession {
     return this.state === "online";
   }
 
-  request(action: string, payload: unknown): Promise<OutboundRequestResult> {
+  request(
+    action: string,
+    payload: unknown,
+    options: { messageId?: string } = {},
+  ): Promise<OutboundRequestResult> {
     this.emitProtocolMessage({
       protocol: "OCPP16J",
       direction: "outbound",
       messageKind: "request",
-      messageId: `${action}-request-${this.requests.length + 1}`,
+      messageId:
+        options.messageId ?? `${action}-request-${this.requests.length + 1}`,
       action,
       payload,
     });
-    this.requests.push({ action, payload });
+    this.requests.push({
+      action,
+      payload,
+      ...(options.messageId === undefined ? {} : { messageId: options.messageId }),
+    });
     const reply = this.replies.shift();
     if (reply === undefined) {
       throw new Error(`未配置 ${action} 响应`);
@@ -223,6 +233,10 @@ export function createProtocolRuntime(replies: QueuedReply[], options: {
   configurationPersistence?: Ocpp16RuntimeOptions["configurationPersistence"];
   actorLogs?: Ocpp16ActorLog[];
   transactionStore?: Ocpp16RuntimeOptions["transactionStore"];
+  authorizationStore?: Ocpp16RuntimeOptions["authorizationStore"];
+  idGenerator?: Ocpp16RuntimeOptions["idGenerator"];
+  messageIdGenerator?: Ocpp16RuntimeOptions["messageIdGenerator"];
+  clock?: Ocpp16RuntimeOptions["clock"];
 } = {}): { protocolRuntime: Ocpp16Runtime; session: FakeSession } {
   const session = new FakeSession(replies);
   const protocolRuntime = new Ocpp16Runtime({
@@ -230,12 +244,14 @@ export function createProtocolRuntime(replies: QueuedReply[], options: {
     chargingPoint: options.chargingPoint ?? createChargingPoint(),
     configurationCatalog: options.configurationCatalog,
     configurationPersistence: options.configurationPersistence,
-    clock: () => new Date("2026-01-01T00:00:00.000Z"),
-    idGenerator: () => "transaction-1",
+    clock: options.clock ?? (() => new Date("2026-01-01T00:00:00.000Z")),
+    idGenerator: options.idGenerator ?? (() => "transaction-1"),
+    messageIdGenerator: options.messageIdGenerator,
     emitActorLog: (actorLog) => {
       options.actorLogs?.push(actorLog);
     },
     transactionStore: options.transactionStore,
+    authorizationStore: options.authorizationStore,
   });
 
   return { protocolRuntime, session };

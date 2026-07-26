@@ -212,6 +212,8 @@ class FakeProtocolRuntime {
 
   async restorePersistedTransactions(): Promise<void> {}
 
+  async restorePersistedAuthorization(): Promise<void> {}
+
   resumeActiveTransactionSampling(): void {}
 
   async boot() {
@@ -762,6 +764,9 @@ describe("Ocpp16ChargingPointActor", () => {
 
     expect(actor.status).toBe("starting");
 
+    await vi.waitFor(() => {
+      expect(session.connectCalls).toBe(1);
+    });
     session.completeConnect();
     await expect(startPromise).resolves.toMatchObject({
       chargingPointActorStatus: "running",
@@ -1422,6 +1427,7 @@ describe("Ocpp16ChargingPointActor", () => {
     })).resolves.toEqual({
       status: "accepted",
       transactionId: "1001",
+      deliveryStatus: "pending",
     });
 
     expect(protocolRuntime.calls).toEqual([
@@ -1957,7 +1963,8 @@ describe("Ocpp16ChargingPointActor", () => {
 
     expect(start).toEqual({
       status: "accepted",
-      transactionId: "1001",
+      transactionId: "event-1",
+      deliveryStatus: "pending",
     });
     expect(events).toContainEqual(expect.objectContaining({
       type: "transaction.meterValue",
@@ -1965,7 +1972,7 @@ describe("Ocpp16ChargingPointActor", () => {
         scope: "transaction",
         evseId: 1,
         connectorId: 1,
-        transactionId: "1001",
+        transactionId: "event-1",
       },
       meterWh: 0,
       sampledAt: "2026-01-01T00:00:00.000Z",
@@ -1998,6 +2005,10 @@ describe("Ocpp16ChargingPointActor", () => {
     });
     session.emitInboundRequest(request);
     await flushRemoteCommand();
+    await vi.waitFor(() => {
+      expect(events.filter((event) => event.type === "authorization.status"))
+        .toHaveLength(1);
+    });
 
     expect(request.responses).toEqual([{ status: "Accepted" }]);
     expect(events).toContainEqual(expect.objectContaining({
@@ -2018,7 +2029,7 @@ describe("Ocpp16ChargingPointActor", () => {
         scope: "transaction",
         evseId: 1,
         connectorId: 1,
-        transactionId: "2001",
+        transactionId: "event-1",
       },
       previousStatus: null,
       currentStatus: "active",
@@ -2054,18 +2065,29 @@ describe("Ocpp16ChargingPointActor", () => {
       connectorId: 1,
       idTag: "REMOTE",
     });
+    expect(startResult).toMatchObject({
+      status: "accepted",
+      transactionId: "event-1",
+      deliveryStatus: "pending",
+    });
+    await vi.waitFor(() => {
+      expect(session.requests.filter((item) => item.action === "StatusNotification"))
+        .toHaveLength(4);
+    });
     const events = collectChargingPointActorEvents(actor, [
       "transaction.status",
       "protocol.message",
     ]);
     const request = new RuntimeFakeInboundRequest("RemoteStopTransaction", {
-      transactionId: startResult.status === "accepted"
-        ? Number(startResult.transactionId)
-        : 0,
+      transactionId: 2001,
     });
 
     session.emitInboundRequest(request);
     await flushRemoteCommand();
+    await vi.waitFor(() => {
+      expect(session.requests.find((item) => item.action === "StopTransaction"))
+        .toBeDefined();
+    });
 
     expect(request.responses).toEqual([{ status: "Accepted" }]);
     expect(events).toContainEqual(expect.objectContaining({
@@ -2074,7 +2096,7 @@ describe("Ocpp16ChargingPointActor", () => {
         scope: "transaction",
         evseId: 1,
         connectorId: 1,
-        transactionId: "2001",
+        transactionId: "event-1",
       },
       previousStatus: "active",
       currentStatus: "ended",
@@ -2228,6 +2250,10 @@ describe("Ocpp16ChargingPointActor", () => {
     });
     session.emitInboundRequest(request);
     await flushRemoteCommand();
+    await vi.waitFor(() => {
+      expect(events.filter((event) => event.type === "authorization.status"))
+        .toHaveLength(2);
+    });
 
     const authorizationEvents = events.filter((event) =>
       event.type === "authorization.status"
