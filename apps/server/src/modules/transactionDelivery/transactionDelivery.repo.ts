@@ -1,5 +1,8 @@
 import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import type {
+  ChargingPointActorMeterValueDeliveryPayload,
+  ChargingPointActorStartTransactionDeliveryPayload,
+  ChargingPointActorStopTransactionDeliveryPayload,
   ChargingPointActorTransactionDeliveryRecord,
   ChargingPointActorTransactionStore,
 } from "../../lib/chargingPointActor";
@@ -24,25 +27,10 @@ export type TransactionDeliveryStatus =
   | "delivered"
   | "failed";
 
-export interface TransactionDeliveryRecord {
-  id: string;
+export type TransactionDeliveryRecord =
+  ChargingPointActorTransactionDeliveryRecord & {
   chargingPointId: string;
-  transactionId: string;
-  ocppTransactionId: number | null;
-  deliverySequence: bigint;
-  messageId: string;
-  messageType: "start" | "meter_value" | "stop";
-  payload: Record<string, unknown>;
-  occurredAt: Date;
-  status: TransactionDeliveryStatus;
-  attemptCount: number;
-  nextAttemptAt: Date | null;
-  inFlightAt: Date | null;
-  deliveredAt: Date | null;
-  failedAt: Date | null;
-  lastErrorCode: string | null;
-  lastErrorMessage: string | null;
-}
+};
 
 export interface StartTransactionWithDeliveryInput {
   chargingPointId: string;
@@ -768,12 +756,30 @@ export class TransactionDeliveryRepository {
     transactionId: string,
     ocppTransactionId: number | null,
   ): TransactionDeliveryRecord & ChargingPointActorTransactionDeliveryRecord {
-    return {
+    const base = {
       ...row,
       transactionId,
       ocppTransactionId,
-      messageType: row.messageType as TransactionDeliveryRecord["messageType"],
       status: row.status as TransactionDeliveryStatus,
+    };
+    if (row.messageType === "start") {
+      return {
+        ...base,
+        messageType: "start",
+        payload: row.payload as unknown as ChargingPointActorStartTransactionDeliveryPayload,
+      };
+    }
+    if (row.messageType === "meter_value") {
+      return {
+        ...base,
+        messageType: "meter_value",
+        payload: row.payload as unknown as ChargingPointActorMeterValueDeliveryPayload,
+      };
+    }
+    return {
+      ...base,
+      messageType: "stop",
+      payload: row.payload as unknown as ChargingPointActorStopTransactionDeliveryPayload,
     };
   }
 }

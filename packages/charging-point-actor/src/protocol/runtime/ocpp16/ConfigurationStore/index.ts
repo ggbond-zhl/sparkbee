@@ -18,6 +18,10 @@ export {
   type Ocpp16ConfigurationKey,
   type Ocpp16ConfigurationKeyInput,
 } from "./configurationDefinitions";
+export {
+  normalizeConfigurationValue,
+  type ConfigurationValueDefinition,
+} from "../../../../model";
 
 export type Ocpp16ConfigurationCatalogInput =
   | ConfigurationCatalog

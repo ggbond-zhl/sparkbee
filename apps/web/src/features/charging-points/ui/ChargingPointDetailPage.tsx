@@ -109,15 +109,12 @@ import type {
 } from "@/features/charging-points/model/chargingPointRuntimeEvents";
 import {
   OBSERVATION_TIME_FILTER_OPTIONS,
-  buildObservationTypeFilterOptions,
-  filterObservationEntries,
   getObservationEmptyText,
   type ObservationTimeFilter,
   type ObservationTypeFilterOption,
 } from "@/features/charging-points/model/chargingPointObservationFilters";
 import type { ChargingPointObservationWorkbench } from "@/features/charging-points/model/chargingPointWorkbench";
 import { useChargingPointWorkbench } from "@/features/charging-points/model/useChargingPointWorkbench";
-import { useTransactionDeliveries } from "@/features/charging-points/model/useTransactionDeliveries";
 import { ChargingPointConnectorEditDialog } from "@/features/charging-points/ui/ChargingPointConnectorEditDialog";
 import { ChargingPointEditDialog } from "@/features/charging-points/ui/ChargingPointEditDialog";
 import { cn } from "@/lib/utils";
@@ -229,7 +226,6 @@ export function ChargingPointDetailPage() {
         ))}
       </section>
       <RuntimeObservationTabs
-        chargingPointId={chargingPointId}
         observation={observation}
       />
       <ChargingPointEditDialog
@@ -692,109 +688,53 @@ function getEnergyChartDomain(samples: ChargingSamplePoint[]) {
 }
 
 function RuntimeObservationTabs({
-  chargingPointId,
   observation,
 }: {
-  chargingPointId: string;
   observation: ChargingPointObservationWorkbench;
 }) {
   const [activeObservationTab, setActiveObservationTab] =
     useState<RuntimeObservationTab>("messages");
-  const transactionDeliveries = useTransactionDeliveries(chargingPointId);
   const {
     events,
-    eventHistory,
-    eventTimeFilter,
-    eventTypeFilter,
-    messageDirectionFilter,
-    messageHistory,
-    messageTimeFilter,
-    messageTypeFilter,
     protocolMessages,
-    setEventTimeFilter,
-    setEventTypeFilter,
-    setMessageDirectionFilter,
-    setMessageTimeFilter,
-    setMessageTypeFilter,
+    transactionDeliveries,
   } = observation;
   const messagesListHandleRef = useRef<ObservationListHandle | null>(null);
   const eventsListHandleRef = useRef<ObservationListHandle | null>(null);
-  const filterNowMs = Date.now();
-  const messageTypeOptions = useMemo(
-    () => buildObservationTypeFilterOptions(
-      protocolMessages,
-      (message) => message.action,
-    ),
-    [protocolMessages],
-  );
-  const eventTypeOptions = useMemo(
-    () => buildObservationTypeFilterOptions(
-      events,
-      (event) => event.eventType,
-    ),
-    [events],
-  );
-  const filteredProtocolMessages = useMemo(
-    () => filterObservationEntries(
-      protocolMessages.filter((message) =>
-        messageDirectionFilter === "all" ||
-        message.direction === messageDirectionFilter
-      ),
-      {
-        getType: (message) => message.action,
-        limit: messageHistory.capacity,
-        nowMs: filterNowMs,
-        timeFilter: messageTimeFilter,
-        typeFilter: messageTypeFilter,
-      },
-    ),
-    [
-      filterNowMs,
-      messageDirectionFilter,
-      messageHistory.capacity,
-      messageTimeFilter,
-      messageTypeFilter,
-      protocolMessages,
-    ],
-  );
-  const filteredEvents = useMemo(
-    () => filterObservationEntries(events, {
-      getType: (event) => event.eventType,
-      limit: eventHistory.capacity,
-      nowMs: filterNowMs,
-      timeFilter: eventTimeFilter,
-      typeFilter: eventTypeFilter,
-    }),
-    [eventHistory.capacity, eventTimeFilter, eventTypeFilter, events, filterNowMs],
-  );
   const activeListHandleRef =
     activeObservationTab === "messages" ? messagesListHandleRef : eventsListHandleRef;
   const activeListLength = activeObservationTab === "messages"
-    ? protocolMessages.length
-    : events.length;
+    ? protocolMessages.totalItems
+    : events.totalItems;
   const activeTimeFilter =
-    activeObservationTab === "messages" ? messageTimeFilter : eventTimeFilter;
+    activeObservationTab === "messages"
+      ? protocolMessages.timeFilter
+      : events.timeFilter;
   const activeTypeFilter =
-    activeObservationTab === "messages" ? messageTypeFilter : eventTypeFilter;
+    activeObservationTab === "messages"
+      ? protocolMessages.typeFilter
+      : events.typeFilter;
   const activeTypeOptions =
-    activeObservationTab === "messages" ? messageTypeOptions : eventTypeOptions;
+    activeObservationTab === "messages"
+      ? protocolMessages.typeOptions
+      : events.typeOptions;
 
   function handleActiveTimeFilterChange(timeFilter: ObservationTimeFilter) {
     activeListHandleRef.current?.resetToTop();
     if (activeObservationTab === "messages") {
-      setMessageTimeFilter(timeFilter);
+      protocolMessages.setTimeFilter(timeFilter);
       return;
     }
-    setEventTimeFilter(timeFilter);
+    events.setTimeFilter(timeFilter);
   }
 
   function handleActiveTypeFilterChange(typeFilter: string) {
     activeListHandleRef.current?.resetToTop();
     if (activeObservationTab === "messages") {
-      setMessageTypeFilter(typeFilter);
+      protocolMessages.setTypeFilter(typeFilter);
       return;
     }
-    setEventTypeFilter(typeFilter);
+    events.setTypeFilter(typeFilter);
   }
 
   return (
@@ -814,13 +754,13 @@ function RuntimeObservationTabs({
             <RuntimeObservationToolbar
               disabled={activeListLength === 0}
               directionFilter={activeObservationTab === "messages"
-                ? messageDirectionFilter
+                ? protocolMessages.directionFilter
                 : undefined}
               timeFilter={activeTimeFilter}
               typeFilter={activeTypeFilter}
               typeOptions={activeTypeOptions}
               onDirectionFilterChange={activeObservationTab === "messages"
-                ? setMessageDirectionFilter
+                ? protocolMessages.setDirectionFilter
                 : undefined}
               onTimeFilterChange={handleActiveTimeFilterChange}
               onTypeFilterChange={handleActiveTypeFilterChange}
@@ -829,22 +769,22 @@ function RuntimeObservationTabs({
         </div>
         <TabsContent className="mt-3" value="messages">
           <ProtocolMessageList
-            entries={filteredProtocolMessages}
-            entriesCount={protocolMessages.length}
-            hasMore={messageHistory.hasMore}
-            loadingMore={messageHistory.loadingMore}
+            entries={protocolMessages.items}
+            entriesCount={protocolMessages.totalItems}
+            hasMore={protocolMessages.history.hasMore}
+            loadingMore={protocolMessages.history.loadingMore}
             listHandleRef={messagesListHandleRef}
-            onLoadMore={messageHistory.loadMore}
+            onLoadMore={protocolMessages.history.loadMore}
           />
         </TabsContent>
         <TabsContent className="mt-3" value="events">
           <ProtocolEventList
-            entries={filteredEvents}
-            entriesCount={events.length}
-            hasMore={eventHistory.hasMore}
-            loadingMore={eventHistory.loadingMore}
+            entries={events.items}
+            entriesCount={events.totalItems}
+            hasMore={events.history.hasMore}
+            loadingMore={events.history.loadingMore}
             listHandleRef={eventsListHandleRef}
-            onLoadMore={eventHistory.loadMore}
+            onLoadMore={events.history.loadMore}
           />
         </TabsContent>
         <TabsContent className="mt-3" value="deliveries">
@@ -860,7 +800,7 @@ type RuntimeObservationTab = "messages" | "events" | "deliveries";
 function TransactionDeliveryPanel({
   delivery,
 }: {
-  delivery: ReturnType<typeof useTransactionDeliveries>;
+  delivery: ChargingPointObservationWorkbench["transactionDeliveries"];
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -965,16 +905,16 @@ function TransactionDeliveryPanel({
           </TableBody>
         </Table>
       )}
-      {delivery.hasMore && (
+      {delivery.history.hasMore && (
         <div className="flex justify-center">
           <Button
-            disabled={delivery.loadingMore}
+            disabled={delivery.history.loadingMore}
             size="sm"
             type="button"
             variant="outline"
-            onClick={delivery.loadMore}
+            onClick={delivery.history.loadMore}
           >
-            {delivery.loadingMore ? "加载中" : "加载更早记录"}
+            {delivery.history.loadingMore ? "加载中" : "加载更早记录"}
           </Button>
         </div>
       )}
@@ -985,7 +925,7 @@ function TransactionDeliveryPanel({
 function TransactionDeliveryStatusBadge({
   status,
 }: {
-  status: ReturnType<typeof useTransactionDeliveries>["items"][number]["status"];
+  status: ChargingPointObservationWorkbench["transactionDeliveries"]["items"][number]["status"];
 }) {
   const presentation = {
     pending: { label: "待交付", variant: "secondary" },
@@ -1001,7 +941,7 @@ function TransactionDeliveryStatusBadge({
 }
 
 function formatDeliveryMessageType(
-  messageType: ReturnType<typeof useTransactionDeliveries>["items"][number]["messageType"],
+  messageType: ChargingPointObservationWorkbench["transactionDeliveries"]["items"][number]["messageType"],
 ) {
   return {
     start: "StartTransaction",

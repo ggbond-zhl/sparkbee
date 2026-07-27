@@ -281,7 +281,7 @@ describe("chargingPoint management API", () => {
         defaultValue: "60",
         readonly: false,
         valueType: "integer",
-        minValue: 0,
+        minValue: 1,
         maxValue: null,
         version: 1,
         pendingRestart: false,
@@ -414,6 +414,19 @@ describe("chargingPoint management API", () => {
     expect(invalidResponse.status).toBe(422);
     expect(apiErrorResponseSchema.parse(await invalidResponse.json()).error.code)
       .toBe("PROTOCOL_CONFIGURATION_INVALID_VALUE");
+
+    const zeroHeartbeatResponse = await app.request(
+      `/api/charging-points/${created.id}/configuration/HeartbeatInterval`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "0", expectedVersion: 1 }),
+      },
+    );
+    expect(zeroHeartbeatResponse.status).toBe(422);
+    expect(
+      apiErrorResponseSchema.parse(await zeroHeartbeatResponse.json()).error.code,
+    ).toBe("PROTOCOL_CONFIGURATION_INVALID_VALUE");
   });
 
   test("delegates protocol configuration updates to a running actor", async () => {
@@ -1115,6 +1128,7 @@ describe("chargingPoint management API", () => {
           },
           messageId: "00000000-0000-4000-8000-000000000099",
           payload: {
+            evseId: input.evseId,
             connectorId: input.connectorId,
             idTag: input.idTag,
             meterStartWh: input.meterStartWh ?? 0,

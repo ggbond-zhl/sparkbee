@@ -1,7 +1,9 @@
 export { createChargingPointActor } from "./createChargingPointActor";
 export {
   configurationDefinitions,
+  normalizeConfigurationValue,
   type ConfigurationDefinition,
+  type ConfigurationValueDefinition,
 } from "../protocol/runtime/ocpp16/ConfigurationStore";
 export { ChargingPointActorError, type ChargingPointActorErrorCode } from "./errors";
 export type {
@@ -58,7 +60,11 @@ export type {
   ChargingPointActorPersistedLocalAuthorizationEntry,
   ChargingPointActorPersistedLocalAuthorizationList,
   ChargingPointActorPersistedTransaction,
+  ChargingPointActorMeterValueDeliveryPayload,
+  ChargingPointActorStartTransactionDeliveryPayload,
+  ChargingPointActorStopTransactionDeliveryPayload,
   ChargingPointActorTransactionDeliveryMessageType,
+  ChargingPointActorTransactionDeliveryMessage,
   ChargingPointActorTransactionDeliveryRecord,
   ChargingPointActorTransactionDeliveryStatus,
   ChargingPointActorTransactionDeliverySummary,

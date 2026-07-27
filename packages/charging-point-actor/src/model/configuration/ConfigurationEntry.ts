@@ -19,6 +19,7 @@ import type {
   ConfigurationEntrySyncResult,
   ConfigurationValueType,
 } from "./types";
+import { normalizeConfigurationValue } from "./normalizeConfigurationValue";
 
 export class ConfigurationEntry {
   readonly key: string;
@@ -157,39 +158,6 @@ export class ConfigurationEntry {
   }
 
   private normalizeValue(value: string): string {
-    if (this.valueType === "string") {
-      return value;
-    }
-
-    if (this.valueType === "boolean") {
-      const normalized = value.trim().toLowerCase();
-      if (normalized !== "true" && normalized !== "false") {
-        throw new Error(`配置项 ${this.key} 只接受 true/false`);
-      }
-
-      return normalized;
-    }
-
-    const normalized = value.trim();
-    if (!/^-?\d+$/.test(normalized)) {
-      throw new Error(`配置项 ${this.key} 只接受整数`);
-    }
-
-    const parsed = Number(normalized);
-    assertFiniteNumber(parsed, `${this.key}.value`);
-
-    if (!Number.isSafeInteger(parsed)) {
-      throw new Error(`配置项 ${this.key} 超出安全整数范围`);
-    }
-
-    if (this.minValue !== undefined && parsed < this.minValue) {
-      throw new Error(`配置项 ${this.key} 不能小于 ${this.minValue}`);
-    }
-
-    if (this.maxValue !== undefined && parsed > this.maxValue) {
-      throw new Error(`配置项 ${this.key} 不能大于 ${this.maxValue}`);
-    }
-
-    return String(parsed);
+    return normalizeConfigurationValue(this, value);
   }
 }

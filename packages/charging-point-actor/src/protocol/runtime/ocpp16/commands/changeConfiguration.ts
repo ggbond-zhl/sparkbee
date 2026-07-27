@@ -15,10 +15,6 @@ export async function handleChangeConfiguration(
   request: InboundRequest,
 ): Promise<void> {
   const payload = request.payload as Ocpp16RequestOf<"ChangeConfiguration">;
-  if (payload.key === "HeartbeatInterval" && !isPositiveIntegerString(payload.value)) {
-    await respond(request, "Rejected");
-    return;
-  }
 
   let result: Ocpp16ConfigurationChangeResult;
   try {
@@ -44,10 +40,6 @@ export async function changeConfiguration(
     expectedVersion?: number;
   },
 ): Promise<Ocpp16ConfigurationChangeResult> {
-  if (input.key === "HeartbeatInterval" && !isPositiveIntegerString(input.value)) {
-    return { status: "Rejected" };
-  }
-
   const result = await context.configurationStore.changeAndPersist(
     input.key,
     input.value,
@@ -93,14 +85,4 @@ function respond(
   return request.respond({
     status,
   } satisfies Ocpp16ResponseOf<"ChangeConfiguration">);
-}
-
-function isPositiveIntegerString(value: string): boolean {
-  const normalized = value.trim();
-  if (!/^\d+$/.test(normalized)) {
-    return false;
-  }
-
-  const parsed = Number(normalized);
-  return Number.isSafeInteger(parsed) && parsed > 0;
 }

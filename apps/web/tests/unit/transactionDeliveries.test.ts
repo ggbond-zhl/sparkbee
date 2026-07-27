@@ -4,7 +4,7 @@ import type {
   TransactionDeliveryItem,
 } from "@spark-bee/contracts";
 
-import { mergeTransactionDeliveryItems } from "../../src/features/charging-points/model/useTransactionDeliveries";
+import { mergeTransactionDeliveryItems } from "../../src/features/charging-points/model/transactionDeliveryObservation";
 
 describe("交易交付列表", () => {
   test("按 messageId 合并 SSE 状态并保持单桩序号倒序", () => {

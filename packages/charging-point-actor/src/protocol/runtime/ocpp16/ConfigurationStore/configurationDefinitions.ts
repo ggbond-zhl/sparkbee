@@ -88,7 +88,7 @@ export const configurationDefinitions = [
     access: "RW",
     defaultValue: "60",
     valueType: "integer",
-    minValue: 0,
+    minValue: 1,
     description: "桩向中心系统发送 Heartbeat.req 的间隔，单位秒；BootNotification Accepted 后同步为中心系统返回的 interval。",
   },
   {

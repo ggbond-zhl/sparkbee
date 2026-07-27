@@ -72,6 +72,41 @@ describe("web architecture", () => {
     expect(workbenchSource).toContain("useChargingPointObservation");
     expect(observationSource).toContain("useChargingPointRuntimeEvents");
     expect(observationSource).toContain("useInfiniteQuery");
+    expect(observationSource).toContain("transactionDeliveriesInfiniteQueryOptions");
+    expect(detailPageSource).not.toContain("useTransactionDeliveries");
+  });
+
+  test("protocol configuration page renders through its workbench seam", () => {
+    const pagePath = join(
+      srcRoot,
+      "features",
+      "charging-points",
+      "ui",
+      "ChargingPointConfigurationPage.tsx",
+    );
+    const workbenchPath = join(
+      srcRoot,
+      "features",
+      "charging-points",
+      "model",
+      "useProtocolConfigurationWorkbench.ts",
+    );
+    const pageSource = readFileSync(pagePath, "utf8");
+    const workbenchSource = existsSync(workbenchPath)
+      ? readFileSync(workbenchPath, "utf8")
+      : "";
+
+    expect(existsSync(workbenchPath)).toBe(true);
+    expect(pageSource).toContain("useProtocolConfigurationWorkbench");
+    expect(pageSource).not.toContain("useQuery");
+    expect(pageSource).not.toContain("useMutation");
+    expect(pageSource).not.toContain("useQueryClient");
+    expect(pageSource).not.toContain("subscribeChargingPointEvents");
+    expect(pageSource).not.toContain("updateProtocolConfiguration");
+    expect(workbenchSource).toContain("useQuery");
+    expect(workbenchSource).toContain("useMutation");
+    expect(workbenchSource).toContain("subscribeChargingPointEvents");
+    expect(workbenchSource).toContain("protocolConfigurationQueryKey");
   });
 
   test("app shell only wires providers and router", () => {
@@ -113,6 +148,7 @@ describe("web architecture", () => {
 
     expect(appShellSource).toContain("SidebarProvider");
     expect(appShellSource).toContain("defaultOpen");
+    expect(appShellSource).toContain('"--sidebar-width": "14rem"');
     expect(appShellSource).not.toContain("<SidebarProvider open");
     expect(appShellSource).toContain("SidebarInset");
     expect(appShellSource).toContain("SidebarTrigger");
@@ -451,8 +487,10 @@ describe("web architecture", () => {
     expect(detailPageSource).toContain("VirtualObservationList");
     expect(detailPageSource).toContain("RuntimeObservationToolbar");
     expect(detailPageSource).toContain("OBSERVATION_TIME_FILTER_OPTIONS");
-    expect(detailPageSource).toContain("filterObservationEntries");
-    expect(detailPageSource).toContain("buildObservationTypeFilterOptions");
+    expect(detailPageSource).not.toContain("filterObservationEntries");
+    expect(detailPageSource).not.toContain("buildObservationTypeFilterOptions");
+    expect(observationSource).toContain("filterObservationEntries");
+    expect(observationSource).toContain("buildObservationTypeFilterOptions");
     expect(detailPageSource).toContain(
       '<TabsTrigger value="messages">报文</TabsTrigger>',
     );
@@ -474,8 +512,8 @@ describe("web architecture", () => {
     expect(observationSource).toContain(
       "200 * (eventHistoryQuery.data?.pages.length ?? 1)",
     );
-    expect(detailPageSource).toContain("limit: messageHistory.capacity");
-    expect(detailPageSource).toContain("limit: eventHistory.capacity");
+    expect(observationSource).toContain("limit: messageHistory.capacity");
+    expect(observationSource).toContain("limit: eventHistory.capacity");
     expect(detailPageSource).toContain(
       "targetIndex !== previousAnchorIndex",
     );

@@ -15,6 +15,7 @@ import { createDeferred } from "../../../../src/shared/deferred.ts";
 import { MemoryTransactionDeliveryStore } from "../../../../src/protocol/runtime/ocpp16/MemoryTransactionDeliveryStore.ts";
 import type {
   ChargingPointActorAuthorizationStore,
+  ChargingPointActorTransactionDeliveryMessage,
   ChargingPointActorTransactionDeliveryRecord,
   ChargingPointActorTransactionStore,
 } from "../../../../src/chargingPointActor/types.ts";
@@ -232,16 +233,15 @@ function createTransactionStore(
   overrides: Partial<ChargingPointActorTransactionStore> = {},
 ): ChargingPointActorTransactionStore {
   const createRecord = (
-    messageType: ChargingPointActorTransactionDeliveryRecord["messageType"],
-    input: { transactionId: string; messageId: string; payload: Record<string, unknown>; occurredAt: Date },
+    message: ChargingPointActorTransactionDeliveryMessage,
+    input: { transactionId: string; messageId: string; occurredAt: Date },
   ): ChargingPointActorTransactionDeliveryRecord => ({
     id: input.messageId,
     transactionId: input.transactionId,
     ocppTransactionId: null,
     deliverySequence: 1n,
     messageId: input.messageId,
-    messageType,
-    payload: input.payload,
+    ...message,
     occurredAt: input.occurredAt,
     status: "pending",
     attemptCount: 0,
@@ -254,22 +254,28 @@ function createTransactionStore(
   });
   return {
     loadActive: vi.fn(async () => []),
-    start: vi.fn(async (input) => createRecord("start", {
+    start: vi.fn(async (input) => createRecord({
+      messageType: "start",
+      payload: input.payload,
+    }, {
       transactionId: input.transaction.transactionId,
       messageId: input.messageId,
-      payload: input.payload,
       occurredAt: input.transaction.startedAt,
     })),
-    recordSample: vi.fn(async (input) => createRecord("meter_value", {
+    recordSample: vi.fn(async (input) => createRecord({
+      messageType: "meter_value",
+      payload: input.payload,
+    }, {
       transactionId: input.transactionId,
       messageId: input.messageId,
-      payload: input.payload,
       occurredAt: input.sampledAt,
     })),
-    end: vi.fn(async (input) => createRecord("stop", {
+    end: vi.fn(async (input) => createRecord({
+      messageType: "stop",
+      payload: input.payload,
+    }, {
       transactionId: input.transactionId,
       messageId: input.messageId,
-      payload: input.payload,
       occurredAt: input.stoppedAt,
     })),
     listPending: vi.fn(async () => []),
@@ -561,7 +567,7 @@ describe("Ocpp16Runtime", () => {
             key: "HeartbeatInterval",
             value: "30",
             valueType: "integer",
-            minValue: 0,
+            minValue: 1,
           },
         ],
       }),
@@ -621,7 +627,7 @@ describe("Ocpp16Runtime", () => {
   });
 
   test("rejects invalid HeartbeatInterval configuration entry", () => {
-    const invalidEntries = [
+    const invalidDefinitionEntries = [
       {
         key: "HeartbeatInterval",
         value: "0",
@@ -633,15 +639,9 @@ describe("Ocpp16Runtime", () => {
         value: "0",
         valueType: "integer",
       },
-      {
-        key: "HeartbeatInterval",
-        value: "1",
-        valueType: "integer",
-        minValue: 1,
-      },
     ] as const;
 
-    for (const entry of invalidEntries) {
+    for (const entry of invalidDefinitionEntries) {
       expect(() =>
         createProtocolRuntime([], {
           configurationCatalog: new ConfigurationCatalog({
@@ -652,6 +652,21 @@ describe("Ocpp16Runtime", () => {
         })
       ).toThrow(ProtocolRuntimeError);
     }
+
+    expect(() =>
+      createProtocolRuntime([], {
+        configurationCatalog: new ConfigurationCatalog({
+          chargingPointId: "cp-1",
+          protocolVersion: "OCPP16J",
+          entries: [{
+            key: "HeartbeatInterval",
+            value: "0",
+            valueType: "integer",
+            minValue: 1,
+          }],
+        }),
+      })
+    ).toThrow("配置项 HeartbeatInterval 不能小于 1");
   });
 
   test("reports only charging point status when requested", async () => {
@@ -6214,7 +6229,7 @@ describe("Ocpp16Runtime", () => {
             key: "HeartbeatInterval",
             value: "30",
             valueType: "integer",
-            minValue: 0,
+            minValue: 1,
           },
           {
             key: "NumberOfConnectors",

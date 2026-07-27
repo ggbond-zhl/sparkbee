@@ -3,6 +3,7 @@ import type {
   ChargingPointDetailResponse,
   ConnectorResponse,
   RuntimeOperationResponse,
+  TransactionDeliveryItem,
 } from "@spark-bee/contracts";
 
 import {
@@ -25,7 +26,16 @@ import type {
   ProtocolMessageLogEntry,
   RuntimeEventLogEntry,
 } from "./chargingPointRuntimeEvents";
-import type { ObservationTimeFilter } from "./chargingPointObservationFilters";
+import {
+  ALL_RUNTIME_LOG_TYPE_FILTER,
+  buildObservationTypeFilterOptions,
+  type ObservationTimeFilter,
+  type ObservationTypeFilterOption,
+} from "./chargingPointObservationFilters";
+import type {
+  TransactionDeliveryMessageTypeFilter,
+  TransactionDeliveryStatusFilter,
+} from "./transactionDeliveryObservation";
 
 interface ConnectorWorkbenchItem {
   model: ConnectorCardModel;
@@ -46,21 +56,33 @@ interface ConnectorEditorWorkbench {
   save(savedConnector: ConnectorResponse): Promise<void>;
 }
 
+interface ObservationListWorkbench<TItem> {
+  items: TItem[];
+  totalItems: number;
+  timeFilter: ObservationTimeFilter;
+  typeFilter: string;
+  typeOptions: ObservationTypeFilterOption[];
+  setTimeFilter(value: ObservationTimeFilter): void;
+  setTypeFilter(value: string): void;
+  history: ObservationHistoryPagination;
+}
+
 export interface ChargingPointObservationWorkbench {
-  events: RuntimeEventLogEntry[];
-  protocolMessages: ProtocolMessageLogEntry[];
-  messageTimeFilter: ObservationTimeFilter;
-  eventTimeFilter: ObservationTimeFilter;
-  messageTypeFilter: string;
-  eventTypeFilter: string;
-  messageDirectionFilter: "all" | "sent" | "received";
-  setMessageTimeFilter(value: ObservationTimeFilter): void;
-  setEventTimeFilter(value: ObservationTimeFilter): void;
-  setMessageTypeFilter(value: string): void;
-  setEventTypeFilter(value: string): void;
-  setMessageDirectionFilter(value: "all" | "sent" | "received"): void;
-  messageHistory: ObservationHistoryPagination;
-  eventHistory: ObservationHistoryPagination;
+  protocolMessages: ObservationListWorkbench<ProtocolMessageLogEntry> & {
+    directionFilter: "all" | "sent" | "received";
+    setDirectionFilter(value: "all" | "sent" | "received"): void;
+  };
+  events: ObservationListWorkbench<RuntimeEventLogEntry>;
+  transactionDeliveries: {
+    items: TransactionDeliveryItem[];
+    statusFilter: TransactionDeliveryStatusFilter;
+    messageTypeFilter: TransactionDeliveryMessageTypeFilter;
+    setStatusFilter(value: TransactionDeliveryStatusFilter): void;
+    setMessageTypeFilter(value: TransactionDeliveryMessageTypeFilter): void;
+    loading: boolean;
+    error: boolean;
+    history: ObservationHistoryPagination;
+  };
 }
 
 interface ObservationHistoryPagination {
@@ -199,27 +221,51 @@ export function createReadyChargingPointWorkbench(
 function createDefaultObservation(
   eventFeedState: ChargingPointRuntimeEventFeedState,
 ): ChargingPointObservationWorkbench {
-  const pagination = {
+  const createPagination = (): ObservationHistoryPagination => ({
     capacity: 200,
     hasMore: false,
     loadingMore: false,
     loadMore: () => undefined,
-  };
+  });
 
   return {
-    events: eventFeedState.events,
-    protocolMessages: eventFeedState.protocolMessages,
-    messageTimeFilter: "all",
-    eventTimeFilter: "all",
-    messageTypeFilter: "all",
-    eventTypeFilter: "all",
-    messageDirectionFilter: "all",
-    setMessageTimeFilter: () => undefined,
-    setEventTimeFilter: () => undefined,
-    setMessageTypeFilter: () => undefined,
-    setEventTypeFilter: () => undefined,
-    setMessageDirectionFilter: () => undefined,
-    messageHistory: pagination,
-    eventHistory: pagination,
+    protocolMessages: {
+      items: eventFeedState.protocolMessages,
+      totalItems: eventFeedState.protocolMessages.length,
+      timeFilter: "all",
+      typeFilter: ALL_RUNTIME_LOG_TYPE_FILTER,
+      typeOptions: buildObservationTypeFilterOptions(
+        eventFeedState.protocolMessages,
+        (message) => message.action,
+      ),
+      directionFilter: "all",
+      setTimeFilter: () => undefined,
+      setTypeFilter: () => undefined,
+      setDirectionFilter: () => undefined,
+      history: createPagination(),
+    },
+    events: {
+      items: eventFeedState.events,
+      totalItems: eventFeedState.events.length,
+      timeFilter: "all",
+      typeFilter: ALL_RUNTIME_LOG_TYPE_FILTER,
+      typeOptions: buildObservationTypeFilterOptions(
+        eventFeedState.events,
+        (event) => event.eventType,
+      ),
+      setTimeFilter: () => undefined,
+      setTypeFilter: () => undefined,
+      history: createPagination(),
+    },
+    transactionDeliveries: {
+      items: [],
+      statusFilter: "all",
+      messageTypeFilter: "all",
+      setStatusFilter: () => undefined,
+      setMessageTypeFilter: () => undefined,
+      loading: false,
+      error: false,
+      history: createPagination(),
+    },
   };
 }

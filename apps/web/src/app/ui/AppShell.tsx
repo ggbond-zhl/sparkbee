@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import type { PropsWithChildren } from "react";
+import type { CSSProperties, PropsWithChildren } from "react";
 import { ArrowLeftIcon } from "lucide-react";
 
 import { getPageTitleForPath } from "@/app/navigation";
@@ -25,7 +25,10 @@ export function AppShell({ children }: PropsWithChildren) {
 
   return (
     <TooltipProvider>
-      <SidebarProvider defaultOpen>
+      <SidebarProvider
+        defaultOpen
+        style={{ "--sidebar-width": "14rem" } as CSSProperties}
+      >
         <AppSidebar />
         <SidebarInset>
           <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b border-border/40 bg-background px-2">

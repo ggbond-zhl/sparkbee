@@ -2,6 +2,7 @@ export {
   ChargingPointActorError,
   configurationDefinitions,
   createChargingPointActor,
+  normalizeConfigurationValue,
 } from "@spark-bee/charging-point-actor";
 export type {
   ChargingPointActor,
@@ -26,7 +27,11 @@ export type {
   ChargingPointActorStopTransactionResult,
   ChargingPointActorTransactionStartResult,
   ChargingPointActorPersistedTransaction,
+  ChargingPointActorMeterValueDeliveryPayload,
+  ChargingPointActorStartTransactionDeliveryPayload,
+  ChargingPointActorStopTransactionDeliveryPayload,
   ChargingPointActorTransactionDeliveryMessageType,
+  ChargingPointActorTransactionDeliveryMessage,
   ChargingPointActorTransactionDeliveryRecord,
   ChargingPointActorTransactionDeliveryStatus,
   ChargingPointActorTransactionDeliverySummary,

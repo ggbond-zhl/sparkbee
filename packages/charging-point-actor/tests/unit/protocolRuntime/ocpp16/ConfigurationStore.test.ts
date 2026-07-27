@@ -5,6 +5,7 @@ import { ProtocolRuntimeError } from "../../../../src/protocol/runtime/index.ts"
 import {
   ConfigurationStore,
   configurationDefinitions,
+  type ConfigurationDefinition,
   type Ocpp16ConfigurationKey,
   type Ocpp16ConfigurationKeyInput,
 } from "../../../../src/protocol/runtime/ocpp16/ConfigurationStore/index.ts";
@@ -100,6 +101,10 @@ describe("ConfigurationStore", () => {
     }
 
     expect(definitionsByKey.get("AuthorizeRemoteTxRequests")?.access).toBe("R/RW");
+    const heartbeatDefinition = definitionsByKey.get(
+      "HeartbeatInterval",
+    ) as ConfigurationDefinition | undefined;
+    expect(heartbeatDefinition?.minValue).toBe(1);
   });
 
   test("adds required OCPP16 configuration entries", () => {
@@ -152,10 +157,10 @@ describe("ConfigurationStore", () => {
         entries: [
           {
             key: "HeartbeatInterval",
-            value: "0",
+            value: "1",
             readonly: true,
             valueType: "integer",
-            minValue: 0,
+            minValue: 1,
           },
           {
             key: "CustomConfig",
@@ -191,7 +196,7 @@ describe("ConfigurationStore", () => {
     );
 
     expect(changed).toBe("Rejected");
-    expect(store.getValue("HeartbeatInterval")).toBe("0");
+    expect(store.getValue("HeartbeatInterval")).toBe("1");
 
     store.sync(
       "HeartbeatInterval",

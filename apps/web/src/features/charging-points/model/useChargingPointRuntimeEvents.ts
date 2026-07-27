@@ -14,6 +14,7 @@ import {
 
 export interface UseChargingPointRuntimeEventsOptions {
   enabled?: boolean;
+  onEvent?(message: ChargingPointEventStreamMessage): void;
   onRuntimeStatus?(runtimeStatus: RuntimeOperationResponse): void;
   onSnapshot?(): void;
 }
@@ -28,6 +29,7 @@ export function useChargingPointRuntimeEvents(
   options: UseChargingPointRuntimeEventsOptions = {},
 ): UseChargingPointRuntimeEventsResult {
   const enabled = options.enabled ?? true;
+  const onEvent = options.onEvent;
   const onRuntimeStatus = options.onRuntimeStatus;
   const onSnapshot = options.onSnapshot;
   const [runtimeEventState, setRuntimeEventState] = useState(
@@ -53,6 +55,7 @@ export function useChargingPointRuntimeEvents(
         if (runtimeStatus !== null) {
           onRuntimeStatus?.(runtimeStatus);
         }
+        onEvent?.(message);
 
         setRuntimeEventState((currentState) =>
           reduceChargingPointRuntimeEventState(currentState, message)
@@ -62,7 +65,7 @@ export function useChargingPointRuntimeEvents(
         );
       },
     });
-  }, [chargingPointId, enabled, onRuntimeStatus, onSnapshot]);
+  }, [chargingPointId, enabled, onEvent, onRuntimeStatus, onSnapshot]);
 
   return {
     runtimeEventState,

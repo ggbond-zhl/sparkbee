@@ -300,14 +300,54 @@ export type ChargingPointActorTransactionDeliveryMessageType =
   | "meter_value"
   | "stop";
 
-export interface ChargingPointActorTransactionDeliveryRecord {
+export interface ChargingPointActorStartTransactionDeliveryPayload
+  extends Record<string, unknown> {
+  evseId: number;
+  connectorId: number;
+  idTag: string;
+  meterStartWh: number;
+  reservationId?: number;
+}
+
+export interface ChargingPointActorMeterValueDeliveryPayload
+  extends Record<string, unknown> {
+  connectorId: number;
+  meterWh: number;
+  powerW: number;
+  currentA: number;
+  voltageV: number;
+}
+
+export interface ChargingPointActorStopTransactionDeliveryPayload
+  extends Record<string, unknown> {
+  evseId: number;
+  connectorId: number;
+  meterStopWh: number;
+  reason: string | null;
+  idTag: string | null;
+  authorizationIdTag: string | null;
+}
+
+export type ChargingPointActorTransactionDeliveryMessage =
+  | {
+      messageType: "start";
+      payload: ChargingPointActorStartTransactionDeliveryPayload;
+    }
+  | {
+      messageType: "meter_value";
+      payload: ChargingPointActorMeterValueDeliveryPayload;
+    }
+  | {
+      messageType: "stop";
+      payload: ChargingPointActorStopTransactionDeliveryPayload;
+    };
+
+interface ChargingPointActorTransactionDeliveryRecordBase {
   id: string;
   transactionId: string;
   ocppTransactionId: number | null;
   deliverySequence: bigint;
   messageId: string;
-  messageType: ChargingPointActorTransactionDeliveryMessageType;
-  payload: Record<string, unknown>;
   occurredAt: Date;
   status: ChargingPointActorTransactionDeliveryStatus;
   attemptCount: number;
@@ -318,6 +358,10 @@ export interface ChargingPointActorTransactionDeliveryRecord {
   lastErrorCode: string | null;
   lastErrorMessage: string | null;
 }
+
+export type ChargingPointActorTransactionDeliveryRecord =
+  ChargingPointActorTransactionDeliveryRecordBase &
+    ChargingPointActorTransactionDeliveryMessage;
 
 export interface ChargingPointActorTransactionDeliverySummary {
   pendingCount: number;
@@ -332,7 +376,7 @@ export interface ChargingPointActorTransactionStore {
   start(input: {
     transaction: ChargingPointActorPersistedTransaction;
     messageId: string;
-    payload: Record<string, unknown>;
+    payload: ChargingPointActorStartTransactionDeliveryPayload;
   }): Promise<ChargingPointActorTransactionDeliveryRecord>;
   recordSample(input: {
     sampleId: string;
@@ -343,14 +387,14 @@ export interface ChargingPointActorTransactionStore {
     currentA: number;
     voltageV: number;
     messageId: string;
-    payload: Record<string, unknown>;
+    payload: ChargingPointActorMeterValueDeliveryPayload;
   }): Promise<ChargingPointActorTransactionDeliveryRecord>;
   end(input: {
     transactionId: string;
     stoppedAt: Date;
     meterStopWh: number;
     messageId: string;
-    payload: Record<string, unknown>;
+    payload: ChargingPointActorStopTransactionDeliveryPayload;
   }): Promise<ChargingPointActorTransactionDeliveryRecord>;
   listPending(): Promise<ChargingPointActorTransactionDeliveryRecord[]>;
   claimHead(claimedAt: Date): Promise<ChargingPointActorTransactionDeliveryRecord | null>;

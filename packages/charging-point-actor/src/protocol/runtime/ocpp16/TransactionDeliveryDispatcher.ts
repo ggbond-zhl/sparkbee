@@ -100,7 +100,7 @@ export class TransactionDeliveryDispatcher {
         : "StopTransaction";
       if (delivery.messageType === "stop") {
         await sendStatusNotification(this.context, {
-          connectorId: readNumber(delivery.payload, "connectorId"),
+          connectorId: delivery.payload.connectorId,
           status: mapConnectorFlowStatus("finishing"),
           at: delivery.occurredAt,
         });
@@ -130,13 +130,12 @@ export class TransactionDeliveryDispatcher {
       emitTransactionDeliveryChanged(this.context, updated, "in_flight");
       if (delivery.messageType === "stop") {
         const response = parseStopTransactionResponse(result.payload);
-        const idTag = readOptionalString(delivery.payload, "authorizationIdTag");
-        const evseId = readOptionalNumber(delivery.payload, "evseId");
-        if (idTag !== null && evseId !== null) {
+        const { authorizationIdTag, evseId } = delivery.payload;
+        if (authorizationIdTag !== null) {
           await getOcpp16AuthorizationPolicy(this.context)
             .absorbStopTransactionResult({
               evseId,
-              idTag,
+              idTag: authorizationIdTag,
               authorizationStatus: response.idTagInfoStatus,
               expiryDate: response.expiryDate,
               parentIdTag: response.parentIdTag,
@@ -153,15 +152,15 @@ export class TransactionDeliveryDispatcher {
   }
 
   private async deliverStart(
-    delivery: ChargingPointActorTransactionDeliveryRecord,
+    delivery: Extract<ChargingPointActorTransactionDeliveryRecord, { messageType: "start" }>,
   ): Promise<boolean> {
     const result = await sendStartTransaction(this.context, {
-      connectorId: readNumber(delivery.payload, "connectorId"),
-      idTag: readString(delivery.payload, "idTag"),
-      meterStartWh: readNumber(delivery.payload, "meterStartWh"),
-      ...(readOptionalNumber(delivery.payload, "reservationId") === null
+      connectorId: delivery.payload.connectorId,
+      idTag: delivery.payload.idTag,
+      meterStartWh: delivery.payload.meterStartWh,
+      ...(delivery.payload.reservationId === undefined
         ? {}
-        : { reservationId: readNumber(delivery.payload, "reservationId") }),
+        : { reservationId: delivery.payload.reservationId }),
       at: delivery.occurredAt,
     }, { messageId: delivery.messageId });
     if (result.outcome === "Failed") {
@@ -178,8 +177,8 @@ export class TransactionDeliveryDispatcher {
       delivery.transactionId,
       updated.ocppTransactionId ?? result.ocppTransactionId,
     );
-    const evseId = readNumber(delivery.payload, "evseId");
-    const connectorId = readNumber(delivery.payload, "connectorId");
+    const evseId = delivery.payload.evseId;
+    const connectorId = delivery.payload.connectorId;
     await getOcpp16AuthorizationPolicy(this.context)
       .absorbStartTransactionResult({
         evseId,
@@ -210,11 +209,11 @@ export class TransactionDeliveryDispatcher {
   }
 
   private async reportPostStopStatus(
-    delivery: ChargingPointActorTransactionDeliveryRecord,
+    delivery: Extract<ChargingPointActorTransactionDeliveryRecord, { messageType: "stop" }>,
   ): Promise<void> {
     const connectorRef = {
-      evseId: readNumber(delivery.payload, "evseId"),
-      connectorId: readNumber(delivery.payload, "connectorId"),
+      evseId: delivery.payload.evseId,
+      connectorId: delivery.payload.connectorId,
     };
     await sendStatusNotification(this.context, {
       connectorId: connectorRef.connectorId,
@@ -232,31 +231,35 @@ export class TransactionDeliveryDispatcher {
     }
     if (delivery.messageType === "meter_value") {
       return {
-        connectorId: readNumber(delivery.payload, "connectorId"),
+        connectorId: delivery.payload.connectorId,
         transactionId: ocppTransactionId,
         meterValue: [createMeterValue(
-          readNumber(delivery.payload, "meterWh"),
+          delivery.payload.meterWh,
           delivery.occurredAt,
           "Sample.Periodic",
           {
-            powerW: readNumber(delivery.payload, "powerW"),
-            currentA: readNumber(delivery.payload, "currentA"),
-            voltageV: readNumber(delivery.payload, "voltageV"),
+            powerW: delivery.payload.powerW,
+            currentA: delivery.payload.currentA,
+            voltageV: delivery.payload.voltageV,
           },
         )],
       } satisfies Ocpp16RequestOf<"MeterValues">;
     }
 
-    const reason = readOptionalString(delivery.payload, "reason");
-    const idTag = readOptionalString(delivery.payload, "idTag");
+    if (delivery.messageType !== "stop") {
+      throw new Error(`交易交付 ${delivery.id} 的消息类型无法构造 payload`);
+    }
+
+    const reason = delivery.payload.reason;
+    const idTag = delivery.payload.idTag;
     return {
       transactionId: ocppTransactionId,
-      meterStop: readNumber(delivery.payload, "meterStopWh"),
+      meterStop: delivery.payload.meterStopWh,
       timestamp: toOcppDate(delivery.occurredAt),
       ...(reason === null ? {} : { reason }),
       ...(idTag === null ? {} : { idTag }),
       transactionData: [createMeterValue(
-        readNumber(delivery.payload, "meterStopWh"),
+        delivery.payload.meterStopWh,
         delivery.occurredAt,
         "Transaction.End",
       )],
@@ -325,44 +328,6 @@ export class TransactionDeliveryDispatcher {
       this.retryTimer = null;
     }
   }
-}
-
-function readString(payload: Record<string, unknown>, key: string): string {
-  const value = payload[key];
-  if (typeof value !== "string") {
-    throw new Error(`交易交付 payload.${key} 必须是字符串`);
-  }
-  return value;
-}
-
-function readOptionalString(
-  payload: Record<string, unknown>,
-  key: string,
-): string | null {
-  const value = payload[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-  return readString(payload, key);
-}
-
-function readNumber(payload: Record<string, unknown>, key: string): number {
-  const value = payload[key];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(`交易交付 payload.${key} 必须是有限数字`);
-  }
-  return value;
-}
-
-function readOptionalNumber(
-  payload: Record<string, unknown>,
-  key: string,
-): number | null {
-  const value = payload[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-  return readNumber(payload, key);
 }
 
 function unrefTimer(timerId: ReturnType<typeof setTimeout>): void {

@@ -1,5 +1,6 @@
 import type {
   ChargingPointActorPersistedTransaction,
+  ChargingPointActorTransactionDeliveryMessage,
   ChargingPointActorTransactionDeliveryRecord,
   ChargingPointActorTransactionDeliverySummary,
   ChargingPointActorTransactionStore,
@@ -160,20 +161,16 @@ export class MemoryTransactionDeliveryStore
   private append(input: {
     transactionId: string;
     messageId: string;
-    messageType: ChargingPointActorTransactionDeliveryRecord["messageType"];
-    payload: Record<string, unknown>;
     occurredAt: Date;
-  }): ChargingPointActorTransactionDeliveryRecord {
-    const record: ChargingPointActorTransactionDeliveryRecord = {
+  } & ChargingPointActorTransactionDeliveryMessage): ChargingPointActorTransactionDeliveryRecord {
+    const base = {
       id: input.messageId,
       transactionId: input.transactionId,
       ocppTransactionId: this.ocppTransactionIds.get(input.transactionId) ?? null,
       deliverySequence: this.nextSequence,
       messageId: input.messageId,
-      messageType: input.messageType,
-      payload: structuredClone(input.payload),
       occurredAt: new Date(input.occurredAt),
-      status: "pending",
+      status: "pending" as const,
       attemptCount: 0,
       nextAttemptAt: null,
       inFlightAt: null,
@@ -182,6 +179,24 @@ export class MemoryTransactionDeliveryStore
       lastErrorCode: null,
       lastErrorMessage: null,
     };
+    const record: ChargingPointActorTransactionDeliveryRecord =
+      input.messageType === "start"
+        ? {
+            ...base,
+            messageType: "start",
+            payload: structuredClone(input.payload),
+          }
+        : input.messageType === "meter_value"
+          ? {
+              ...base,
+              messageType: "meter_value",
+              payload: structuredClone(input.payload),
+            }
+          : {
+              ...base,
+              messageType: "stop",
+              payload: structuredClone(input.payload),
+            };
     this.nextSequence += 1n;
     this.messages.push(record);
     return cloneRecord(record);
@@ -247,15 +262,20 @@ function cloneTransaction(
 function cloneRecord(
   record: ChargingPointActorTransactionDeliveryRecord,
 ): ChargingPointActorTransactionDeliveryRecord {
-  return {
-    ...record,
-    payload: structuredClone(record.payload),
+  const dates = {
     occurredAt: new Date(record.occurredAt),
     nextAttemptAt: cloneNullableDate(record.nextAttemptAt),
     inFlightAt: cloneNullableDate(record.inFlightAt),
     deliveredAt: cloneNullableDate(record.deliveredAt),
     failedAt: cloneNullableDate(record.failedAt),
   };
+  if (record.messageType === "start") {
+    return { ...record, ...dates, payload: structuredClone(record.payload) };
+  }
+  if (record.messageType === "meter_value") {
+    return { ...record, ...dates, payload: structuredClone(record.payload) };
+  }
+  return { ...record, ...dates, payload: structuredClone(record.payload) };
 }
 
 function cloneNullableDate(value: Date | null): Date | null {

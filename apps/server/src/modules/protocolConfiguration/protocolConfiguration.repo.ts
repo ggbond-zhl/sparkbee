@@ -1,5 +1,6 @@
 import {
   configurationDefinitions,
+  normalizeConfigurationValue,
   type ConfigurationDefinition,
   type ChargingPointActorConfigurationEntry,
   type ChargingPointActorConfigurationPersistence,
@@ -93,7 +94,12 @@ export class ProtocolConfigurationRepository {
       );
     }
 
-    const value = normalizeValue(definition, input.value);
+    let value: string;
+    try {
+      value = normalizeConfigurationValue(definition, input.value);
+    } catch {
+      throwInvalidValue();
+    }
     const pendingRestart = definition.rebootRequired ?? false;
     const entry = await this.persist(chargingPointId, protocol, {
       key,
@@ -280,37 +286,6 @@ function requireDefinition(key: string): ConfigurationDefinition {
     );
   }
   return definition;
-}
-
-function normalizeValue(definition: ConfigurationDefinition, value: string): string {
-  if (definition.valueType === undefined || definition.valueType === "string") {
-    return value;
-  }
-
-  if (definition.valueType === "boolean") {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === "true" || normalized === "false") {
-      return normalized;
-    }
-    throwInvalidValue();
-  }
-
-  const normalized = value.trim();
-  if (!/^-?\d+$/.test(normalized)) {
-    throwInvalidValue();
-  }
-  const parsed = Number(normalized);
-  const minimum = definition.key === "HeartbeatInterval"
-    ? Math.max(1, definition.minValue ?? 1)
-    : definition.minValue;
-  if (
-    !Number.isSafeInteger(parsed) ||
-    (minimum !== undefined && parsed < minimum) ||
-    (definition.maxValue !== undefined && parsed > definition.maxValue)
-  ) {
-    throwInvalidValue();
-  }
-  return String(parsed);
 }
 
 function throwInvalidValue(): never {

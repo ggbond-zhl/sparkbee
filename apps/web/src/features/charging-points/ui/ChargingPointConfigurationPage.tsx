@@ -1,12 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import type {
-  ProtocolConfigurationItem,
-  ProtocolConfigurationListResponse,
-} from "@spark-bee/contracts";
+import type { ProtocolConfigurationItem } from "@spark-bee/contracts";
 import { RotateCcwIcon, SearchIcon } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import type { FormEvent } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,19 +39,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  ProtocolConfigurationApiError,
-  subscribeChargingPointEvents,
-  updateProtocolConfiguration,
-} from "@/features/charging-points/api/chargingPoints";
-import {
-  protocolConfigurationQueryKey,
-  protocolConfigurationQueryOptions,
-} from "@/features/charging-points/model/chargingPointQueries";
-import {
-  filterProtocolConfigurationItems,
-  type ProtocolConfigurationFilter,
-} from "@/features/charging-points/model/protocolConfiguration";
+import type { ProtocolConfigurationFilter } from "@/features/charging-points/model/protocolConfiguration";
+import { useProtocolConfigurationWorkbench } from "@/features/charging-points/model/useProtocolConfigurationWorkbench";
 
 const filterOptions = [
   { value: "all", label: "全部" },
@@ -79,88 +63,24 @@ export function ChargingPointConfigurationPage() {
   const { chargingPointId } = useParams({
     from: "/charging-points/$chargingPointId/configuration",
   });
-  const queryClient = useQueryClient();
-  const [keyword, setKeyword] = useState("");
-  const [filter, setFilter] = useState<ProtocolConfigurationFilter>("all");
-  const [editingItem, setEditingItem] = useState<ProtocolConfigurationItem | null>(
-    null,
-  );
-  const [draftValue, setDraftValue] = useState("");
-  const configurationQuery = useQuery(
-    protocolConfigurationQueryOptions(chargingPointId),
-  );
-  const items = configurationQuery.data?.items ?? [];
-  const filteredItems = useMemo(
-    () => filterProtocolConfigurationItems(items, keyword, filter),
-    [filter, items, keyword],
-  );
-  const mutation = useMutation({
-    mutationFn: ({ item, value }: { item: ProtocolConfigurationItem; value: string }) =>
-      updateProtocolConfiguration(chargingPointId, item.key, {
-        value,
-        expectedVersion: item.version,
-      }),
-    onSuccess: (result) => {
-      replaceCachedItem(queryClient, chargingPointId, result.item);
-      setEditingItem(null);
-      toast.success("协议配置已保存");
-    },
-    onError: async (error) => {
-      if (error instanceof ProtocolConfigurationApiError && error.status === 409) {
-        await queryClient.invalidateQueries({
-          queryKey: protocolConfigurationQueryKey(chargingPointId),
-        });
-        toast.error("配置已被更新，已刷新最新值");
-        return;
-      }
-      toast.error(error instanceof Error ? error.message : "协议配置保存失败");
-    },
-  });
+  const workbench = useProtocolConfigurationWorkbench(chargingPointId);
 
-  useEffect(() => subscribeChargingPointEvents(chargingPointId, {
-    onEvent: (message) => {
-      if (message.event !== "configuration.changed") return;
-      queryClient.setQueryData<ProtocolConfigurationListResponse>(
-        protocolConfigurationQueryKey(chargingPointId),
-        (current) => current === undefined
-          ? current
-          : {
-              ...current,
-              items: current.items.map((item) =>
-                item.key === message.data.resource.key
-                  ? {
-                      ...item,
-                      value: message.data.value,
-                      version: message.data.version,
-                      pendingRestart: message.data.pendingRestart,
-                      lastModifiedBy: message.data.lastModifiedBy,
-                      updatedAt: message.data.occurredAt,
-                    }
-                  : item
-              ),
-            },
-      );
-    },
-  }), [chargingPointId, queryClient]);
-
-  function openEditor(item: ProtocolConfigurationItem) {
-    setEditingItem(item);
-    setDraftValue(item.value);
-    mutation.reset();
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (editingItem === null) return;
-    mutation.mutate({ item: editingItem, value: draftValue });
-  }
-
-  if (configurationQuery.isLoading) {
+  if (workbench.status === "loading") {
     return <PageState text="协议配置加载中" />;
   }
-  if (configurationQuery.isError) {
+  if (workbench.status === "error") {
     return <PageState className="text-destructive" text="协议配置加载失败" />;
   }
+  const {
+    editor,
+    filter,
+    filteredItems,
+    items,
+    keyword,
+    protocol,
+    setFilter,
+    setKeyword,
+  } = workbench;
 
   return (
     <section className="flex flex-col gap-4">
@@ -202,7 +122,7 @@ export function ChargingPointConfigurationPage() {
       </div>
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>{configurationQuery.data?.protocol ?? "OCPP16J"}</span>
+        <span>{protocol}</span>
         <span>显示 {filteredItems.length} / {items.length} 项</span>
       </div>
 
@@ -210,25 +130,22 @@ export function ChargingPointConfigurationPage() {
         <PageState text="没有符合条件的协议配置" />
       ) : (
         <>
-          <ConfigurationTable items={filteredItems} onEdit={openEditor} />
-          <ConfigurationCardList items={filteredItems} onEdit={openEditor} />
+          <ConfigurationTable items={filteredItems} onEdit={editor.open} />
+          <ConfigurationCardList items={filteredItems} onEdit={editor.open} />
         </>
       )}
 
       <ConfigurationEditor
-        draftValue={draftValue}
-        item={editingItem}
-        pending={mutation.isPending}
-        onDraftValueChange={setDraftValue}
-        onOpenChange={(open) => {
-          if (!open && !mutation.isPending) setEditingItem(null);
+        draftValue={editor.draftValue}
+        item={editor.item}
+        pending={editor.pending}
+        onDraftValueChange={editor.setDraftValue}
+        onOpenChange={editor.setOpen}
+        onRestoreDefault={editor.restoreDefault}
+        onSubmit={(event) => {
+          event.preventDefault();
+          editor.save();
         }}
-        onRestoreDefault={() => {
-          if (editingItem !== null) {
-            mutation.mutate({ item: editingItem, value: editingItem.defaultValue });
-          }
-        }}
-        onSubmit={handleSubmit}
       />
     </section>
   );
@@ -396,9 +313,7 @@ function ConfigurationEditor({
                   <Input
                     id="protocol-configuration-value"
                     max={item.maxValue ?? undefined}
-                    min={item.key === "HeartbeatInterval"
-                      ? 1
-                      : item.minValue ?? undefined}
+                    min={item.minValue ?? undefined}
                     type={item.valueType === "integer" ? "number" : "text"}
                     value={draftValue}
                     onChange={(event) => onDraftValueChange(event.target.value)}
@@ -433,31 +348,12 @@ function ConfigurationEditor({
 function formatValueConstraint(item: ProtocolConfigurationItem): string {
   if (item.valueType === "boolean") return "可选择启用或停用。";
   if (item.valueType !== "integer") return "请输入文本值。";
-  if (item.key === "HeartbeatInterval") return "请输入不小于 1 的整数。";
   if (item.minValue !== null && item.maxValue !== null) {
     return `允许 ${item.minValue} 到 ${item.maxValue} 的整数。`;
   }
   if (item.minValue !== null) return `请输入不小于 ${item.minValue} 的整数。`;
   if (item.maxValue !== null) return `请输入不大于 ${item.maxValue} 的整数。`;
   return "请输入整数。";
-}
-
-function replaceCachedItem(
-  queryClient: ReturnType<typeof useQueryClient>,
-  chargingPointId: string,
-  nextItem: ProtocolConfigurationItem,
-) {
-  queryClient.setQueryData<ProtocolConfigurationListResponse>(
-    protocolConfigurationQueryKey(chargingPointId),
-    (current) => current === undefined
-      ? current
-      : {
-          ...current,
-          items: current.items.map((item) =>
-            item.key === nextItem.key ? nextItem : item
-          ),
-        },
-  );
 }
 
 function PageState({ className, text }: { className?: string; text: string }) {
