@@ -271,7 +271,7 @@ describe("server architecture", () => {
     expect(serviceSource).not.toContain("toActorOptions");
     expect(lifecycleSource).toContain("async start(");
     expect(lifecycleSource).toContain("async stop(");
-    expect(lifecycleSource).toContain("recoverActiveTransactions");
+    expect(lifecycleSource).toContain("recoverRunningChargingPoints");
     expect(serviceSource).not.toContain("ChargingPointActorRegistry");
     expect(serviceSource).not.toContain("ChargingPointEventStreamHub");
     expect(serviceSource).not.toContain("ChargingPointRuntimeProjection");
@@ -295,7 +295,7 @@ describe("server architecture", () => {
     expect(packageJson.scripts?.dev).toBe("tsx watch src/index.ts");
     const indexSource = readFileSync(join(srcRoot, "index.ts"), "utf8");
     expect(indexSource).toContain(
-      "void runtimeOperationService.recoverActiveTransactions()",
+      "void runtimeOperationService.recoverRunningChargingPoints()",
     );
   });
 

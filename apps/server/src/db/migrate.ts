@@ -3,6 +3,7 @@ import type { PGlite } from "@electric-sql/pglite";
 export async function migrateDatabase(client: Pick<PGlite, "exec">): Promise<void> {
   await client.exec(`
     create type charging_point_protocol as enum ('OCPP16J');
+    create type charging_point_running_intent as enum ('stopped', 'running');
     create type connector_format as enum ('socket', 'cable', 'unknown');
     create type connector_power_type as enum ('ac', 'dc', 'unknown');
 
@@ -12,6 +13,7 @@ export async function migrateDatabase(client: Pick<PGlite, "exec">): Promise<voi
       description text,
       identity text not null,
       protocol charging_point_protocol not null,
+      running_intent charging_point_running_intent not null default 'stopped',
       central_system_url text not null,
       vendor text not null,
       model text not null,

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { paginatedResponseSchema, paginationQuerySchema } from "../pagination";
 
 export const chargingPointProtocolSchema = z.enum(["OCPP16J"]);
+export const chargingPointRunningIntentSchema = z.enum(["stopped", "running"]);
 export const connectorTypeSchema = z.enum([
   "GBT_AC",
   "GBT_DC",
@@ -172,6 +173,9 @@ export const runtimeOperationResponseSchema = z.object({
   status: z
     .enum(["stopped", "starting", "running"])
     .describe("当前服务进程中的运行状态。"),
+  runningIntent: chargingPointRunningIntentSchema.describe(
+    "用户期望桩实例跨服务进程保持的运行意图。",
+  ),
   bootStatus: z
     .enum(["Accepted", "Pending"])
     .optional()

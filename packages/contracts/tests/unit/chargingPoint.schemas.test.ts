@@ -320,17 +320,22 @@ describe("chargingPoint contract schemas", () => {
       runtimeOperationResponseSchema.parse({
         chargingPointId: "00000000-0000-4000-8000-000000000001",
         status: "starting",
+        runningIntent: "running",
         bootStatus: "Pending",
         retryAfterSec: 30,
       }),
     ).toEqual({
       chargingPointId: "00000000-0000-4000-8000-000000000001",
       status: "starting",
+      runningIntent: "running",
       bootStatus: "Pending",
       retryAfterSec: 30,
     });
     expect(runtimeOperationResponseSchema.shape.status.description).toBe(
       "当前服务进程中的运行状态。",
+    );
+    expect(runtimeOperationResponseSchema.shape.runningIntent.description).toBe(
+      "用户期望桩实例跨服务进程保持的运行意图。",
     );
   });
 
@@ -341,6 +346,7 @@ describe("chargingPoint contract schemas", () => {
         runtimeStatus: {
           chargingPointId: "00000000-0000-4000-8000-000000000001",
           status: "running",
+          runningIntent: "running",
         },
         sessionStatus: {
           currentStatus: "online",
@@ -426,6 +432,7 @@ describe("chargingPoint contract schemas", () => {
       runtimeStatus: {
         chargingPointId: "00000000-0000-4000-8000-000000000001",
         status: "running",
+        runningIntent: "running",
       },
       sessionStatus: null,
       chargingPointStatus: null,

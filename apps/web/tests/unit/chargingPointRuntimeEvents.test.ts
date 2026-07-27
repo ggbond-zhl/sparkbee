@@ -20,6 +20,7 @@ describe("charging point runtime events", () => {
         runtimeStatus: {
           chargingPointId: "00000000-0000-4000-8000-000000000001",
           status: "running",
+          runningIntent: "running",
         },
         sessionStatus: null,
         chargingPointStatus: null,
@@ -240,6 +241,7 @@ describe("charging point runtime events", () => {
           runtimeStatus: {
             chargingPointId: "00000000-0000-4000-8000-000000000001",
             status: "running",
+            runningIntent: "running",
           },
           sessionStatus: {
             currentStatus: "online",
@@ -323,6 +325,7 @@ describe("charging point runtime events", () => {
         runtimeStatus: {
           chargingPointId: "00000000-0000-4000-8000-000000000001",
           status: "running",
+          runningIntent: "running",
           bootStatus: "Accepted",
         },
         sessionStatus: null,
@@ -340,6 +343,7 @@ describe("charging point runtime events", () => {
     expect(runtimeStatus).toEqual({
       chargingPointId: "00000000-0000-4000-8000-000000000001",
       status: "running",
+      runningIntent: "running",
       bootStatus: "Accepted",
     });
   });
@@ -376,12 +380,14 @@ describe("charging point runtime events", () => {
     expect(pending).toEqual({
       chargingPointId: "00000000-0000-4000-8000-000000000001",
       status: "starting",
+      runningIntent: "running",
       bootStatus: "Pending",
       retryAfterSec: 10,
     });
     expect(accepted).toEqual({
       chargingPointId: "00000000-0000-4000-8000-000000000001",
       status: "running",
+      runningIntent: "running",
       bootStatus: "Accepted",
     });
   });
@@ -547,6 +553,7 @@ describe("charging point runtime events", () => {
           runtimeStatus: {
             chargingPointId: "00000000-0000-4000-8000-000000000001",
             status: "running",
+            runningIntent: "running",
           },
           sessionStatus: {
             currentStatus: "reconnecting",
@@ -669,6 +676,7 @@ describe("charging point runtime events", () => {
         runtimeStatus: {
           chargingPointId: "00000000-0000-4000-8000-000000000001",
           status: "stopped",
+          runningIntent: "stopped",
         },
         sessionStatus: null,
         chargingPointStatus: null,

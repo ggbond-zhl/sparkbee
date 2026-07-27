@@ -16,12 +16,14 @@ import {
   type ChargingPointActorHostStartResult,
 } from "../../lib/chargingPointActorHost";
 import { AppError } from "../../utils/errors";
-import { ChargingTransactionRepository } from "../chargingTransaction/chargingTransaction.repo";
 import { AuthorizationRepository } from "../authorization/authorization.repo";
 import { TransactionDeliveryRepository } from "../transactionDelivery/transactionDelivery.repo";
 import { ProtocolConfigurationRepository } from "../protocolConfiguration/protocolConfiguration.repo";
 import { toChargingPointActorOptions } from "./chargingPointActorOptions";
-import { RuntimeOperationRepository } from "./runtimeOperation.repo";
+import {
+  RuntimeOperationRepository,
+  type RuntimeOperationDetail,
+} from "./runtimeOperation.repo";
 
 export type ChargingPointActorFactory = (
   options: ChargingPointActorOptions,
@@ -50,10 +52,10 @@ interface RuntimeOperationLifecycleDependencies {
 
 export class RuntimeOperationLifecycle {
   private readonly actorFactory: ChargingPointActorFactory;
+  private readonly operationTails = new Map<string, Promise<void>>();
 
   constructor(
     private readonly repository: RuntimeOperationRepository,
-    private readonly chargingTransactionRepository: ChargingTransactionRepository,
     private readonly transactionDeliveryRepository: TransactionDeliveryRepository,
     private readonly authorizationPersistenceRepository: AuthorizationRepository,
     private readonly protocolConfigurationRuntime: ProtocolConfigurationRuntime,
@@ -63,7 +65,75 @@ export class RuntimeOperationLifecycle {
   }
 
   async start(id: string): Promise<RuntimeOperationResponse> {
-    const chargingPoint = await this.repository.getOperationDetail(id);
+    return this.runSerially(id, async () => {
+      const chargingPoint = await this.repository.getOperationDetail(id);
+      this.requireRunnable(chargingPoint);
+      await this.repository.setRunningIntent(id, "running");
+      return this.startActor(id, chargingPoint);
+    });
+  }
+
+  async stop(id: string): Promise<RuntimeOperationResponse> {
+    return this.runSerially(id, async () => {
+      await this.repository.getOperationDetail(id);
+      await this.repository.setRunningIntent(id, "stopped");
+      try {
+        await this.dependencies.actorHost.stop(id);
+        return {
+          chargingPointId: id,
+          status: "stopped",
+          runningIntent: "stopped",
+        };
+      } catch {
+        throw new AppError(
+          502,
+          "CHARGING_POINT_STOP_FAILED",
+          "Charging point stop failed",
+        );
+      }
+    });
+  }
+
+  async recoverRunningChargingPoints(): Promise<{
+    recovered: string[];
+    failed: Array<{ chargingPointId: string; error: unknown }>;
+  }> {
+    const chargingPointIds = await this.repository.listRunningChargingPointIds();
+    const results = await Promise.all(
+      chargingPointIds.map(async (chargingPointId) => {
+        try {
+          const recovered = await this.runSerially(chargingPointId, async () => {
+            const chargingPoint = await this.repository.getOperationDetail(chargingPointId);
+            if (chargingPoint.runningIntent === "stopped") {
+              return false;
+            }
+
+            this.requireRunnable(chargingPoint);
+            await this.startActor(chargingPointId, chargingPoint);
+            return true;
+          });
+          return { chargingPointId, recovered };
+        } catch (error) {
+          return { chargingPointId, recovered: false as const, error };
+        }
+      }),
+    );
+
+    return {
+      recovered: results.flatMap((result) =>
+        result.recovered ? [result.chargingPointId] : [],
+      ),
+      failed: results.flatMap((result) =>
+        "error" in result
+          ? [{ chargingPointId: result.chargingPointId, error: result.error }]
+          : [],
+      ),
+    };
+  }
+
+  private requireRunnable(
+    chargingPoint: RuntimeOperationDetail,
+  ): void {
     if (chargingPoint.connectors.length === 0) {
       throw new AppError(
         409,
@@ -71,7 +141,12 @@ export class RuntimeOperationLifecycle {
         "Charging point requires at least one connector",
       );
     }
+  }
 
+  private async startActor(
+    id: string,
+    chargingPoint: RuntimeOperationDetail,
+  ): Promise<RuntimeOperationResponse> {
     let entry: ChargingPointActorHostStartResult;
     try {
       const configurationCatalog =
@@ -94,43 +169,30 @@ export class RuntimeOperationLifecycle {
     }
 
     return entry.created
-      ? toRuntimeOperationResponse(id, entry.actor, entry.result)
-      : toRuntimeOperationResponse(id, entry.actor);
+      ? toRuntimeOperationResponse(id, entry.actor, "running", entry.result)
+      : toRuntimeOperationResponse(id, entry.actor, "running");
   }
 
-  async stop(id: string): Promise<RuntimeOperationResponse> {
-    await this.repository.getOperationDetail(id);
+  private async runSerially<T>(
+    id: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.operationTails.get(id) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.operationTails.set(id, current);
+
+    await previous;
     try {
-      await this.dependencies.actorHost.stop(id);
-      return { chargingPointId: id, status: "stopped" };
-    } catch {
-      throw new AppError(
-        502,
-        "CHARGING_POINT_STOP_FAILED",
-        "Charging point stop failed",
-      );
-    }
-  }
-
-  async recoverActiveTransactions(): Promise<{
-    recovered: string[];
-    failed: Array<{ chargingPointId: string; error: unknown }>;
-  }> {
-    const chargingPointIds =
-      await this.chargingTransactionRepository.listRecoverableChargingPointIds();
-    const recovered: string[] = [];
-    const failed: Array<{ chargingPointId: string; error: unknown }> = [];
-
-    for (const chargingPointId of chargingPointIds) {
-      try {
-        await this.start(chargingPointId);
-        recovered.push(chargingPointId);
-      } catch (error) {
-        failed.push({ chargingPointId, error });
+      return await operation();
+    } finally {
+      release();
+      if (this.operationTails.get(id) === current) {
+        this.operationTails.delete(id);
       }
     }
-
-    return { recovered, failed };
   }
 
   private toActorOptions(
@@ -182,12 +244,14 @@ export class RuntimeOperationLifecycle {
 export function toRuntimeOperationResponse(
   chargingPointId: string,
   actor: ChargingPointActor | undefined,
+  runningIntent: RuntimeOperationResponse["runningIntent"],
   startResult?: ChargingPointActorStartResult,
 ): RuntimeOperationResponse {
   if (startResult !== undefined) {
     return {
       chargingPointId: startResult.chargingPointId,
       status: startResult.chargingPointActorStatus,
+      runningIntent,
       bootStatus: startResult.bootStatus,
       retryAfterSec: "retryAfterSec" in startResult
         ? startResult.retryAfterSec
@@ -195,10 +259,24 @@ export function toRuntimeOperationResponse(
     };
   }
   if (actor?.status === "running") {
-    return { chargingPointId, status: "running", bootStatus: "Accepted" };
+    return {
+      chargingPointId,
+      status: "running",
+      runningIntent,
+      bootStatus: "Accepted",
+    };
   }
   if (actor?.status === "starting") {
-    return { chargingPointId, status: "starting", bootStatus: "Pending" };
+    return {
+      chargingPointId,
+      status: "starting",
+      runningIntent,
+      bootStatus: "Pending",
+    };
   }
-  return { chargingPointId, status: actor?.status ?? "stopped" };
+  return {
+    chargingPointId,
+    status: actor?.status ?? "stopped",
+    runningIntent,
+  };
 }

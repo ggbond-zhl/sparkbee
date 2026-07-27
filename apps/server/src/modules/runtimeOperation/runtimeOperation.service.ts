@@ -76,7 +76,6 @@ export class RuntimeOperationService {
     this.actorHost = dependencies.chargingPointActorHost ?? new ChargingPointActorHost();
     this.lifecycle = new RuntimeOperationLifecycle(
       repository,
-      chargingTransactionRepository,
       transactionDeliveryRepository,
       authorizationPersistenceRepository,
       protocolConfigurationRuntime,
@@ -96,13 +95,21 @@ export class RuntimeOperationService {
   }
 
   async getStatus(id: string): Promise<RuntimeOperationResponse> {
-    await this.repository.getOperationDetail(id);
-    return toRuntimeOperationResponse(id, this.actorHost.get(id));
+    const chargingPoint = await this.repository.getOperationDetail(id);
+    return toRuntimeOperationResponse(
+      id,
+      this.actorHost.get(id),
+      chargingPoint.runningIntent,
+    );
   }
 
   async getRuntimeSnapshot(id: string): Promise<RuntimeSnapshotResponse> {
-    await this.repository.getOperationDetail(id);
-    const runtimeStatus = toRuntimeOperationResponse(id, this.actorHost.get(id));
+    const chargingPoint = await this.repository.getOperationDetail(id);
+    const runtimeStatus = toRuntimeOperationResponse(
+      id,
+      this.actorHost.get(id),
+      chargingPoint.runningIntent,
+    );
     const snapshot = this.actorHost.getRuntimeSnapshot(id, runtimeStatus);
     return this.withTransactionDeliverySummary(id, snapshot);
   }
@@ -114,19 +121,23 @@ export class RuntimeOperationService {
     return this.chargingTransactionRepository.listActiveSamples(id);
   }
 
-  async recoverActiveTransactions(): Promise<{
+  async recoverRunningChargingPoints(): Promise<{
     recovered: string[];
     failed: Array<{ chargingPointId: string; error: unknown }>;
   }> {
-    return this.lifecycle.recoverActiveTransactions();
+    return this.lifecycle.recoverRunningChargingPoints();
   }
 
   async subscribeToEvents(
     id: string,
     listener: (event: ChargingPointStreamEvent) => void,
   ): Promise<{ snapshot: RuntimeSnapshotResponse; unsubscribe: () => void }> {
-    await this.repository.getOperationDetail(id);
-    const runtimeStatus = toRuntimeOperationResponse(id, this.actorHost.get(id));
+    const chargingPoint = await this.repository.getOperationDetail(id);
+    const runtimeStatus = toRuntimeOperationResponse(
+      id,
+      this.actorHost.get(id),
+      chargingPoint.runningIntent,
+    );
     const subscription = this.actorHost.subscribeWithSnapshot(
       id,
       runtimeStatus,

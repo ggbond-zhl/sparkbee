@@ -44,6 +44,7 @@ export interface ChargingPointDetailHeaderModel {
   recentIssue: HeaderStatusItem | null;
   lastHeartbeatLabel: string;
   primaryAction: HeaderPrimaryAction;
+  secondaryAction?: HeaderPrimaryAction;
 }
 
 export type RuntimeStatusQueryState = "loading" | "error" | "success";
@@ -146,6 +147,7 @@ export function buildChargingPointDetailHeaderModel({
 
   if (runtimeStatus.status === "stopped") {
     const runnable = connectorCount > 0;
+    const recoveryRequested = runtimeStatus.runningIntent === "running";
 
     return {
       ...base,
@@ -157,7 +159,13 @@ export function buildChargingPointDetailHeaderModel({
       sessionStatus,
       chargingPointStatus,
       operability: runnable
-        ? {
+        ? recoveryRequested
+          ? {
+              label: "等待重试",
+              tone: "warning",
+              description: "运行意图为保持运行，但当前桩实例已停止",
+            }
+          : {
             label: "可启动",
             tone: "success",
           }
@@ -170,10 +178,19 @@ export function buildChargingPointDetailHeaderModel({
       recentIssue,
       primaryAction: {
         kind: "start",
-        label: "启动",
+        label: recoveryRequested ? "重试启动" : "启动",
         disabled: !runnable,
         disabledReason: runnable ? undefined : "缺少枪口",
       },
+      ...(recoveryRequested
+        ? {
+            secondaryAction: {
+              kind: "stop" as const,
+              label: "取消自动恢复",
+              disabled: false,
+            },
+          }
+        : {}),
     };
   }
 

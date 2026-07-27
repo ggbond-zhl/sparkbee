@@ -102,18 +102,18 @@ await startServer({
     retentionScheduler.start();
     transactionDeliveryRetentionScheduler.start();
     protocolObservationRetentionScheduler.start();
-    void runtimeOperationService.recoverActiveTransactions().then((result) => {
+    void runtimeOperationService.recoverRunningChargingPoints().then((result) => {
       logger.info({
         event: "runtime-recovery.completed",
         recoveredChargingPointIds: result.recovered,
         failedChargingPointIds: result.failed.map((item) => item.chargingPointId),
-      }, "Active charging point transactions recovery completed");
+      }, "Running charging point recovery completed");
       for (const failure of result.failed) {
         logger.error({
           event: "runtime-recovery.failed",
           chargingPointId: failure.chargingPointId,
           error: failure.error,
-        }, "Active charging point transaction recovery failed");
+        }, "Running charging point recovery failed");
       }
     });
   },

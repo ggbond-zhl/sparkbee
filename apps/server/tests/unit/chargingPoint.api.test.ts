@@ -64,24 +64,38 @@ describe("chargingPoint management API", () => {
     expect(document.paths["/api/charging-points/{id}/start"].post.tags).toEqual([
       "RuntimeOperation",
     ]);
+    expect(document.paths["/api/charging-points/{id}/start"].post.description).toBe(
+      "将运行意图持久化为 running 后启动当前服务进程中的桩实例 Actor；启动失败时仍保留 running，供服务重启后恢复。",
+    );
     expect(document.paths["/api/charging-points/{id}/stop"].post.summary).toBe(
       "停止桩实例",
     );
     expect(document.paths["/api/charging-points/{id}/stop"].post.tags).toEqual([
       "RuntimeOperation",
     ]);
+    expect(document.paths["/api/charging-points/{id}/stop"].post.description).toBe(
+      "将运行意图持久化为 stopped 后停止当前服务进程中的桩实例 Actor；停止失败时仍保留 stopped。",
+    );
     expect(document.paths["/api/charging-points/{id}/status"].get.summary).toBe(
       "查询桩实例运行状态",
     );
     expect(document.paths["/api/charging-points/{id}/status"].get.tags).toEqual([
       "RuntimeOperation",
     ]);
+    expect(document.paths["/api/charging-points/{id}/status"].get.description).toBe(
+      "同时查询持久化运行意图与当前服务进程中的 Actor 实际状态；没有 Actor 时实际状态为 stopped。",
+    );
     expect(
       document.paths["/api/charging-points/{id}/runtime-snapshot"].get.summary,
     ).toBe("查询桩实例运行状态快照");
     expect(
       document.paths["/api/charging-points/{id}/runtime-snapshot"].get.tags,
     ).toEqual(["RuntimeOperation"]);
+    expect(
+      document.paths["/api/charging-points/{id}/runtime-snapshot"].get.description,
+    ).toBe(
+      "查询持久化运行意图与当前服务进程中的桩实例运行状态快照；没有 Actor 时返回 stopped 和空运行投影。",
+    );
     expect(
       document.paths[
         "/api/charging-points/{id}/active-transaction-samples"
@@ -101,6 +115,9 @@ describe("chargingPoint management API", () => {
     expect(document.paths["/api/charging-points/{id}/events"].get.tags).toEqual([
       "ChargingPointEvent",
     ]);
+    expect(document.paths["/api/charging-points/{id}/events"].get.description).toBe(
+      "订阅单个桩实例的 SSE 事件流；连接建立后先发送包含运行意图与实际状态的当前快照，再推送后续实时协议事件。",
+    );
     expect(
       document.paths["/api/charging-points/{id}/protocol-messages"].get.summary,
     ).toBe("查询桩实例协议报文");
@@ -183,7 +200,7 @@ describe("chargingPoint management API", () => {
     expect(serializedDocument).toContain("CSMS 基础 WebSocket 地址");
     expect(serializedDocument).toContain("枪口在所属桩实例内的 connectorId");
     expect(serializedDocument).toContain("当前服务进程中的运行状态");
-    expect(serializedDocument).toContain("刷新后恢复当前运行态");
+    expect(serializedDocument).toContain("跨服务进程保持的运行意图");
     expect(serializedDocument).toContain("车辆接入枪口模拟动作");
     expect(serializedDocument).toContain("用于 OCPP Authorize 的 idTag");
     expect(serializedDocument).toContain("不要求事先调用鉴权接口");
@@ -809,6 +826,7 @@ describe("chargingPoint management API", () => {
     expect(runtimeOperationResponseSchema.parse(await response.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "stopped",
+      runningIntent: "stopped",
     });
   });
 
@@ -853,6 +871,7 @@ describe("chargingPoint management API", () => {
     expect(runtimeOperationResponseSchema.parse(await response.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "running",
+      runningIntent: "running",
       bootStatus: "Accepted",
     });
   });
@@ -1231,11 +1250,276 @@ describe("chargingPoint management API", () => {
         return recoveredActor;
       },
     });
-    await expect(recoveryService.recoverActiveTransactions()).resolves.toEqual({
+    await expect(recoveryService.recoverRunningChargingPoints()).resolves.toEqual({
       recovered: [chargingPoint.id],
       failed: [],
     });
     expect(recoveredActor.startCalls).toBe(1);
+  });
+
+  test("recovers a manually running chargingPoint without active transactions", async () => {
+    const database = await createTestDatabase();
+    const firstActor = createActorDouble();
+    const firstApp = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        firstActor.id = options.id;
+        firstActor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return firstActor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(firstApp, {
+      identity: "CP-RUNNING",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(firstApp, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "IEC_62196_T2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await firstApp.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+
+    const recoveredActor = createActorDouble();
+    const recoveryService = createRuntimeOperationService(database, {
+      createChargingPointActor: (options) => {
+        recoveredActor.id = options.id;
+        return recoveredActor;
+      },
+    });
+
+    await expect(recoveryService.recoverRunningChargingPoints()).resolves.toEqual({
+      recovered: [chargingPoint.id],
+      failed: [],
+    });
+    expect(recoveredActor.startCalls).toBe(1);
+  });
+
+  test("does not recover a stopped chargingPoint with an active transaction", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble();
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP-STOPPED",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "IEC_62196_T2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+    await new ChargingTransactionRepository(database).start({
+      chargingPointId: chargingPoint.id,
+      transactionId: "active-transaction",
+      ocppTransactionId: 1001,
+      evseId: 1,
+      connectorId: 1,
+      idTag: "TAG-1",
+      meterStartWh: 0,
+      startedAt: new Date("2026-07-27T00:00:00.000Z"),
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/stop`, {
+      method: "POST",
+    });
+
+    const recoveredActor = createActorDouble();
+    const recoveryService = createRuntimeOperationService(database, {
+      createChargingPointActor: () => recoveredActor,
+    });
+
+    await expect(recoveryService.recoverRunningChargingPoints()).resolves.toEqual({
+      recovered: [],
+      failed: [],
+    });
+    expect(recoveredActor.startCalls).toBe(0);
+  });
+
+  test("keeps an explicit stop when recovery already discovered the chargingPoint", async () => {
+    const database = await createTestDatabase();
+    const firstActor = createActorDouble();
+    const firstApp = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        firstActor.id = options.id;
+        return firstActor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(firstApp, {
+      identity: "CP-RECOVERY-STOP-RACE",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(firstApp, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "IEC_62196_T2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await firstApp.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+
+    const recoveredActor = createActorDouble();
+    const recoveryService = createRuntimeOperationService(database, {
+      createChargingPointActor: (options) => {
+        recoveredActor.id = options.id;
+        return recoveredActor;
+      },
+    });
+    const recoveryRepository = (
+      recoveryService as unknown as {
+        repository: {
+          listRunningChargingPointIds(): Promise<string[]>;
+        };
+      }
+    ).repository;
+    const originalListRunningChargingPointIds =
+      recoveryRepository.listRunningChargingPointIds.bind(recoveryRepository);
+    const listed = createDeferred();
+    const continueRecovery = createDeferred();
+    recoveryRepository.listRunningChargingPointIds = async () => {
+      const ids = await originalListRunningChargingPointIds();
+      listed.resolve();
+      await continueRecovery.promise;
+      return ids;
+    };
+
+    const recovery = recoveryService.recoverRunningChargingPoints();
+    await listed.promise;
+    await recoveryService.stop(chargingPoint.id);
+    continueRecovery.resolve();
+
+    await expect(recovery).resolves.toEqual({ recovered: [], failed: [] });
+    await expect(recoveryService.getStatus(chargingPoint.id)).resolves.toEqual({
+      chargingPointId: chargingPoint.id,
+      status: "stopped",
+      runningIntent: "stopped",
+    });
+    expect(recoveredActor.startCalls).toBe(0);
+  });
+
+  test("recovers chargingPoints concurrently and isolates start failures", async () => {
+    const database = await createTestDatabase();
+    const setupApp = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        const actor = createActorDouble();
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoints = await Promise.all(
+      ["CP-RECOVERY-SUCCESS", "CP-RECOVERY-FAILURE"].map(async (identity) => {
+        const chargingPoint = await createChargingPoint(setupApp, {
+          identity,
+          protocol: "OCPP16J",
+          centralSystemUrl: "ws://localhost:9000/ocpp",
+          vendor: "SparkBee",
+          model: "DebugBox",
+        });
+        await createConnector(setupApp, chargingPoint.id, {
+          evseId: 1,
+          connectorId: 1,
+          type: "IEC_62196_T2",
+          format: "socket",
+          powerType: "ac",
+        });
+        await setupApp.request(`/api/charging-points/${chargingPoint.id}/start`, {
+          method: "POST",
+        });
+        return chargingPoint;
+      }),
+    );
+    const [successfulChargingPoint, failedChargingPoint] = chargingPoints;
+    if (successfulChargingPoint === undefined || failedChargingPoint === undefined) {
+      throw new Error("Expected two chargingPoints");
+    }
+
+    const releaseStarts = createDeferred();
+    const allStartsEntered = createDeferred();
+    const startedChargingPointIds = new Set<string>();
+    const recoveredActors = new Map<string, ReturnType<typeof createActorDouble>>();
+    const recoveryService = createRuntimeOperationService(database, {
+      createChargingPointActor: (options) => {
+        const actor = createActorDouble();
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        actor.start = async () => {
+          actor.startCalls += 1;
+          startedChargingPointIds.add(options.id);
+          if (startedChargingPointIds.size === chargingPoints.length) {
+            allStartsEntered.resolve();
+          }
+          await releaseStarts.promise;
+          if (options.id === failedChargingPoint.id) {
+            throw new Error("recovery failed");
+          }
+          actor.status = "running";
+          return actor.startResult;
+        };
+        recoveredActors.set(options.id, actor);
+        return actor;
+      },
+    });
+
+    const recovery = recoveryService.recoverRunningChargingPoints();
+    const enteredConcurrently = await Promise.race([
+      allStartsEntered.promise.then(() => true),
+      new Promise<false>((resolve) => {
+        setTimeout(() => resolve(false), 2_000);
+      }),
+    ]);
+    releaseStarts.resolve();
+    const result = await recovery;
+
+    expect(enteredConcurrently).toBe(true);
+    expect(result.recovered).toEqual([successfulChargingPoint.id]);
+    expect(result.failed.map((item) => item.chargingPointId)).toEqual([
+      failedChargingPoint.id,
+    ]);
+    expect(recoveredActors.get(successfulChargingPoint.id)?.startCalls).toBe(1);
+    expect(recoveredActors.get(failedChargingPoint.id)?.startCalls).toBe(1);
   });
 
   test("returns 404 when subscribing to a missing chargingPoint event stream", async () => {
@@ -1581,12 +1865,14 @@ describe("chargingPoint management API", () => {
     expect(runtimeOperationResponseSchema.parse(await firstResponse.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "running",
+      runningIntent: "running",
       bootStatus: "Accepted",
     });
     expect(secondResponse.status).toBe(200);
     expect(runtimeOperationResponseSchema.parse(await secondResponse.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "running",
+      runningIntent: "running",
       bootStatus: "Accepted",
     });
     expect(actor.startCalls).toBe(1);
@@ -2367,6 +2653,7 @@ describe("chargingPoint management API", () => {
     expect(runtimeOperationResponseSchema.parse(await response.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "starting",
+      runningIntent: "running",
       bootStatus: "Pending",
       retryAfterSec: 30,
     });
@@ -2391,6 +2678,7 @@ describe("chargingPoint management API", () => {
     expect(runtimeOperationResponseSchema.parse(await response.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "stopped",
+      runningIntent: "stopped",
     });
   });
 
@@ -2433,6 +2721,16 @@ describe("chargingPoint management API", () => {
     });
     expect(actorHost.get(chargingPoint.id)).toBeUndefined();
     expect(actor.disposeCalls).toBe(1);
+
+    const restartedApp = createApp({ database });
+    const statusResponse = await restartedApp.request(
+      `/api/charging-points/${chargingPoint.id}/status`,
+    );
+    expect(runtimeOperationResponseSchema.parse(await statusResponse.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      status: "stopped",
+      runningIntent: "running",
+    });
   });
 
   test("stops a running chargingPoint and removes its actor", async () => {
@@ -2480,10 +2778,60 @@ describe("chargingPoint management API", () => {
     expect(runtimeOperationResponseSchema.parse(await response.json())).toEqual({
       chargingPointId: chargingPoint.id,
       status: "stopped",
+      runningIntent: "stopped",
     });
     expect(actorHost.get(chargingPoint.id)).toBeUndefined();
     expect(actor.stopCalls).toBe(1);
     expect(actor.disposeCalls).toBe(1);
+  });
+
+  test("keeps stopped intent when stopping the actor fails", async () => {
+    const database = await createTestDatabase();
+    const actor = createActorDouble({ stopError: new Error("boom") });
+    const app = createApp({
+      database,
+      createChargingPointActor: (options) => {
+        actor.id = options.id;
+        actor.startResult = {
+          chargingPointId: options.id,
+          chargingPointActorStatus: "running",
+          bootStatus: "Accepted",
+        };
+        return actor;
+      },
+    });
+    const chargingPoint = await createChargingPoint(app, {
+      identity: "CP001",
+      protocol: "OCPP16J",
+      centralSystemUrl: "ws://localhost:9000/ocpp",
+      vendor: "SparkBee",
+      model: "DebugBox",
+    });
+    await createConnector(app, chargingPoint.id, {
+      evseId: 1,
+      connectorId: 1,
+      type: "IEC_62196_T2",
+      format: "socket",
+      powerType: "ac",
+    });
+    await app.request(`/api/charging-points/${chargingPoint.id}/start`, {
+      method: "POST",
+    });
+
+    const response = await app.request(`/api/charging-points/${chargingPoint.id}/stop`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(502);
+    const restartedApp = createApp({ database });
+    const statusResponse = await restartedApp.request(
+      `/api/charging-points/${chargingPoint.id}/status`,
+    );
+    expect(runtimeOperationResponseSchema.parse(await statusResponse.json())).toEqual({
+      chargingPointId: chargingPoint.id,
+      status: "stopped",
+      runningIntent: "stopped",
+    });
   });
 });
 
@@ -2725,6 +3073,14 @@ function createActorDouble(
   };
 }
 
+function createDeferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function createConnectorActionResult(
   chargingPointId: string,
   input: ChargingPointActorConnectorActionInput,
@@ -2746,10 +3102,11 @@ function expectedRuntimeSnapshot(
 ) {
   const runtimeStatus =
     status === "stopped"
-      ? { chargingPointId, status }
+      ? { chargingPointId, status, runningIntent: "stopped" as const }
       : {
           chargingPointId,
           status,
+          runningIntent: "running" as const,
           bootStatus: status === "running" ? "Accepted" : "Pending",
         };
 

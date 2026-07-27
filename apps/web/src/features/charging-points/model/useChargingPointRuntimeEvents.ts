@@ -85,6 +85,7 @@ export function toRuntimeStatusFromStreamMessage(
       return {
         chargingPointId: message.data.chargingPointId,
         status: "stopped",
+        runningIntent: "running",
       };
     }
 
@@ -93,6 +94,7 @@ export function toRuntimeStatusFromStreamMessage(
       status: message.data.status === "Accepted"
         ? "running"
         : "starting",
+      runningIntent: "running",
       bootStatus: message.data.status,
       ...(message.data.retryAfterSec === undefined
         ? {}

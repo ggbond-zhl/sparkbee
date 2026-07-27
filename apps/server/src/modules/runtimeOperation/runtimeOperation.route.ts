@@ -98,7 +98,8 @@ const startChargingPointRoute = createRoute({
   path: "/{id}/start",
   tags: ["RuntimeOperation"],
   summary: "启动桩实例",
-  description: "启动当前服务进程中的桩实例 Actor；重复启动时返回已有 Actor 的运行状态。",
+  description:
+    "将运行意图持久化为 running 后启动当前服务进程中的桩实例 Actor；启动失败时仍保留 running，供服务重启后恢复。",
   request: {
     params: chargingPointIdParamSchema,
   },
@@ -122,7 +123,8 @@ const stopChargingPointRoute = createRoute({
   path: "/{id}/stop",
   tags: ["RuntimeOperation"],
   summary: "停止桩实例",
-  description: "停止当前服务进程中的桩实例 Actor；未运行时直接返回 stopped。",
+  description:
+    "将运行意图持久化为 stopped 后停止当前服务进程中的桩实例 Actor；停止失败时仍保留 stopped。",
   request: {
     params: chargingPointIdParamSchema,
   },
@@ -142,7 +144,8 @@ const getChargingPointStatusRoute = createRoute({
   path: "/{id}/status",
   tags: ["RuntimeOperation"],
   summary: "查询桩实例运行状态",
-  description: "查询当前服务进程中桩实例 Actor 的运行状态；没有 Actor 时返回 stopped。",
+  description:
+    "同时查询持久化运行意图与当前服务进程中的 Actor 实际状态；没有 Actor 时实际状态为 stopped。",
   request: {
     params: chargingPointIdParamSchema,
   },
@@ -159,7 +162,7 @@ const getChargingPointRuntimeSnapshotRoute = createRoute({
   tags: ["RuntimeOperation"],
   summary: "查询桩实例运行状态快照",
   description:
-    "查询当前服务进程中的桩实例运行状态快照，用于页面刷新后恢复当前运行态；没有 Actor 时返回 stopped 和空运行投影。",
+    "查询持久化运行意图与当前服务进程中的桩实例运行状态快照；没有 Actor 时返回 stopped 和空运行投影。",
   request: {
     params: chargingPointIdParamSchema,
   },
@@ -330,7 +333,7 @@ const getChargingPointEventsRoute = createRoute({
   tags: ["ChargingPointEvent"],
   summary: "订阅桩事件流",
   description:
-    "订阅单个桩实例的 SSE 事件流；连接建立后先发送当前运行状态快照，再推送后续实时协议事件。",
+    "订阅单个桩实例的 SSE 事件流；连接建立后先发送包含运行意图与实际状态的当前快照，再推送后续实时协议事件。",
   request: {
     params: chargingPointIdParamSchema,
   },

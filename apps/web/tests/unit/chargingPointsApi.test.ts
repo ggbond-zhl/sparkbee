@@ -192,6 +192,7 @@ describe("chargingPoints API client", () => {
         JSON.stringify({
           chargingPointId: "00000000-0000-4000-8000-000000000001",
           status: "running",
+          runningIntent: "running",
           bootStatus: "Accepted",
         }),
         { status: 200 },
@@ -266,6 +267,7 @@ describe("chargingPoints API client", () => {
           runtimeStatus: {
             chargingPointId: "00000000-0000-4000-8000-000000000001",
             status: "running",
+            runningIntent: "running",
           },
           sessionStatus: null,
           chargingPointStatus: null,
@@ -378,6 +380,7 @@ describe("chargingPoints API client", () => {
           JSON.stringify({
             chargingPointId: "00000000-0000-4000-8000-000000000001",
             status: "starting",
+            runningIntent: "running",
           }),
           { status: 200 },
         ),
@@ -386,6 +389,7 @@ describe("chargingPoints API client", () => {
         JSON.stringify({
           chargingPointId: "00000000-0000-4000-8000-000000000001",
           status: "stopped",
+          runningIntent: "stopped",
         }),
         { status: 200 },
       ));
@@ -664,6 +668,7 @@ describe("chargingPoints API client", () => {
         runtimeStatus: {
           chargingPointId: "00000000-0000-4000-8000-000000000001",
           status: "running",
+          runningIntent: "running",
         },
         sessionStatus: null,
         chargingPointStatus: null,
@@ -694,6 +699,7 @@ describe("chargingPoints API client", () => {
         runtimeStatus: {
           chargingPointId: "00000000-0000-4000-8000-000000000001",
           status: "running",
+          runningIntent: "running",
         },
         sessionStatus: null,
         chargingPointStatus: null,

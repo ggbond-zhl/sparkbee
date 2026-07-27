@@ -48,9 +48,11 @@ const baseDetail: ChargingPointDetailResponse = {
 function buildRuntimeStatus(
   input: Partial<RuntimeOperationResponse>,
 ): RuntimeOperationResponse {
+  const status = input.status ?? "stopped";
   return {
     chargingPointId: baseDetail.id,
-    status: "stopped",
+    status,
+    runningIntent: status === "stopped" ? "stopped" : "running",
     ...input,
   };
 }
@@ -87,6 +89,7 @@ describe("charging point detail header model", () => {
     });
 
     expect(model.mainStatus.label).toBe("已停止");
+    expect(model).not.toHaveProperty("runningIntentStatus");
     expect(model.lastHeartbeatLabel).toBe("最后心跳 --");
     expect(model.operability.label).toBe("可启动");
     expect(model.primaryAction).toMatchObject({
@@ -96,6 +99,31 @@ describe("charging point detail header model", () => {
     });
     expect(model.sessionStatus.label).toBe("会话未建立");
     expect(model.chargingPointStatus.label).toBe("桩状态未同步");
+  });
+
+  test("keeps recovery choices without exposing running intent status", () => {
+    const model = buildChargingPointDetailHeaderModel({
+      detail: baseDetail,
+      runtimeStatus: buildRuntimeStatus({
+        status: "stopped",
+        runningIntent: "running",
+      }),
+      statusQueryState: "success",
+      lastHeartbeatAt: null,
+    });
+
+    expect(model).not.toHaveProperty("runningIntentStatus");
+    expect(model.mainStatus.label).toBe("已停止");
+    expect(model.primaryAction).toMatchObject({
+      kind: "start",
+      label: "重试启动",
+      disabled: false,
+    });
+    expect(model.secondaryAction).toMatchObject({
+      kind: "stop",
+      label: "取消自动恢复",
+      disabled: false,
+    });
   });
 
   test("omits connector and transaction summaries from the detail header", () => {

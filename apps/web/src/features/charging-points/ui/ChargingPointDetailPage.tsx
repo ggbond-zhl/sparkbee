@@ -197,6 +197,17 @@ export function ChargingPointDetailPage() {
           )}
         </CardContent>
         <CardFooter className="flex-wrap justify-end gap-2">
+          {headerModel.secondaryAction && runtime.applySecondaryAction && (
+            <Button
+              disabled={headerModel.secondaryAction.disabled || runtime.pending}
+              title={headerModel.secondaryAction.disabledReason}
+              type="button"
+              variant="outline"
+              onClick={runtime.applySecondaryAction}
+            >
+              {runtime.pending ? "处理中" : headerModel.secondaryAction.label}
+            </Button>
+          )}
           <Button
             disabled={headerModel.primaryAction.disabled || runtime.pending}
             type="button"
@@ -1588,6 +1599,7 @@ function StatusBadge({
   return (
     <Badge
       className={toBadgeToneClassName(item.tone)}
+      title={item.description}
       variant={toBadgeVariant(item.tone)}
     >
       {item.label}

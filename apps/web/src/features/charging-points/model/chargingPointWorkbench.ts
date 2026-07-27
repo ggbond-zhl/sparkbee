@@ -101,6 +101,7 @@ export interface ReadyChargingPointWorkbench {
   runtime: {
     pending: boolean;
     applyPrimaryAction(): void;
+    applySecondaryAction?(): void;
   };
   connectors: {
     pending: boolean;
@@ -200,6 +201,13 @@ export function createReadyChargingPointWorkbench(
       applyPrimaryAction: headerModel.primaryAction.kind === "start"
         ? input.actions.startRuntime
         : input.actions.stopRuntime,
+      ...(headerModel.secondaryAction === undefined
+        ? {}
+        : {
+            applySecondaryAction: headerModel.secondaryAction.kind === "start"
+              ? input.actions.startRuntime
+              : input.actions.stopRuntime,
+          }),
     },
     connectors: {
       pending: input.pending.connectors,

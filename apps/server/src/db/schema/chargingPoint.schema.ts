@@ -9,6 +9,10 @@ import {
 import { isNull } from "drizzle-orm";
 
 export const chargingPointProtocol = pgEnum("charging_point_protocol", ["OCPP16J"]);
+export const chargingPointRunningIntent = pgEnum(
+  "charging_point_running_intent",
+  ["stopped", "running"],
+);
 
 export const chargingPoints = pgTable(
   "charging_points",
@@ -18,6 +22,9 @@ export const chargingPoints = pgTable(
     description: text("description"),
     identity: text("identity").notNull(),
     protocol: chargingPointProtocol("protocol").notNull(),
+    runningIntent: chargingPointRunningIntent("running_intent")
+      .notNull()
+      .default("stopped"),
     centralSystemUrl: text("central_system_url").notNull(),
     vendor: text("vendor").notNull(),
     model: text("model").notNull(),
